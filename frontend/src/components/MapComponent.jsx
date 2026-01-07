@@ -2,34 +2,51 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-// Fix pour les icônes Leaflet qui buggent parfois avec React
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
+// Icône personnalisée "Oracle"
+const oracleIcon = L.divIcon({
+  className: 'custom-icon',
+  html: `<div style="
+    background-color: #9333ea;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 20px #9333ea; 
+    animation: pulse 2s infinite;
+  "></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
 });
-L.Marker.prototype.options.icon = DefaultIcon;
 
 export default function MapComponent({ lat, lon }) {
   if (!lat || !lon) return null;
 
   return (
-    <div className="w-full max-w-md mx-auto mt-6 h-64 rounded-lg overflow-hidden border border-slate-700 shadow-lg z-0 relative">
-      <MapContainer center={[lat, lon]} zoom={15} scrollWheelZoom={false} className="h-full w-full">
+    // CORRECTION ICI : 
+    // On met h-full w-full pour qu'elle remplisse exactement la colonne définie dans App.jsx
+    // J'ai retiré les rounded-3xl et shadow ici car c'est App.jsx qui gère le cadre maintenant.
+    <div className="w-full h-full relative z-0">
+      
+      <MapContainer 
+        center={[lat, lon]} 
+        zoom={16} 
+        scrollWheelZoom={false} 
+        className="h-full w-full bg-slate-900"
+      >
         <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution='&copy; OpenStreetMap'
+            // Carte style "Dark Matter"
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        <Marker position={[lat, lon]}>
-          <Popup>
-            ICI <br /> Zone de Vice détectée.
+        <Marker position={[lat, lon]} icon={oracleIcon}>
+          <Popup className="text-slate-900 font-bold">
+            Cible Localisée.
           </Popup>
         </Marker>
       </MapContainer>
+      
+      {/* Vignette d'ambiance (ombre interne) */}
+      <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_50px_rgba(0,0,0,0.5)] z-[400]"></div>
     </div>
   );
 }
