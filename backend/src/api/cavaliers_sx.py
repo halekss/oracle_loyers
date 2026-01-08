@@ -1,0 +1,5 @@
+17 Rue Docteur Bouchut - "Passage du Désir"
+16 Rue Constantine - "espaceplaisir"
+17 Rue René Leynaud - "Love Shop (Dé)boutonné(e)s"
+15 Rue Tupin - "espaceplaisir"
+27 Rue Lanterne - "La Lanterne Loveshop"

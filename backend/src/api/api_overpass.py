@@ -14,17 +14,22 @@ def get_cavaliers_data(city_name="Lyon"):
         "Vice - Kebab": ("cuisine", "kebab"),
         "Vice - Bar": ("amenity", "bar"),
         "Vice - Tabac": ("shop", "tobacco"),
-        "Vice - Sex-shop": ("shop", "adult"),
+        "Vice - Sex-shop": ("love", "shop"),
+        "Vice - Casino": ("amenity", "casino"),
         
         # --- GENTRIFICATION ---
         "Gentrification - Bio": ("shop", "organic"),
         "Gentrification - Salle Sport": ("leisure", "fitness_centre"),
         "Gentrification - Yoga": ("sport", "yoga"),
         "Gentrification - Crèche": ("amenity", "childcare"),
+        "Gentrification - Épicerie Fine": ("shop", "deli"),
+        "Gentrification - Torréfacteur": ("shop", "coffee"),
         
         # --- NUISANCE ---
         "Nuisance - École": ("amenity", "school"),
         "Nuisance - Aire de jeux": ("leisure", "playground"),
+        "Nuisance - Salle de Concert": ("amenity", "music_venue"),
+        "Nuisance - Discothèque": ("amenity", "nightclub"),
         
         # --- SUPERSTITION ---
         "Superstition - Pompes Funèbres": ("shop", "funeral_directors"),
