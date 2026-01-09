@@ -1,4 +1,9 @@
 ﻿categorie_cavalier,type_osm,nom_lieu,latitude,longitude
+Vice - Sex-shop,manual_add,Passage du Désir,45.759775,4.855356
+Vice - Sex-shop,manual_add,espaceplaisir,45.766989,4.832144
+Vice - Sex-shop,manual_add,Love Shop (Dé)boutonné(e)s,45.769746,4.832958
+Vice - Sex-shop,manual_add,espaceplaisir,45.762948,4.83379
+Vice - Sex-shop,manual_add,La Lanterne Loveshop,45.765703,4.832034
 Vice - Kebab,kebab,Antalya,45.7427751,4.8698435
 Vice - Kebab,kebab,Lumière Kebab,45.7450863,4.8721525
 Vice - Kebab,kebab,Eclair Kebab,45.7320869,4.8592433
@@ -402,6 +407,7 @@ Vice - Bar,bar,New Allstar,45.7670546,4.8220034
 Vice - Bar,bar,Bambane,45.7498253,4.8460842
 Vice - Bar,bar,Mac Bar,45.7841771,4.8527224
 Vice - Bar,bar,Lo'Ben Bar,45.742905,4.8165537
+Vice - Bar,bar,MOS Bellecour,45.7576619,4.8347376
 Vice - Bar,bar,Espit Chupitos,45.7676293,4.837294
 Vice - Bar,bar,bohème,45.7675751,4.8577755
 Vice - Bar,bar,Tic & Tac,45.769989,4.8504268
@@ -483,6 +489,19 @@ Vice - Tabac,tobacco,Tabac Lafayette,45.7636113,4.8639656
 Vice - Tabac,tobacco,Inconnu,45.7756124,4.7951253
 Vice - Tabac,tobacco,Smoke Shop,45.7611909,4.8556693
 Vice - Casino,casino,Le Pharaon,45.7847561,4.8527698
+Vice - CBD Shop,cannabis,High Society,45.753454,4.8292928
+Vice - CBD Shop,cannabis,CBD Shop,45.7528917,4.8306852
+Vice - CBD Shop,cannabis,High Society,45.7539177,4.8465622
+Vice - CBD Shop,cannabis,Dr. Greentown,45.7634937,4.842753
+Vice - CBD Shop,cannabis,CBioD,45.7778059,4.8333
+Vice - CBD Shop,cannabis,Nativus,45.774241,4.807453
+Vice - CBD Shop,cannabis,CBD shop,45.7749061,4.8063496
+Vice - CBD Shop,cannabis,Les Gones CBD,45.7635477,4.8527624
+Vice - CBD Shop,cannabis,Generation Vape,45.7637333,4.847409
+Vice - CBD Shop,cannabis,High Society,45.7637164,4.8443396
+Vice - CBD Shop,cannabis,Aydoo CBD,45.7689465,4.8562199
+Vice - CBD Shop,cannabis,Plaisirs Délices,45.7664917,4.845156
+Vice - CBD Shop,cannabis,Le CBD français,45.7766309,4.832004
 Gentrification - Salle Sport,fitness_centre,Banane & basket,45.7709288,4.8077511
 Gentrification - Salle Sport,fitness_centre,WellNess,45.7516682,4.8524991
 Gentrification - Salle Sport,fitness_centre,L'Appart Fitness,45.7680154,4.8376767
@@ -707,6 +726,148 @@ Gentrification - Torréfacteur,coffee,Shouka,45.7691572,4.8502907
 Gentrification - Torréfacteur,coffee,Nespresso,45.7612691,4.8552013
 Gentrification - Torréfacteur,coffee,Loutsa,45.7615356,4.8548129
 Gentrification - Torréfacteur,coffee,La Route des Arômes,45.7617405,4.8566224
+Gentrification - Atelier Vélo,bicycle,Culture Vélo,45.7672621,4.8247285
+Gentrification - Atelier Vélo,bicycle,Véran des Villes,45.7672567,4.8267576
+Gentrification - Atelier Vélo,bicycle,Vélonaute Tête d'Or,45.7699141,4.8472781
+Gentrification - Atelier Vélo,bicycle,Lyon Cycle Chic,45.7496354,4.8440923
+Gentrification - Atelier Vélo,bicycle,Vélonaute Liberté,45.7566431,4.842593
+Gentrification - Atelier Vélo,bicycle,Vélos et Compagnie,45.7775529,4.8300857
+Gentrification - Atelier Vélo,bicycle,Velostrada,45.7572531,4.8417193
+Gentrification - Atelier Vélo,bicycle,Cycles Blain - Manudany,45.767991,4.8619861
+Gentrification - Atelier Vélo,bicycle,Vélo Station,45.7672558,4.8252935
+Gentrification - Atelier Vélo,bicycle,Cyclexperts,45.7354849,4.8534583
+Gentrification - Atelier Vélo,bicycle,Cyclable Jean Jaurès,45.7526335,4.8460345
+Gentrification - Atelier Vélo,bicycle,Vélonaute Croix-Rousse,45.7794521,4.8277975
+Gentrification - Atelier Vélo,bicycle,Eco-triporteur Delano,45.7671337,4.8475117
+Gentrification - Atelier Vélo,bicycle,Vélonaute Frères Lumière,45.7464727,4.8621429
+Gentrification - Atelier Vélo,bicycle,Lion à Bicyclette,45.7525538,4.8533453
+Gentrification - Atelier Vélo,bicycle,Atelier cycle Lyon 3,45.7520069,4.8419229
+Gentrification - Atelier Vélo,bicycle,Cyclable Foch,45.7698667,4.8433812
+Gentrification - Atelier Vélo,bicycle,Giant,45.7601097,4.8412542
+Gentrification - Atelier Vélo,bicycle,Altermove,45.7641975,4.8450618
+Gentrification - Atelier Vélo,bicycle,Peugeot Cycles,45.7503937,4.8453529
+Gentrification - Atelier Vélo,bicycle,Cycle Service,45.7453641,4.8462221
+Gentrification - Atelier Vélo,bicycle,ECOX LYON,45.7639653,4.8451066
+Gentrification - Atelier Vélo,bicycle,Atelier Vélo Change de Chaîne,45.781507,4.8056633
+Gentrification - Atelier Vélo,bicycle,Cyclable Croix-Rousse,45.7769695,4.833203
+Gentrification - Atelier Vélo,bicycle,Méca Vélo,45.7742475,4.8086086
+Gentrification - Atelier Vélo,bicycle,Véran des Chemins,45.7673577,4.8262644
+Gentrification - Atelier Vélo,bicycle,Moustache Store by Vélonaute,45.7565659,4.8425985
+Gentrification - Atelier Vélo,bicycle,Cycles Millot,45.75642,4.8105437
+Gentrification - Atelier Vélo,bicycle,Grimpeurs Cyclist House,45.7670156,4.8309763
+Gentrification - Atelier Vélo,bicycle,Etablicyclette,45.764745,4.8437804
+Gentrification - Atelier Vélo,bicycle,Ambassade Probikeshop,45.7354325,4.8152245
+Gentrification - Atelier Vélo,bicycle,Baroudeur Cycles - L'Atelier,45.7685635,4.8289429
+Gentrification - Atelier Vélo,bicycle,Véloterie Fondation AJD,45.7637332,4.8326563
+Gentrification - Atelier Vélo,bicycle,Cyclable,45.7576089,4.8288278
+Gentrification - Atelier Vélo,bicycle,Cycles Marchi L'Atelier,45.7545227,4.8264445
+Gentrification - Atelier Vélo,bicycle,Le Comptoir du Cycle,45.7419643,4.8187872
+Gentrification - Atelier Vélo,bicycle,Giant,45.7603563,4.8412356
+Gentrification - Atelier Vélo,bicycle,Repair and run,45.7635019,4.8426045
+Gentrification - Atelier Vélo,bicycle,Véran des Routes,45.7672765,4.8266361
+Gentrification - Atelier Vélo,bicycle,Uniques,45.7606659,4.8453647
+Gentrification - Atelier Vélo,bicycle,Repair and Run,45.764124,4.8450661
+Gentrification - Atelier Vélo,bicycle,En Selle Marcel,45.761103,4.8377031
+Gentrification - Atelier Vélo,bicycle,Virvolt,45.7690942,4.8351089
+Gentrification - Atelier Vélo,bicycle,Cycles Vega,45.7573154,4.8475982
+Gentrification - Atelier Vélo,bicycle,En Selle Marcel,45.7666635,4.8441096
+Gentrification - Atelier Vélo,bicycle,Dring,45.7578205,4.8523545
+Gentrification - Atelier Vélo,bicycle,Prestacycles,45.7352257,4.8397282
+Gentrification - Atelier Vélo,bicycle,Fix&Move,45.7569403,4.8330072
+Gentrification - Atelier Vélo,bicycle,Holland Bikes,45.7574517,4.8409227
+Gentrification - Atelier Vélo,bicycle,Les ateliers de l'audace,45.7595083,4.8450789
+Gentrification - Atelier Vélo,bicycle,Velograma,45.7566388,4.86761
+Gentrification - Atelier Vélo,bicycle,Cycletic Café-Vélo,45.7636179,4.8645127
+Gentrification - Atelier Vélo,bicycle,Baroudeur Cycles - Le Magasin,45.768787,4.8293247
+Gentrification - Atelier Vélo,bicycle,Montcycle,45.7535025,4.8920998
+Gentrification - Atelier Vélo,bicycle,Velcroc,45.7642268,4.8413299
+Gentrification - Atelier Vélo,bicycle,La 8ème roue,45.7239895,4.876826
+Gentrification - Atelier Vélo,bicycle,Recyclerie sportive,45.785558,4.7947792
+Gentrification - Atelier Vélo,bicycle,L'Atelier Vélo,45.7983441,4.8310816
+Gentrification - Atelier Vélo,bicycle,8 ô vélo,45.7372678,4.8624638
+Gentrification - Atelier Vélo,bicycle,Holland Bikes,45.7566729,4.8409512
+Gentrification - Atelier Vélo,bicycle,Epsilon Bikes,45.7377581,4.8720235
+Gentrification - Atelier Vélo,bicycle,Bicycl'haize,45.7565264,4.8167234
+Gentrification - Atelier Vélo,bicycle,VéloTech Lyon Ouest,45.7561286,4.8169892
+Gentrification - Atelier Vélo,bicycle,Bric à Bike,45.7359184,4.8424789
+Gentrification - Atelier Vélo,bicycle,L'Atelier du Chat Perché,45.7325874,4.8300114
+Gentrification - Atelier Vélo,bicycle,Le Petit Porteur,45.7543775,4.8266242
+Gentrification - Atelier Vélo,bicycle,Tournée Cycles (sur rendez-vous),45.7529638,4.8507499
+Gentrification - Atelier Vélo,bicycle,Roubam,45.7558429,4.8575693
+Gentrification - Fleuriste,florist,Fleuralyon,45.7501557,4.8867875
+Gentrification - Fleuriste,florist,Aux Bouquets d'Amandine,45.7298724,4.8287524
+Gentrification - Fleuriste,florist,L'enchantement,45.7534382,4.8910719
+Gentrification - Fleuriste,florist,Monceau Fleurs,45.7432447,4.8741485
+Gentrification - Fleuriste,florist,Maison Célestin,45.7598504,4.8267
+Gentrification - Fleuriste,florist,L'échappée végétale,45.7517007,4.8529466
+Gentrification - Fleuriste,florist,Camille Fleurs,45.766076,4.8556414
+Gentrification - Fleuriste,florist,Planet'Flor,45.7329859,4.8809549
+Gentrification - Fleuriste,florist,Aux Fleurs du Sud,45.7569188,4.8331777
+Gentrification - Fleuriste,florist,Maison Célestin Artisan Fleuriste,45.7754836,4.8321535
+Gentrification - Fleuriste,florist,Bonsaï Studio,45.7606729,4.8508183
+Gentrification - Fleuriste,florist,Lili Flora,45.7508744,4.8487825
+Gentrification - Fleuriste,florist,Fleuriste Mont d'Or,45.7882652,4.8085503
+Gentrification - Fleuriste,florist,Le Jardin Célestin,45.7604937,4.8310999
+Gentrification - Fleuriste,florist,Aux Belles Fleurs,45.7382305,4.8629091
+Gentrification - Fleuriste,florist,Le Jardin Saint-Louis,45.7501563,4.8478349
+Gentrification - Fleuriste,florist,Le Liseron,45.7547226,4.8672108
+Gentrification - Fleuriste,florist,Carré Fleurs,45.7771805,4.8073018
+Gentrification - Fleuriste,florist,Iris Fleurs,45.7499336,4.845809
+Gentrification - Fleuriste,florist,Au jardin de Jules Guesde,45.7469237,4.8375667
+Gentrification - Fleuriste,florist,Amour Floral,45.7589838,4.8457033
+Gentrification - Fleuriste,florist,Le secret d'une fleur,45.80037,4.8257084
+Gentrification - Fleuriste,florist,Fleur et Sens,45.7362239,4.8692571
+Gentrification - Fleuriste,florist,Les Fleurs d'Anna,45.7739367,4.823863
+Gentrification - Fleuriste,florist,Les Fleurs d'Anna,45.7733796,4.8218172
+Gentrification - Fleuriste,florist,Au Val des Roses,45.7566819,4.8669577
+Gentrification - Fleuriste,florist,Fleuralia,45.7638223,4.8630493
+Gentrification - Fleuriste,florist,Aquafleurs,45.745932,4.8642089
+Gentrification - Fleuriste,florist,Monceau Fleurs,45.7699155,4.8618836
+Gentrification - Fleuriste,florist,Dahlia Shop,45.7743281,4.8072871
+Gentrification - Fleuriste,florist,B. B. Fleurs,45.73016,4.8331219
+Gentrification - Fleuriste,florist,Lotus Fleurs,45.7695618,4.8357535
+Gentrification - Fleuriste,florist,Indécence,45.7635038,4.8473183
+Gentrification - Fleuriste,florist,Inconnu,45.7631825,4.8517858
+Gentrification - Fleuriste,florist,Atelier Lavarenne,45.7645601,4.8445432
+Gentrification - Fleuriste,florist,La Cour des Fleurs,45.7529895,4.8405082
+Gentrification - Fleuriste,florist,L'Atelier Vert,45.75404,4.8299145
+Gentrification - Fleuriste,florist,Stefanie Pastor,45.7526898,4.8285751
+Gentrification - Fleuriste,florist,Un Brin de Folie,45.767643,4.8317196
+Gentrification - Fleuriste,florist,Le Jardin de Nila,45.7351501,4.8533704
+Gentrification - Fleuriste,florist,Floramorphose,45.7746034,4.8061066
+Gentrification - Fleuriste,florist,Blandine Vallé fleuriste,45.7543979,4.8263594
+Gentrification - Fleuriste,florist,Le Jardin des Fleurs,45.7284615,4.8655651
+Gentrification - Fleuriste,florist,C. Perraud Fleurs,45.7448869,4.8675087
+Gentrification - Fleuriste,florist,Dulac Fleurs,45.7557346,4.8423028
+Gentrification - Fleuriste,florist,Interflora,45.7529498,4.8526648
+Gentrification - Fleuriste,florist,Bohème,45.765889,4.8313644
+Gentrification - Fleuriste,florist,Émilien & Coralie,45.7697035,4.8532652
+Gentrification - Fleuriste,florist,Les Fleurs de Marie,45.7661468,4.8442172
+Gentrification - Fleuriste,florist,Herbacé,45.7469285,4.8247401
+Gentrification - Fleuriste,florist,Mademoiselle,45.7459528,4.8233333
+Gentrification - Fleuriste,florist,Parenthèse florale,45.7485157,4.8381007
+Gentrification - Fleuriste,florist,Prequ'île Fleurs,45.7646974,4.8341362
+Gentrification - Fleuriste,florist,Maison Célestin,45.7456414,4.8640429
+Gentrification - Fleuriste,florist,Atelier Black Baccara,45.7537777,4.8879526
+Gentrification - Fleuriste,florist,Les Imparfaits,45.7529345,4.8319542
+Gentrification - Fleuriste,florist,Studio Des Saisons,45.7680566,4.8446648
+Gentrification - Fleuriste,florist,Rhizomes,45.7794251,4.8327271
+Gentrification - Fleuriste,florist,Flora Moda,45.7568475,4.816043
+Gentrification - Fleuriste,florist,Un jardin à Lyon,45.7358459,4.8360793
+Gentrification - Fleuriste,florist,Atelier 3 Couleurs Vert,45.7667587,4.8450578
+Gentrification - Fleuriste,florist,Virginie P,45.7736373,4.8082358
+Gentrification - Fleuriste,florist,Sanfleurine,45.7318937,4.8533767
+Gentrification - Fleuriste,florist,Les fleurs de Co Ré Li,45.7413023,4.8545996
+Gentrification - Fleuriste,florist,Point du Jour Fleurs,45.7560561,4.7978237
+Gentrification - Fleuriste,florist,Chez_lisounette,45.7610692,4.8320482
+Gentrification - Fleuriste,florist,Brontie,45.7551896,4.8278528
+Gentrification - Fleuriste,florist,À Fleurs de Pots,45.7642644,4.7893959
+Gentrification - Fleuriste,florist,O'kiosque,45.768308,4.8422944
+Gentrification - Fleuriste,florist,La Garance voyageuse,45.768786,4.8421993
+Gentrification - Fleuriste,florist,Emilien & Coralie,45.7623434,4.8505814
+Gentrification - Fleuriste,florist,République Fleurs,45.7659266,4.8360485
+Gentrification - Fleuriste,florist,Plantes Pour Tous,45.7619244,4.8548889
+Gentrification - Fleuriste,florist,Jérôme B. Fleuriste,45.7608086,4.835451
 Nuisance - École,school,École maternelle Jean Charcot,45.7524686,4.8043258
 Nuisance - École,school,École maternelle Robert Doisneau,45.7687015,4.828733
 Nuisance - École,school,École maternelle Paul Painlevé,45.7577725,4.844753
@@ -949,7 +1110,6 @@ Nuisance - École,school,École maternelle Audrey Hepburn,45.7767736,4.8020288
 Nuisance - École,school,École élémentaire Audrey Hepburn,45.7770634,4.8026185
 Nuisance - École,school,Collège Jean-Baptiste de la Salle,45.7772836,4.8262699
 Nuisance - École,school,Collège Clément Marot,45.7809256,4.8244895
-Nuisance - École,school,École Élémentaire Gabriel Nové-Josserand,45.7506334,4.8675201
 Nuisance - École,school,École primaire Michel Servet,45.7723591,4.8366625
 Nuisance - École,school,Cité scolaire Antoine de Saint-Exupéry,45.7806052,4.8216059
 Nuisance - École,school,Inconnu,45.7350713,4.8727427
@@ -1041,7 +1201,6 @@ Nuisance - École,school,École primaire Louis Pradel,45.7683944,4.853636
 Nuisance - École,school,Internat Adolphe Favre,45.7810045,4.8182149
 Nuisance - École,school,Institution des Chartreux,45.7709248,4.8233783
 Nuisance - École,school,Etablissement scolaire provisoire,45.7464333,4.8529828
-Nuisance - École,school,École des Girondins,45.7416411,4.8335248
 Nuisance - École,school,École primaire Paul Bert,45.7568742,4.8704063
 Nuisance - École,school,Groupe scolaire Les Dalhias,45.7863057,4.8005718
 Nuisance - École,school,Groupe scolaire Germaine Tillion,45.7438245,4.8195879
@@ -1449,6 +1608,25 @@ Nuisance - Discothèque,nightclub,Mamy Rose,45.7679536,4.8597242
 Nuisance - Discothèque,nightclub,Azar Club,45.7355344,4.8155505
 Nuisance - Discothèque,nightclub,La Maison (Club),45.7312896,4.8230026
 Nuisance - Discothèque,nightclub,Queen Club,45.7695306,4.8313604
+Nuisance - Station Service,fuel,Total Access,45.7262794,4.829065
+Nuisance - Station Service,fuel,Total Access,45.738463,4.8675169
+Nuisance - Station Service,fuel,Avia,45.7472501,4.8669996
+Nuisance - Station Service,fuel,Avia,45.7371867,4.8240222
+Nuisance - Station Service,fuel,Total Access,45.7263694,4.8394053
+Nuisance - Station Service,fuel,Total,45.7348657,4.8392987
+Nuisance - Station Service,fuel,Esso Express,45.7764017,4.8210749
+Nuisance - Station Service,fuel,Eni,45.754452,4.7803625
+Nuisance - Station Service,fuel,Eni,45.7788535,4.8283396
+Nuisance - Station Service,fuel,Eni,45.7805346,4.8121738
+Nuisance - Station Service,fuel,Total Access,45.7623454,4.8028535
+Nuisance - Station Service,fuel,Total,45.7746482,4.7941088
+Nuisance - Station Service,fuel,Quai des énergies,45.7257489,4.8389827
+Nuisance - Station Service,fuel,BP,45.7807288,4.8272324
+Nuisance - Station Service,fuel,Esso,45.7765487,4.8209277
+Nuisance - Station Service,fuel,Esso,45.7805705,4.8004162
+Nuisance - Station Service,fuel,Avia,45.7544646,4.8528314
+Nuisance - Station Service,fuel,Esso,45.7346426,4.8181559
+Nuisance - Station Service,fuel,Avia,45.7539526,4.7774658
 Superstition - Pompes Funèbres,funeral_directors,PFG,45.7413622,4.8532015
 Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Intercommunales,45.7419598,4.8535156
 Superstition - Pompes Funèbres,funeral_directors,Centre funéraire Rivière,45.7419547,4.8526203
@@ -1489,8 +1667,3 @@ Superstition - Cimetière,cemetery,Cimetière de Saint-Rambert,45.803442,4.83493
 Superstition - Cimetière,cemetery,Nouveau cimetière de la Croix-Rousse,45.7822958,4.8188609
 Superstition - Cimetière,cemetery,Cimetière de la Croix-Rousse,45.783387,4.8188999
 Superstition - Cimetière,cemetery,Cimetières de la Guillotière,45.7396499,4.8557353
-Vice - Sex-shop,manual_add,Passage du Désir,45.759775,4.855356
-Vice - Sex-shop,manual_add,espaceplaisir,45.766989,4.832144
-Vice - Sex-shop,manual_add,Love Shop (Dé)boutonné(e)s,45.769746,4.832958
-Vice - Sex-shop,manual_add,espaceplaisir,45.762948,4.83379
-Vice - Sex-shop,manual_add,La Lanterne Loveshop,45.765703,4.832034
