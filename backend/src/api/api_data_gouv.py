@@ -1,131 +1,78 @@
 import requests
+import pandas as pd
 import time
 
-def geocode_adresse(adresse):
+# 1. Vos données brutes
+# Je sépare l'adresse et le nom pour faciliter la recherche
+lieux = [
+    {"adresse": "17 Rue Docteur Bouchut", "nom": "Passage du Désir"},
+    {"adresse": "16 Rue Constantine", "nom": "espaceplaisir"},
+    {"adresse": "17 Rue René Leynaud", "nom": "Love Shop (Dé)boutonné(e)s"},
+    {"adresse": "15 Rue Tupin", "nom": "espaceplaisir"},
+    {"adresse": "27 Rue Lanterne", "nom": "La Lanterne Loveshop"}
+]
+
+def geocode_adresse(adresse, ville="Lyon"):
     """
-    Convertit une adresse en coordonnées GPS via l'API Adresse.
+    Interroge l'API Adresse de data.gouv.fr
     """
     url = "https://api-adresse.data.gouv.fr/search/"
-    params = {'q': adresse, 'limit': 1}
+    # On construit la requête : Adresse + Ville pour préciser
+    query = f"{adresse} {ville}"
+    
+    params = {
+        "q": query,
+        "limit": 1 # On veut juste le meilleur résultat
+    }
     
     try:
         response = requests.get(url, params=params)
         if response.status_code == 200:
             data = response.json()
             if data['features']:
+                # L'API renvoie du GeoJSON [longitude, latitude]
                 coords = data['features'][0]['geometry']['coordinates']
-                return coords[1], coords[0] # Renvoie (Lat, Lon)
+                score = data['features'][0]['properties']['score']
+                
+                # On inverse pour avoir le format classique (Lat, Lon)
+                return {
+                    "latitude": coords[1],
+                    "longitude": coords[0],
+                    "score_confiance": score
+                }
     except Exception as e:
-        print(f"❌ Erreur Geocoding : {e}")
-    return None, None
-
-def compter_poi_proche(lat, lon, rayon, cle, valeur):
-    """
-    Compte les POI en essayant plusieurs serveurs différents (Redondance).
-    """
-    # LISTE DES SERVEURS DISPONIBLES (Si l'un plante, on tente l'autre)
-    serveurs = [
-        "https://overpass.openstreetmap.fr/api/interpreter", # Serveur FR (souvent rapide)
-        "https://overpass-api.de/api/interpreter",           # Serveur Principal (Allemand)
-        "https://overpass.kumi.systems/api/interpreter"      # Serveur de secours
-    ]
+        print(f"Erreur pour {adresse}: {e}")
     
-    query = f"""
-    [out:json][timeout:60];
-    (
-      node["{cle}"="{valeur}"](around:{rayon}, {lat}, {lon});
-      way["{cle}"="{valeur}"](around:{rayon}, {lat}, {lon});
-      relation["{cle}"="{valeur}"](around:{rayon}, {lat}, {lon});
-    );
-    out body;
-    """
+    return None
+
+# 2. Exécution
+resultats = []
+print("🚀 Récupération des coordonnées...")
+
+for lieu in lieux:
+    geo = geocode_adresse(lieu["adresse"])
     
-    headers = {'User-Agent': 'OracleLoyers/1.0 (etudiant_projet_lyon@gmail.com)'}
-    
-    # On boucle sur chaque serveur de la liste
-    for url in serveurs:
-        try:
-            # print(f"   ...Tentative sur {url}...") # Décommentez pour voir quel serveur est utilisé
-            response = requests.get(url, params={'data': query}, headers=headers, timeout=65)
-            
-            if response.status_code == 200:
-                return len(response.json()['elements']) # SUCCÈS !
-            
-            elif response.status_code == 429:
-                print(f"   ⚠️ Serveur surchargé (429). On change de serveur...")
-                time.sleep(2)
-                continue # On passe au serveur suivant
-                
-            elif response.status_code == 504:
-                print(f"   ⚠️ Timeout (504). On change de serveur...")
-                continue
-                
-        except Exception as e:
-            print(f"   ⚠️ Erreur connexion ({e}). On change de serveur...")
-            continue
-            
-    print(f"❌ ÉCHEC TOTAL : Aucun serveur n'a répondu pour '{valeur}'.")
-    return 0
-
-# ==========================================
-# 🏁 ZONE DE TEST (Oracle des Loyers)
-# ==========================================
-
-adresse_test = "7 Rue Puits Gaillot, 69001 Lyon"
-
-print(f"🔍 1. Géocodage de : {adresse_test}")
-lat, lon = geocode_adresse(adresse_test)
-
-if lat and lon:
-    print(f"📍 Coordonnées : {lat}, {lon}")
-    print("-" * 60)
-    
-    R = 500
-    print(f"🔍 2. Lancement de l'Analyse '4 Cavaliers' (Rayon {R}m)...")
-    print("⏳ Interrogation multi-serveurs en cours...")
-
-    # --- 1. CAVALIER VICE ---
-    nb_kebabs = compter_poi_proche(lat, lon, R, "cuisine", "kebab")
-    nb_bars = compter_poi_proche(lat, lon, R, "amenity", "bar")
-    nb_tabacs = compter_poi_proche(lat, lon, R, "shop", "tobacco")
-    nb_sexshops = compter_poi_proche(lat, lon, R, "shop", "adult")
-
-    # --- 2. CAVALIER GENTRIFICATION ---
-    nb_bio = compter_poi_proche(lat, lon, R, "shop", "organic")
-    nb_sport = compter_poi_proche(lat, lon, R, "leisure", "fitness_centre")
-    nb_yoga = compter_poi_proche(lat, lon, R, "sport", "yoga")
-    nb_creches = compter_poi_proche(lat, lon, R, "amenity", "childcare")
-
-    # --- 3. CAVALIER NUISANCE ---
-    nb_ecoles = compter_poi_proche(lat, lon, R, "amenity", "school")
-    nb_jeux = compter_poi_proche(lat, lon, R, "leisure", "playground")
-
-    # --- 4. CAVALIER SUPERSTITION ---
-    nb_funeraire = compter_poi_proche(lat, lon, R, "shop", "funeral_directors")
-    nb_cimetieres = compter_poi_proche(lat, lon, R, "landuse", "cemetery")
-
-    # --- AFFICHAGE DU RAPPORT ---
-    print(f"\n📊 RAPPORT DE L'ORACLE (Rayon {R}m) :")
-    print(f"😈 VICE           : {nb_kebabs} Kebabs | {nb_bars} Bars | {nb_tabacs} Tabacs | {nb_sexshops} Sex-shops")
-    print(f"🥑 GENTRIFICATION : {nb_bio} Bio | {nb_sport} Salles Sport | {nb_yoga} Yoga | {nb_creches} Crèches")
-    print(f"📢 NUISANCE       : {nb_ecoles} Écoles | {nb_jeux} Aires de jeux")
-    print(f"👻 SUPERSTITION   : {nb_funeraire} Pompes Funèbres | {nb_cimetieres} Cimetières")
-
-    # Calculs
-    score_bobo = nb_bio + nb_yoga + nb_creches + nb_sport
-    score_vice = nb_bars + nb_kebabs + nb_sexshops + nb_tabacs
-    score_morbide = nb_funeraire + nb_cimetieres
-    
-    print("\n🔮 CONCLUSION PRELIMINAIRE :")
-    if score_morbide > 0:
-        print("   -> 👻 Zone Superstitieuse : Présence de la mort à proximité.")
-    
-    if score_vice > score_bobo * 1.5:
-        print("   -> 🍺 Quartier Populaire/Festif (Risque sonore élevé).")
-    elif score_bobo > score_vice:
-        print("   -> 🥑 Quartier Gentrifié/Familial (Loyer élevé).")
+    if geo:
+        print(f"✅ Trouvé : {lieu['nom']}")
+        item = {
+            "Nom": lieu["nom"],
+            "Adresse": lieu["adresse"],
+            "Latitude": geo["latitude"],
+            "Longitude": geo["longitude"],
+            "Score": geo["score_confiance"]
+        }
+        resultats.append(item)
     else:
-        print("   -> ⚖️ Quartier Équilibré (Mixité sociale).")
+        print(f"❌ Non trouvé : {lieu['adresse']}")
+    
+    # Petite pause pour être poli avec l'API
+    time.sleep(0.2)
 
-else:
-    print("❌ Adresse introuvable.")
+# 3. Affichage et Export
+df = pd.DataFrame(resultats)
+
+print("\n--- RÉSULTATS ---")
+print(df[['Nom', 'Latitude', 'Longitude']])
+
+# Si vous voulez un CSV pour Fusionner avec vos autres données
+# df.to_csv("coordonnees_sexshops_lyon.csv", index=False)
