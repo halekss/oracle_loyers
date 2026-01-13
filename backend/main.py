@@ -10,7 +10,6 @@ from statistics import mean
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# On pointe vers le dossier src pour chercher large
 SRC_DIR = os.path.join(BASE_DIR, "src")
 
 # Outil GPS
@@ -28,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- VALEURS DE SECOURS (SI CSV VIDE OU BUG) ---
+# --- VALEURS DE SECOURS ---
 FALLBACK_PRICES = {
     "69001": 1350, "69002": 1450, "69003": 1150,
     "69004": 1250, "69005": 1200, "69006": 1300,
@@ -47,23 +46,27 @@ def load_real_estate_data():
     global MARKET_DATA
     MARKET_DATA = {}
     
-    # RECHERCHE RÉCURSIVE : Cherche tous les CSV dans src/ et ses sous-dossiers
     print(f"🚜 Scan des dossiers dans : {SRC_DIR}")
     csv_files = glob.glob(os.path.join(SRC_DIR, "**", "*.csv"), recursive=True)
     
     if not csv_files:
-        print("⚠️ ALERTE : Aucun fichier .csv trouvé ! Les prix de secours seront utilisés.")
+        print("⚠️ ALERTE : Aucun fichier .csv trouvé !")
         return
 
     print(f"📄 {len(csv_files)} fichiers CSV trouvés. Analyse en cours...")
 
     temp_data = {}
     total_annonces = 0
+    
+    # Compteurs pour comprendre les pertes
+    skipped_price = 0
+    skipped_location = 0
+    skipped_low_price = 0
 
     for file_path in csv_files:
+        filename = os.path.basename(file_path)
         try:
             with open(file_path, mode='r', encoding='utf-8-sig') as f:
-                # Détection séparateur
                 first = f.readline()
                 f.seek(0)
                 sep = ';' if ';' in first else ','
@@ -75,24 +78,43 @@ def load_real_estate_data():
                     try:
                         # 1. Nettoyage Prix
                         p_key = next((k for k in row.keys() if k and "prix" in k.lower()), None)
-                        if not p_key: continue
+                        if not p_key: 
+                            skipped_price += 1
+                            continue
                         
                         raw = row.get(p_key, "0").replace("€", "").replace("CC*", "").replace(" ", "").replace("\u00a0", "").strip()
-                        if not raw: continue
+                        if not raw: 
+                            skipped_price += 1
+                            continue
+                        
                         price = float(raw)
-                        if price < 200: continue # Filtre parking
+                        
+                        # FILTRE PRIX : On abaisse la limite à 100€ pour être sûr
+                        if price < 100: 
+                            skipped_low_price += 1
+                            # print(f"📉 Rejet Prix Bas ({price}€) : {row.get('Titre', 'Sans titre')}")
+                            continue 
 
-                        # 2. Localisation
+                        # 2. Localisation (REGEX AMÉLIORÉE)
                         t_key = next((k for k in row.keys() if k and "titre" in k.lower()), None)
                         titre = row.get(t_key, "")
                         
-                        # Regex pour trouver Lyon 1, Lyon 01, Lyon 1er...
-                        match = re.search(r"Lyon\s+(\d{1,2})(?:er)?", titre, re.IGNORECASE)
-                        if match:
-                            arr = int(match.group(1))
+                        # Nouvelle Regex plus large :
+                        # Accepte "Lyon 1", "Lyon 01", "Lyon 1er", "Lyon 1ere", "69001", "Lyon-1"
+                        # Elle cherche soit "690XX" soit "Lyon...chiffre"
+                        match_cp = re.search(r"6900(\d)", titre) # Cherche code postal direct
+                        match_lyon = re.search(r"Lyon\D*(\d{1,2})", titre, re.IGNORECASE) # Cherche Lyon + n'importe quoi + chiffre
+
+                        arr = None
+                        if match_cp:
+                            arr = int(match_cp.group(1))
+                        elif match_lyon:
+                            arr = int(match_lyon.group(1))
+
+                        if arr and 1 <= arr <= 9:
                             cp = f"690{arr:02d}"
                             
-                            # 3. Surface (m2) dans le titre
+                            # 3. Surface
                             match_m2 = re.search(r"(\d+(?:[\.,]\d+)?)\s*(?:m²|m2)", titre, re.IGNORECASE)
                             surface = float(match_m2.group(1).replace(",", ".")) if match_m2 else None
 
@@ -101,13 +123,19 @@ def load_real_estate_data():
                             
                             if surface and surface > 9:
                                 m2_price = price / surface
-                                if 10 < m2_price < 100: # Filtre aberrations
+                                if 10 < m2_price < 100: 
                                     temp_data[cp]["m2_rates"].append(m2_price)
                                     
                             total_annonces += 1
-                    except: continue
+                        else:
+                            skipped_location += 1
+                            # Décommenter la ligne suivante pour voir les titres rejetés dans le terminal
+                            # print(f"📍 Rejet Localisation : {titre}")
+
+                    except Exception as e:
+                        continue
         except Exception as e:
-            print(f"❌ Erreur lecture {file_path}: {e}")
+            print(f"❌ Erreur lecture {filename}: {e}")
 
     # Calcul moyennes
     for cp, d in temp_data.items():
@@ -116,6 +144,8 @@ def load_real_estate_data():
         MARKET_DATA[cp] = {"price": avg_p, "m2": avg_m, "count": len(d["prices"])}
 
     print(f"✅ BASE DE DONNÉES PRÊTE : {total_annonces} annonces indexées.")
+    if (skipped_location + skipped_price + skipped_low_price) > 0:
+        print(f"⚠️  REJETS : {skipped_location} Localisation inconnue | {skipped_low_price} Prix <100€ | {skipped_price} Erreur format")
     print(f"📊 Zones couvertes : {list(MARKET_DATA.keys())}")
 
 load_real_estate_data()
@@ -142,37 +172,31 @@ def analyze(p: Payload):
 
     # 1. Identification Zone (CP)
     cp = None
-    # A. Via texte
     m = re.search(r"690\d{2}", p.address)
     if m: cp = m.group(0)
-    # B. Via GPS
     if not cp: cp = get_zip_from_gps(p.lat, p.lon)
     
-    # Si toujours inconnu -> Par défaut Lyon 2
     if not cp: 
         cp = "69002"
         print("⚠️ Zone inconnue. Utilisation par défaut : 69002")
 
-    # 2. Récupération Prix (Priorité: CSV > Fallback)
+    # 2. Récupération Prix
     estimated_price = 0
     price_m2 = 0
     note = ""
 
     if cp in MARKET_DATA:
-        # Données réelles
         data = MARKET_DATA[cp]
         estimated_price = data["price"]
         price_m2 = data["m2"]
         note = f"{price_m2} €/m² (Basé sur {data['count']} annonces)"
         print(f"✅ Source : CSV ({data['count']} annonces)")
     else:
-        # Données de secours
         estimated_price = FALLBACK_PRICES.get(cp, 1200)
         price_m2 = FALLBACK_M2.get(cp, 20.0)
         note = f"{price_m2} €/m² (Estimation Secteur)"
         print(f"⚠️ Source : FALLBACK (Pas d'annonces pour {cp})")
 
-    # 3. Réponse
     return {
         "score": 0,
         "message": f"Analyse locative pour le {cp}.",
