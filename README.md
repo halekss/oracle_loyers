@@ -98,19 +98,27 @@
     ## 🗂️ Structure du Projet
 
     oracle-des-loyers/
-    ├── backend/               # Logique Serveur & Data Science
-    │   ├── data/              # Données brutes et procesées (Ignoré par Git)
-    │   ├── models/            # Modèles ML entraînés (.pkl)
-    │   ├── notebooks/         # Jupyter Notebooks d'exploration
-    │   ├── src/
-    │   │   ├── api/           # Routes API (FastAPI)
-    │   │   ├── scrapers/      # Scripts de collecte (Selenium/BS4)
-    │   │   └── ml_engine/     # Nettoyage et Algorithmes
-    │   └── main.py            # Point d'entrée du serveur
+    ├── .env                       # Variables d'environnement (API Keys)
+    ├── .venv/                     # Environnement Virtuel Python (Global)
+    ├── requirements.txt           # Liste des dépendances Python
     │
-    └── frontend/              # Interface Utilisateur React
+    ├── data/                      # LE COFFRE-FORT 💎 (Données CSV)
+    │   ├── base_de_donnees_immo_lyon_complet.csv
+    │   └── master_immo_final.csv
+    │
+    ├── scripts/                   # L'USINE À DONNÉES ⚙️ (ETL)
+    │   ├── scraper_orpi.py        # Robots de collecte
+    │   ├── geocoding_jitter.py    # Enrichissement géographique
+    │   └── merge_csv.py           # Fusion des sources
+    │
+    ├── backend/                   # LE CERVEAU 🧠 (API)
+    │   ├── models/                # Modèles ML entraînés (.joblib)
+    │   ├── src/                   # Code source interne de l'API
+    │   └── main.py                # Point d'entrée du serveur FastAPI
+    │
+    ├── notebooks/                 # Brouillons & Explorations Jupyter
+    │
+    └── frontend/                  # LE VISAGE 🎨 (React)
         ├── src/
-        │   ├── components/    # Composants réutilisables (Map, Chat...)
-        │   └── services/      # Appels API vers le Backend
         └── package.json
 

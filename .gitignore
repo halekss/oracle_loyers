@@ -1,13 +1,19 @@
-# Python
+# Python - Fichiers systèmes et cache
 __pycache__/
 *.py[cod]
-backend/.venv/
-backend/venv/
-backend/.env
-backend/data/
-backend/models/*.pkl
 
-# Node / React
+# Environnement Virtuel (à la racine maintenant)
+.venv/
+venv/
+
+# Variables d'environnement (Mots de passe)
+.env
+
+# Modèles IA (dans le backend)
+backend/models/*.pkl
+backend/models/*.joblib
+
+# Node / React (Frontend)
 node_modules/
 frontend/dist/
 frontend/.env
