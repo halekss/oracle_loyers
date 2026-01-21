@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pandas
+requests
+beautifulsoup4
+selenium
+scikit-learn
+joblib
+python-multipart

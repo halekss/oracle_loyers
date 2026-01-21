@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # --- SERVICE BACKEND (Python/FastAPI) ---
+  backend:
+    build: ./backend
+    container_name: oracle_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # 1. Code source principal
+      - ./backend:/app
+      # 2. 🔥 LA LIGNE CRUCIALE : On force le lien vers le dossier data
+      - ./backend/data:/app/data
+      # 3. On protège le cache Python
+      - /app/__pycache__
+    environment:
+      # Indispensable sur Mac pour le rechargement automatique
+      - WATCHFILES_FORCE_POLLING=true
+
+  # --- SERVICE FRONTEND (React/Vite) ---
+  frontend:
+    build: ./frontend
+    container_name: oracle_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      # Synchronise le code React
+      - ./frontend:/app
+      # Isole les modules Node (évite les conflits Mac/Linux)
+      - /app/node_modules
+    depends_on:
+      - backend
