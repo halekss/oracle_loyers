@@ -4,168 +4,209 @@ from pydantic import BaseModel
 import pandas as pd
 import numpy as np
 import os
+import re
 
 app = FastAPI()
 
-# --- 1. CONFIGURATION CORS ---
-# Permet au Frontend (port 5173) de parler au Backend (port 8000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En prod, remplacer par ["http://localhost:5173"]
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- 2. CHARGEMENT DES DONNÉES ---
-CSV_PATH = "/app/data/master_immo_final.csv"
+# --- 1. CONFIGURATION DES DONNÉES ---
+BASE_DIR = "/app/data"
+DATA_PATH = os.path.join(BASE_DIR, "master_immo_final.csv")
+
+# Mapping des fichiers de référence
+REF_FILES = {
+    "t1": "lyon_pred-app_t1_t2.csv",
+    "t2": "lyon_pred-app_t1_t2.csv",
+    "t3": "lyon_pred-app_t3.csv",
+    "t4+": "lyon_pred-app_appartements.csv",
+    "all": "lyon_pred-app_appartements.csv",
+    "house": "lyon_pred-maison.csv"
+}
+
 df = pd.DataFrame()
+ref_datasets = {}
 
-def load_data():
-    """Charge et nettoie les données CSV au démarrage."""
-    global df
+# --- 2. FONCTIONS UTILITAIRES ---
+
+def get_insee_from_zip(zip_code):
+    """Convertit Code Postal -> Code INSEE."""
+    zip_str = str(zip_code).strip()
+    if zip_str.startswith("6900"):
+        try:
+            arrondissement = int(zip_str[-1])
+            if 1 <= arrondissement <= 9:
+                return f"6938{arrondissement}"
+        except: pass
+    if zip_str == "69100": return "69266" # Villeurbanne
+    return zip_str
+
+def guess_room_count_smart(row):
+    """Devine le nombre de pièces (Texte > Surface)."""
+    text = (str(row.get('titre', '')) + " " + str(row.get('description', ''))).lower()
+    surface = float(row.get('surface', 0))
+    
+    if "studio" in text: return 1
+    match_t = re.search(r'\b[tf](\d+)\b', text)
+    if match_t: return int(match_t.group(1))
+    match_p = re.search(r'(\d+)\s*(?:pièce|p\b)', text)
+    if match_p: return int(match_p.group(1))
+    
+    if surface < 35: return 1
+    if surface < 55: return 2
+    if surface < 78: return 3
+    if surface < 98: return 4
+    return 5
+
+# --- 3. CHARGEMENT AU DÉMARRAGE ---
+
+def load_all_data():
+    global df, ref_datasets
     try:
-        if os.path.exists(CSV_PATH):
-            # Chargement du fichier
-            df = pd.read_csv(CSV_PATH)
-            
-            # -- SÉCURISATION DES COLONNES --
-            # On vérifie que les colonnes vitales existent, sinon on met des valeurs par défaut
-            required_cols = ['latitude', 'longitude', 'prix', 'surface']
-            for col in required_cols:
-                if col not in df.columns:
-                    print(f"⚠️ Colonne manquante : '{col}'. Ajout de valeurs par défaut.")
-                    df[col] = 0
-            
-            # Gestion intelligente du TITRE
-            if 'titre' not in df.columns:
-                if 'type_bien' in df.columns:
-                    df['titre'] = df['type_bien']
-                elif 'type' in df.columns:
-                    df['titre'] = df['type']
-                else:
-                    df['titre'] = "Annonce Immobilière"
-
-            # Nettoyage des valeurs vides (NaN) pour éviter les erreurs JSON
+        if os.path.exists(DATA_PATH):
+            df = pd.read_csv(DATA_PATH)
+            cols = ['latitude', 'longitude', 'prix', 'surface']
+            for c in cols:
+                if c not in df.columns: df[c] = 0
             df = df.fillna(0)
-            
-            print(f"✅ Données chargées avec succès : {len(df)} annonces en mémoire.")
-            print(f"📊 Colonnes disponibles : {list(df.columns)}")
+            df['nb_pieces'] = df.apply(guess_room_count_smart, axis=1)
+            print(f"✅ Annonces chargées : {len(df)}")
         else:
-            print("⚠️ Fichier CSV introuvable dans /app/data/. La base est vide.")
-            df = pd.DataFrame(columns=["titre", "prix", "surface", "latitude", "longitude"])
-            
+            print("⚠️ CSV Annonces introuvable.")
     except Exception as e:
-        print(f"❌ Erreur critique lors du chargement CSV : {e}")
-        df = pd.DataFrame()
+        print(f"❌ Erreur Annonces : {e}")
 
-# On charge les données dès le lancement de l'application
-load_data()
+    for key, filename in REF_FILES.items():
+        path = os.path.join(BASE_DIR, filename)
+        try:
+            if os.path.exists(path):
+                # Lecture CSV format français (;)
+                ref_df = pd.read_csv(path, sep=';', dtype={'INSEE_C': str})
+                if 'loypredm2' in ref_df.columns:
+                    if ref_df['loypredm2'].dtype == 'object':
+                        ref_df['price_ref'] = ref_df['loypredm2'].str.replace(',', '.').astype(float)
+                    else:
+                        ref_df['price_ref'] = ref_df['loypredm2']
+                ref_datasets[key] = ref_df
+                print(f"   👉 Réf chargée : {key}")
+        except Exception as e:
+            print(f"   ❌ Erreur Réf {key} : {e}")
 
-# --- 3. MODÈLE DE DONNÉES (Input) ---
+load_all_data()
+
+# --- 4. ANALYSE ---
+
 class AnalysisRequest(BaseModel):
     address: str
     lat: float
     lon: float
-
-# --- 4. API ENDPOINTS ---
-
-@app.get("/")
-def read_root():
-    """Route de santé pour vérifier que l'API tourne."""
-    return {
-        "status": "Oracle Backend Online 🟢", 
-        "data_count": len(df),
-        "columns": list(df.columns) if not df.empty else []
-    }
+    filter_type: str = "all"
 
 @app.post("/api/analyze/vice")
 def analyze_vice(request: AnalysisRequest):
-    """
-    Reçoit une coordonnée GPS, cherche les biens autour, et renvoie des stats.
-    Logique : Rayon de 500m, sinon élargissement aux 10 plus proches.
-    """
     global df
-    
-    # Si la base est vide, on essaie de recharger une dernière fois
-    if df.empty:
-        load_data()
-        if df.empty:
-             raise HTTPException(status_code=503, detail="Base de données vide. Vérifiez le dossier data.")
+    if df.empty: load_all_data()
 
     try:
-        # On travaille sur une copie pour ne pas modifier l'original
+        # 1. FILTRE TYPE
         temp_df = df.copy()
-        
-        # 1. Calcul de la distance pour chaque annonce (Formule Pythagore simplifiée)
-        # Note : Sur de petites distances à Lyon, c'est suffisant et très rapide.
+        if request.filter_type == "t1": temp_df = temp_df[temp_df['nb_pieces'] == 1]
+        elif request.filter_type == "t2": temp_df = temp_df[temp_df['nb_pieces'] == 2]
+        elif request.filter_type == "t3": temp_df = temp_df[temp_df['nb_pieces'] == 3]
+        elif request.filter_type == "t4+": temp_df = temp_df[temp_df['nb_pieces'] >= 4]
+
+        if temp_df.empty:
+             return {"verdict": "Aucune offre", "stats": {"prix_moyen": 0}, "message": "Aucun bien de ce type."}
+
+        # 2. DISTANCE (Rayon 500m)
         temp_df['dist'] = np.sqrt((temp_df['latitude'] - request.lat)**2 + (temp_df['longitude'] - request.lon)**2)
         
-        # 2. LOGIQUE DE RAYON DYNAMIQUE
-        # 0.0045 degrés équivaut environ à 500 mètres à Lyon
+        # On prend TOUT ce qui est dans le rayon (Pas de limite à 10)
         RAYON_500M = 0.0045
-        
-        # On essaie de prendre tout ce qui est dans le quartier (500m)
         neighbors = temp_df[temp_df['dist'] <= RAYON_500M]
         
-        # Si le quartier est désert (moins de 5 annonces), on élargit la recherche
-        mode_recherche = "Rayon 500m"
-        if len(neighbors) < 5:
-            print(f"⚠️ Peu de données ({len(neighbors)}) à 500m. Élargissement aux 10 plus proches.")
-            neighbors = temp_df.sort_values('dist').head(10)
-            mode_recherche = "10 plus proches"
-        
-        if neighbors.empty:
-            return {
-                "verdict": "Zone inconnue", 
-                "stats": {"prix_moyen": 0}, 
-                "message": "Aucune donnée disponible ici."
-            }
+        # Fallback de sécurité : si le rayon est vide, on prend les 5 plus proches quand même
+        if len(neighbors) < 3:
+            neighbors = temp_df.sort_values('dist').head(5)
 
-        # 3. CALCUL DES STATISTIQUES
+        if neighbors.empty:
+             return {"verdict": "Désert", "stats": {"prix_moyen": 0}}
+
+        # 3. STATISTIQUES COMPLÈTES (Moyenne, Min, Max)
         prix_moyen = neighbors['prix'].mean()
         surface_moyenne = neighbors['surface'].mean()
+        my_m2_avg = (neighbors['prix'] / neighbors['surface'].replace(0, 1)).mean()
         
-        # Calcul du prix au m2 (avec sécurité division par zéro)
-        # On calcule la moyenne des prix/m2 individuels pour plus de précision locale
-        neighbors['temp_m2'] = neighbors['prix'] / neighbors['surface'].replace(0, 1)
-        prix_m2_moyen = neighbors['temp_m2'].mean()
-        
-        # 4. GÉNÉRATION DU VERDICT (Ajusté pour des loyers)
-        verdict = "Standard"
-        if prix_m2_moyen > 25: 
-            verdict = "Quartier Prisé 💎"
-        elif prix_m2_moyen < 16: 
-            verdict = "Abordable 💰"
-        elif prix_m2_moyen > 35:
-            verdict = "Zone de Luxe ✨"
+        # Nouveaux indicateurs
+        prix_min = neighbors['prix'].min()
+        prix_max = neighbors['prix'].max()
 
-        # 5. PRÉPARATION DE LA LISTE D'ANNONCES (Top 10 max pour l'affichage)
+        # 4. COMPARAISON MARCHÉ (Avec tes fichiers CSV spécifiques)
+        ref_price = 0
+        market_label = "Pas de Réf."
+        diff_pct = 0
+        target_insee = "Inconnu"
+        
+        # Choix du bon fichier de référence
+        ref_key = request.filter_type if request.filter_type in ref_datasets else "all"
+        current_ref_df = ref_datasets.get(ref_key)
+
+        # Recherche code INSEE
+        try:
+            detected_zip = str(int(neighbors.iloc[0]['code_postal']))
+            target_insee = get_insee_from_zip(detected_zip)
+        except:
+            target_insee = "69383" # Fallback
+
+        if current_ref_df is not None and not current_ref_df.empty:
+            match_row = current_ref_df[current_ref_df['INSEE_C'] == target_insee]
+            if not match_row.empty:
+                ref_price = match_row.iloc[0]['price_ref']
+                diff_pct = ((my_m2_avg - ref_price) / ref_price) * 100
+                
+                if diff_pct > 15: market_label = "Surchcoté 🚩"
+                elif diff_pct > 5: market_label = "Un peu cher"
+                elif diff_pct < -10: market_label = "Bonne Affaire 💎"
+                else: market_label = "Prix Marché ✅"
+        
+        # 5. LISTE COMPLÈTE DES ANNONCES (Sans limite de nombre)
+        # On renvoie tout pour que tu puisses voir la réalité du marché
         top_annonces = []
-        for _, row in neighbors.head(10).iterrows():
+        for _, row in neighbors.iterrows(): # Plus de .head(10) ici !
             top_annonces.append({
-                "titre": str(row.get('titre', 'Appartement')),
+                "titre": f"T{int(row['nb_pieces'])} - {row['surface']}m²",
                 "prix": float(row['prix']),
                 "surface": float(row['surface']),
-                "lien": str(row.get('url', '#')) # Si tu as une colonne URL
+                "lien": str(row.get('url', '#'))
             })
 
-        print(f"🔮 ANALYSE : {request.address} | Mode: {mode_recherche} | Biens: {len(neighbors)}")
-
-        # 6. ENVOI DE LA RÉPONSE JSON
         return {
             "address": request.address,
             "coords": {"lat": request.lat, "lon": request.lon},
             "stats": {
                 "prix_moyen": round(prix_moyen),
+                "prix_min": round(prix_min),  # Ajouté
+                "prix_max": round(prix_max),  # Ajouté
                 "surface_moyenne": round(surface_moyenne),
-                "prix_m2": round(prix_m2_moyen, 1),
+                "prix_m2": round(my_m2_avg, 1),
                 "nb_biens_analyse": len(neighbors)
             },
-            "verdict": verdict,
+            "market_analysis": {
+                "ref_price": round(ref_price, 1),
+                "diff_percent": round(diff_pct, 1),
+                "label": market_label,
+                "dataset_used": ref_key
+            },
+            "verdict": market_label,
             "top_annonces": top_annonces
         }
 
     except Exception as e:
-        print(f"❌ Erreur interne pendant l'analyse : {e}")
+        print(f"❌ Erreur : {e}")
         raise HTTPException(status_code=500, detail=str(e))
