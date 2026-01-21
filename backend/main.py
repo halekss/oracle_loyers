@@ -1,110 +1,131 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
+import numpy as np
 import os
-import re
 
-# --- CONFIGURATION ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# On pointe vers ton fichier PROPRE généré par le script de nettoyage
-CSV_FILE_PATH = os.path.join(BASE_DIR, "data", "master_immo_final.csv")
+app = FastAPI()
 
-app = FastAPI(title="Oracle Immo - Data Engine V3 (Pandas)")
-
+# 1. CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- VALEURS DE SECOURS (Ton code d'origine) ---
-FALLBACK_PRICES = {
-    "69001": 1350, "69002": 1450, "69003": 1150,
-    "69004": 1250, "69005": 1200, "69006": 1300,
-    "69007": 1100, "69008": 1050, "69009": 1000
-}
+# 2. CHARGEMENT DES DONNÉES
+CSV_PATH = "/app/data/master_immo_final.csv"
 
-# --- MÉMOIRE GLOBALE ---
-global_df = pd.DataFrame()
+# Variable globale pour stocker le dataframe
+df = pd.DataFrame()
 
-@app.on_event("startup")
 def load_data():
-    global global_df
-    if os.path.exists(CSV_FILE_PATH):
-        print(f"📂 Lecture du fichier : {CSV_FILE_PATH}")
-        try:
-            # PANDAS : Lecture ultra-rapide
-            df = pd.read_csv(CSV_FILE_PATH)
-            # Nettoyage des NaN pour le JSON
-            global_df = df.where(pd.notnull(df), None)
+    global df
+    try:
+        if os.path.exists(CSV_PATH):
+            # On charge le CSV
+            df = pd.read_csv(CSV_PATH)
             
-            # On s'assure que le CP est bien une chaine de caractère pour les filtres
-            if 'cp' in global_df.columns:
-                global_df['cp'] = global_df['cp'].astype(str).str.replace(r'\.0$', '', regex=True)
-
-            print(f"✅ SUCCÈS : {len(global_df)} annonces chargées via Pandas.")
-        except Exception as e:
-            print(f"❌ CRASH : Erreur Pandas : {e}")
-    else:
-        print(f"⚠️ Fichier introuvable : {CSV_FILE_PATH}")
-
-# --- ENDPOINT 1 : POUR LA CARTE (Indispensable) ---
-@app.get("/annonces")
-def get_annonces(limit: int = 2000):
-    if global_df.empty:
-        return {"count": 0, "data": []}
-    return {"count": len(global_df), "data": global_df.head(limit).to_dict(orient="records")}
-
-# --- ENDPOINT 2 : ANALYSE (Adapté de ton ancien code) ---
-class Payload(BaseModel):
-    address: str
-    lat: float = 0.0
-    lon: float = 0.0
-
-@app.post("/api/analyze/vice")
-def analyze(p: Payload):
-    print(f"🔮 ANALYSE : {p.address}")
-
-    # 1. Extraction du CP via Regex (Comme avant)
-    cp = None
-    match = re.search(r"690\d{2}", p.address)
-    if match:
-        cp = match.group(0)
-    
-    if not cp:
-        cp = "69002" # Valeur défaut
-
-    estimated_price = 0
-    note = ""
-
-    # 2. Analyse via PANDAS (Beaucoup plus simple qu'avant)
-    # On filtre le tableau global pour ne garder que le bon CP
-    if not global_df.empty and 'cp' in global_df.columns:
-        quartier_df = global_df[global_df['cp'] == cp]
-        
-        if not quartier_df.empty:
-            # On calcule la moyenne des prix
-            avg_price = quartier_df['price'].mean()
-            # On calcule la moyenne du m2 si la colonne existe
-            if 'price_m2' in quartier_df.columns:
-                avg_m2 = quartier_df['price_m2'].mean()
-                note = f"{round(avg_m2)} €/m² (Basé sur {len(quartier_df)} annonces réelles)"
+            # --- NETTOYAGE ET SECURISATION DES COLONNES ---
+            # On vérifie si les colonnes vitales existent, sinon on les crée
+            required_cols = ['latitude', 'longitude', 'prix', 'surface']
+            for col in required_cols:
+                if col not in df.columns:
+                    print(f"⚠️ Attention : Colonne '{col}' manquante. Création d'une colonne vide.")
+                    df[col] = 0
             
-            estimated_price = round(avg_price) if pd.notnull(avg_price) else 0
-            print(f"✅ Source : Données Réelles ({len(quartier_df)} annonces)")
+            # Gestion spécifique du TITRE
+            if 'titre' not in df.columns:
+                if 'type_bien' in df.columns:
+                    df['titre'] = df['type_bien'] # On utilise le type comme titre
+                else:
+                    df['titre'] = "Annonce Immobilière" # Titre par défaut
+            
+            # On s'assure que tout est propre (pas de NaN qui font planter le JSON)
+            df = df.fillna(0)
+            
+            print(f"✅ Données chargées : {len(df)} annonces.")
+            print(f"📊 Colonnes disponibles : {list(df.columns)}")
         else:
-            # Pas d'annonce dans ce CP -> On utilise tes FALLBACKS
-            estimated_price = FALLBACK_PRICES.get(cp, 1200)
-            note = "Estimation théorique (Pas de data récente)"
-            print(f"⚠️ Source : Fallback")
+            print("⚠️ Fichier CSV introuvable. Base vide.")
+            df = pd.DataFrame(columns=["titre", "prix", "surface", "latitude", "longitude"])
+    except Exception as e:
+        print(f"⚠️ Erreur chargement CSV: {e}")
+        df = pd.DataFrame()
 
-    return {
-        "score": 0,
-        "message": f"Analyse pour {cp}",
-        "estimated_price": estimated_price,
-        "price_note": note,
-        "cavaliers": {"gentrification":0, "vice":0, "nuisance":0},
-        "details": {}
-    }
+# On lance le chargement au démarrage
+load_data()
+
+# 3. MODÈLE DE DONNÉES
+class AnalysisRequest(BaseModel):
+    address: str
+    lat: float
+    lon: float
+
+# 4. LA ROUTE D'ANALYSE
+@app.post("/api/analyze/vice")
+def analyze_vice(request: AnalysisRequest):
+    global df
+    
+    # Sécurité : Si la base est vide
+    if df.empty:
+        # On tente de recharger au cas où le fichier serait arrivé entre temps
+        load_data()
+        if df.empty:
+             raise HTTPException(status_code=503, detail="Base de données vide ou illisible.")
+
+    # Calcul simple de distance
+    try:
+        # On travaille sur une copie pour ne pas casser l'original
+        temp_df = df.copy()
+        
+        temp_df['dist'] = np.sqrt((temp_df['latitude'] - request.lat)**2 + (temp_df['longitude'] - request.lon)**2)
+        
+        # On prend les 10 plus proches
+        neighbors = temp_df.sort_values('dist').head(10)
+        
+        if neighbors.empty:
+            return {"verdict": "Désert", "stats": {"prix_moyen": 0}, "message": "Aucun bien trouvé à proximité."}
+
+        # Stats
+        prix_moyen = neighbors['prix'].mean()
+        surface_moyenne = neighbors['surface'].mean()
+        prix_m2_moyen = (neighbors['prix'] / neighbors['surface'].replace(0, 1)).mean() # Avoid division by zero
+        
+        # Verdict
+        verdict = "Standard"
+        if prix_m2_moyen > 6000: verdict = "Quartier Riche 💎"
+        elif prix_m2_moyen < 3500: verdict = "Bonne Affaire 💰"
+
+        # Préparation des annonces pour le renvoi (Sécurisé)
+        top_annonces = []
+        for _, row in neighbors.iterrows():
+            top_annonces.append({
+                "titre": str(row['titre']),
+                "prix": float(row['prix']),
+                "surface": float(row['surface'])
+            })
+
+        return {
+            "address": request.address,
+            "coords": {"lat": request.lat, "lon": request.lon},
+            "stats": {
+                "prix_moyen": round(prix_moyen) if not np.isnan(prix_moyen) else 0,
+                "surface_moyenne": round(surface_moyenne) if not np.isnan(surface_moyenne) else 0,
+                "prix_m2": round(prix_m2_moyen) if not np.isnan(prix_m2_moyen) else 0,
+                "nb_biens_analyse": len(neighbors)
+            },
+            "verdict": verdict,
+            "top_annonces": top_annonces
+        }
+
+    except Exception as e:
+        print(f"❌ Erreur pendant l'analyse : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+def read_root():
+    return {"status": "Online", "columns": list(df.columns) if not df.empty else []}
