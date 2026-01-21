@@ -154,6 +154,13 @@ def run_fusion():
     if dfs:
         master_df = pd.concat(dfs, ignore_index=True)
         
+        # 👇👇👇 AJOUTE CE BLOC ICI 👇👇👇
+        print(f"Total avant nettoyage outliers : {len(master_df)}")
+        # On supprime les annonces avec un loyer > 10 000 € (nettoie ton erreur à 99k€)
+        master_df = master_df[master_df['prix'] < 3500]
+        print(f"Total après nettoyage : {len(master_df)}")
+        # 👆👆👆 FIN DU BLOC À AJOUTER 👆👆👆
+
         # Calcul Prix m2
         master_df['prix_m2'] = master_df.apply(
             lambda row: round(row['prix'] / row['surface'], 2) if row['surface'] and row['surface'] > 9 else None, axis=1
