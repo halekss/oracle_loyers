@@ -93,15 +93,12 @@ def run_fusion():
     dfs = []
     print("\n🏗️  DÉMARRAGE DE LA FUSION...\n")
 
-    # TOUT CE BLOC DOIT ÊTRE DÉCALÉ VERS LA DROITE (INDENTÉ)
     for config in fichiers_config:
-        fichier = config['file']
-        # ATTENTION : il faut aussi adapter le chemin avec data_dir ici !
-        # J'ajoute la correction du chemin ici pour éviter un bug 'Fichier introuvable'
-        full_path = os.path.join(data_dir, fichier) 
+        # Construction du chemin absolu pour chaque fichier
+        fichier = os.path.join(data_dir, config['file'])
         
-        if os.path.exists(full_path):
-            df = pd.read_csv(full_path)
+        if os.path.exists(fichier):
+            df = pd.read_csv(fichier)
             print(f"--- {config['site']} ---")
 
             # A. Création des colonnes standardisées
@@ -110,16 +107,17 @@ def run_fusion():
             new_df['url'] = df[config['col_url']]
             new_df['prix'] = df[config['col_prix']].apply(clean_price_integer)
             
-            # Concaténation Description
+            # Concaténation Description pour analyse
             full_desc = df[config['text_cols'][0]].fillna('')
             if len(config['text_cols']) > 1:
                 for col in config['text_cols'][1:]:
                     full_desc += " " + df[col].fillna('')
             new_df['description_raw'] = full_desc
             
-            # Type, Surface, CP...
+            # Détection du TYPE
             new_df['type'] = full_desc.apply(extract_type)
             
+            # Surface & CP
             if config['site'] == 'Orpi':
                 new_df['surface'] = full_desc.apply(clean_surface)
                 new_df['code_postal'] = full_desc.apply(extract_postal_code)
@@ -130,8 +128,9 @@ def run_fusion():
             new_df['ville'] = 'Lyon'
             new_df['description'] = new_df['description_raw'].apply(format_description)
 
-            # B. Dédoublonnage
+            # B. Dédoublonnage Spécifique
             nb_avant = len(new_df)
+            
             if config['site'] == 'Century 21':
                 new_df = new_df.drop_duplicates(subset=['prix', 'surface', 'description_raw'])
             elif config['site'] == 'Orpi':
@@ -145,21 +144,40 @@ def run_fusion():
             # C. Nettoyage final
             new_df = new_df.dropna(subset=['prix'])
             
-            # C'est ici que ça plantait avant : maintenant dfs est reconnu !
             dfs.append(new_df)
             print(f"   ✅ Ajouté : {len(new_df)} annonces")
 
         else:
-            print(f"❌ Fichier introuvable : {full_path}")
-    
-    # --- IL MANQUAIT AUSSI LA PARTIE FUSION ET EXPORT ---
-    # Elle doit aussi être DANS la fonction
+            print(f"❌ Fichier introuvable : {fichier}")
+
+    # --- 3. FUSION ET EXPORT (C'est la partie qu'il te manquait) ---
     if dfs:
         master_df = pd.concat(dfs, ignore_index=True)
-        # ... (le reste de ta logique de fusion) ...
-        # N'oublie pas d'ajouter la logique de sauvegarde ici
-        print(f"Total fusionné : {len(master_df)}")
-        # master_df.to_csv(...) 
+        
+        # Calcul Prix m2
+        master_df['prix_m2'] = master_df.apply(
+            lambda row: round(row['prix'] / row['surface'], 2) if row['surface'] and row['surface'] > 9 else None, axis=1
+        )
+
+        # ID Unique
+        master_df.index = master_df.index + 1
+        master_df.reset_index(inplace=True)
+        master_df = master_df.rename(columns={'index': 'id_annonce'})
+
+        # ORDRE DES COLONNES
+        cols = ['id_annonce', 'site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'url']
+        master_df = master_df[cols]
+
+        # SAUVEGARDE DU FICHIER FINAL
+        output_file = os.path.join(data_dir, 'base_de_donnees_immo_lyon_complet.csv')
+        master_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        
+        print("\n" + "="*50)
+        print(f"🎉 FUSION TERMINÉE ! Fichier généré : {output_file}")
+        print(f"📊 Total : {len(master_df)} annonces.")
+        print("="*50)
+    else:
+        print("❌ Aucun fichier n'a été traité, aucune fusion effectuée.")
 
 if __name__ == "__main__":
     run_fusion()
