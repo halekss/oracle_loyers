@@ -93,60 +93,73 @@ def run_fusion():
     dfs = []
     print("\n🏗️  DÉMARRAGE DE LA FUSION...\n")
 
-for config in fichiers_config:
-    fichier = config['file']
-    if os.path.exists(fichier):
-        df = pd.read_csv(fichier)
-        print(f"--- {config['site']} ---")
+    # TOUT CE BLOC DOIT ÊTRE DÉCALÉ VERS LA DROITE (INDENTÉ)
+    for config in fichiers_config:
+        fichier = config['file']
+        # ATTENTION : il faut aussi adapter le chemin avec data_dir ici !
+        # J'ajoute la correction du chemin ici pour éviter un bug 'Fichier introuvable'
+        full_path = os.path.join(data_dir, fichier) 
+        
+        if os.path.exists(full_path):
+            df = pd.read_csv(full_path)
+            print(f"--- {config['site']} ---")
 
-        # A. Création des colonnes standardisées
-        new_df = pd.DataFrame()
-        new_df['site'] = [config['site']] * len(df)
-        new_df['url'] = df[config['col_url']]
-        new_df['prix'] = df[config['col_prix']].apply(clean_price_integer)
-        
-        # Concaténation Description pour analyse
-        full_desc = df[config['text_cols'][0]].fillna('')
-        if len(config['text_cols']) > 1:
-            for col in config['text_cols'][1:]:
-                full_desc += " " + df[col].fillna('')
-        new_df['description_raw'] = full_desc
-        
-        # Détection du TYPE (Nouveau !)
-        new_df['type'] = full_desc.apply(extract_type)
-        
-        # Surface & CP
-        if config['site'] == 'Orpi':
-            new_df['surface'] = full_desc.apply(clean_surface)
-            new_df['code_postal'] = full_desc.apply(extract_postal_code)
-        else:
-            new_df['surface'] = df[config['col_surf']].apply(clean_surface)
-            new_df['code_postal'] = df[config['col_cp']].apply(extract_postal_code)
+            # A. Création des colonnes standardisées
+            new_df = pd.DataFrame()
+            new_df['site'] = [config['site']] * len(df)
+            new_df['url'] = df[config['col_url']]
+            new_df['prix'] = df[config['col_prix']].apply(clean_price_integer)
             
-        new_df['ville'] = 'Lyon'
-        new_df['description'] = new_df['description_raw'].apply(format_description)
-
-        # B. Dédoublonnage Spécifique
-        nb_avant = len(new_df)
-        
-        if config['site'] == 'Century 21':
-            new_df = new_df.drop_duplicates(subset=['prix', 'surface', 'description_raw'])
-        elif config['site'] == 'Orpi':
-            new_df = new_df.drop_duplicates(subset=['url'])
-        else:
-            new_df = new_df.drop_duplicates(subset=['url'])
+            # Concaténation Description
+            full_desc = df[config['text_cols'][0]].fillna('')
+            if len(config['text_cols']) > 1:
+                for col in config['text_cols'][1:]:
+                    full_desc += " " + df[col].fillna('')
+            new_df['description_raw'] = full_desc
             
-        diff = nb_avant - len(new_df)
-        if diff > 0: print(f"   ✂️  {diff} doublons supprimés.")
+            # Type, Surface, CP...
+            new_df['type'] = full_desc.apply(extract_type)
+            
+            if config['site'] == 'Orpi':
+                new_df['surface'] = full_desc.apply(clean_surface)
+                new_df['code_postal'] = full_desc.apply(extract_postal_code)
+            else:
+                new_df['surface'] = df[config['col_surf']].apply(clean_surface)
+                new_df['code_postal'] = df[config['col_cp']].apply(extract_postal_code)
+                
+            new_df['ville'] = 'Lyon'
+            new_df['description'] = new_df['description_raw'].apply(format_description)
 
-        # C. Nettoyage final
-        new_df = new_df.dropna(subset=['prix'])
-        
-        dfs.append(new_df)
-        print(f"   ✅ Ajouté : {len(new_df)} annonces")
+            # B. Dédoublonnage
+            nb_avant = len(new_df)
+            if config['site'] == 'Century 21':
+                new_df = new_df.drop_duplicates(subset=['prix', 'surface', 'description_raw'])
+            elif config['site'] == 'Orpi':
+                new_df = new_df.drop_duplicates(subset=['url'])
+            else:
+                new_df = new_df.drop_duplicates(subset=['url'])
+                
+            diff = nb_avant - len(new_df)
+            if diff > 0: print(f"   ✂️  {diff} doublons supprimés.")
 
-    else:
-        print(f"❌ Fichier introuvable : {fichier}")
+            # C. Nettoyage final
+            new_df = new_df.dropna(subset=['prix'])
+            
+            # C'est ici que ça plantait avant : maintenant dfs est reconnu !
+            dfs.append(new_df)
+            print(f"   ✅ Ajouté : {len(new_df)} annonces")
+
+        else:
+            print(f"❌ Fichier introuvable : {full_path}")
+    
+    # --- IL MANQUAIT AUSSI LA PARTIE FUSION ET EXPORT ---
+    # Elle doit aussi être DANS la fonction
+    if dfs:
+        master_df = pd.concat(dfs, ignore_index=True)
+        # ... (le reste de ta logique de fusion) ...
+        # N'oublie pas d'ajouter la logique de sauvegarde ici
+        print(f"Total fusionné : {len(master_df)}")
+        # master_df.to_csv(...) 
 
 if __name__ == "__main__":
     run_fusion()
