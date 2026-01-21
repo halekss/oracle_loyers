@@ -7,115 +7,159 @@ import os
 
 app = FastAPI()
 
-# 1. CORS
+# --- 1. CONFIGURATION CORS ---
+# Permet au Frontend (port 5173) de parler au Backend (port 8000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # En prod, remplacer par ["http://localhost:5173"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. CHARGEMENT DES DONNÉES
+# --- 2. CHARGEMENT DES DONNÉES ---
 CSV_PATH = "/app/data/master_immo_final.csv"
-
-# Variable globale pour stocker le dataframe
 df = pd.DataFrame()
 
 def load_data():
+    """Charge et nettoie les données CSV au démarrage."""
     global df
     try:
         if os.path.exists(CSV_PATH):
-            # On charge le CSV
+            # Chargement du fichier
             df = pd.read_csv(CSV_PATH)
             
-            # --- NETTOYAGE ET SECURISATION DES COLONNES ---
-            # On vérifie si les colonnes vitales existent, sinon on les crée
+            # -- SÉCURISATION DES COLONNES --
+            # On vérifie que les colonnes vitales existent, sinon on met des valeurs par défaut
             required_cols = ['latitude', 'longitude', 'prix', 'surface']
             for col in required_cols:
                 if col not in df.columns:
-                    print(f"⚠️ Attention : Colonne '{col}' manquante. Création d'une colonne vide.")
+                    print(f"⚠️ Colonne manquante : '{col}'. Ajout de valeurs par défaut.")
                     df[col] = 0
             
-            # Gestion spécifique du TITRE
+            # Gestion intelligente du TITRE
             if 'titre' not in df.columns:
                 if 'type_bien' in df.columns:
-                    df['titre'] = df['type_bien'] # On utilise le type comme titre
+                    df['titre'] = df['type_bien']
+                elif 'type' in df.columns:
+                    df['titre'] = df['type']
                 else:
-                    df['titre'] = "Annonce Immobilière" # Titre par défaut
-            
-            # On s'assure que tout est propre (pas de NaN qui font planter le JSON)
+                    df['titre'] = "Annonce Immobilière"
+
+            # Nettoyage des valeurs vides (NaN) pour éviter les erreurs JSON
             df = df.fillna(0)
             
-            print(f"✅ Données chargées : {len(df)} annonces.")
+            print(f"✅ Données chargées avec succès : {len(df)} annonces en mémoire.")
             print(f"📊 Colonnes disponibles : {list(df.columns)}")
         else:
-            print("⚠️ Fichier CSV introuvable. Base vide.")
+            print("⚠️ Fichier CSV introuvable dans /app/data/. La base est vide.")
             df = pd.DataFrame(columns=["titre", "prix", "surface", "latitude", "longitude"])
+            
     except Exception as e:
-        print(f"⚠️ Erreur chargement CSV: {e}")
+        print(f"❌ Erreur critique lors du chargement CSV : {e}")
         df = pd.DataFrame()
 
-# On lance le chargement au démarrage
+# On charge les données dès le lancement de l'application
 load_data()
 
-# 3. MODÈLE DE DONNÉES
+# --- 3. MODÈLE DE DONNÉES (Input) ---
 class AnalysisRequest(BaseModel):
     address: str
     lat: float
     lon: float
 
-# 4. LA ROUTE D'ANALYSE
+# --- 4. API ENDPOINTS ---
+
+@app.get("/")
+def read_root():
+    """Route de santé pour vérifier que l'API tourne."""
+    return {
+        "status": "Oracle Backend Online 🟢", 
+        "data_count": len(df),
+        "columns": list(df.columns) if not df.empty else []
+    }
+
 @app.post("/api/analyze/vice")
 def analyze_vice(request: AnalysisRequest):
+    """
+    Reçoit une coordonnée GPS, cherche les biens autour, et renvoie des stats.
+    Logique : Rayon de 500m, sinon élargissement aux 10 plus proches.
+    """
     global df
     
-    # Sécurité : Si la base est vide
+    # Si la base est vide, on essaie de recharger une dernière fois
     if df.empty:
-        # On tente de recharger au cas où le fichier serait arrivé entre temps
         load_data()
         if df.empty:
-             raise HTTPException(status_code=503, detail="Base de données vide ou illisible.")
+             raise HTTPException(status_code=503, detail="Base de données vide. Vérifiez le dossier data.")
 
-    # Calcul simple de distance
     try:
-        # On travaille sur une copie pour ne pas casser l'original
+        # On travaille sur une copie pour ne pas modifier l'original
         temp_df = df.copy()
         
+        # 1. Calcul de la distance pour chaque annonce (Formule Pythagore simplifiée)
+        # Note : Sur de petites distances à Lyon, c'est suffisant et très rapide.
         temp_df['dist'] = np.sqrt((temp_df['latitude'] - request.lat)**2 + (temp_df['longitude'] - request.lon)**2)
         
-        # On prend les 10 plus proches
-        neighbors = temp_df.sort_values('dist').head(10)
+        # 2. LOGIQUE DE RAYON DYNAMIQUE
+        # 0.0045 degrés équivaut environ à 500 mètres à Lyon
+        RAYON_500M = 0.0045
+        
+        # On essaie de prendre tout ce qui est dans le quartier (500m)
+        neighbors = temp_df[temp_df['dist'] <= RAYON_500M]
+        
+        # Si le quartier est désert (moins de 5 annonces), on élargit la recherche
+        mode_recherche = "Rayon 500m"
+        if len(neighbors) < 5:
+            print(f"⚠️ Peu de données ({len(neighbors)}) à 500m. Élargissement aux 10 plus proches.")
+            neighbors = temp_df.sort_values('dist').head(10)
+            mode_recherche = "10 plus proches"
         
         if neighbors.empty:
-            return {"verdict": "Désert", "stats": {"prix_moyen": 0}, "message": "Aucun bien trouvé à proximité."}
+            return {
+                "verdict": "Zone inconnue", 
+                "stats": {"prix_moyen": 0}, 
+                "message": "Aucune donnée disponible ici."
+            }
 
-        # Stats
+        # 3. CALCUL DES STATISTIQUES
         prix_moyen = neighbors['prix'].mean()
         surface_moyenne = neighbors['surface'].mean()
-        prix_m2_moyen = (neighbors['prix'] / neighbors['surface'].replace(0, 1)).mean() # Avoid division by zero
         
-        # Verdict
+        # Calcul du prix au m2 (avec sécurité division par zéro)
+        # On calcule la moyenne des prix/m2 individuels pour plus de précision locale
+        neighbors['temp_m2'] = neighbors['prix'] / neighbors['surface'].replace(0, 1)
+        prix_m2_moyen = neighbors['temp_m2'].mean()
+        
+        # 4. GÉNÉRATION DU VERDICT (Ajusté pour des loyers)
         verdict = "Standard"
-        if prix_m2_moyen > 6000: verdict = "Quartier Riche 💎"
-        elif prix_m2_moyen < 3500: verdict = "Bonne Affaire 💰"
+        if prix_m2_moyen > 25: 
+            verdict = "Quartier Prisé 💎"
+        elif prix_m2_moyen < 16: 
+            verdict = "Abordable 💰"
+        elif prix_m2_moyen > 35:
+            verdict = "Zone de Luxe ✨"
 
-        # Préparation des annonces pour le renvoi (Sécurisé)
+        # 5. PRÉPARATION DE LA LISTE D'ANNONCES (Top 10 max pour l'affichage)
         top_annonces = []
-        for _, row in neighbors.iterrows():
+        for _, row in neighbors.head(10).iterrows():
             top_annonces.append({
-                "titre": str(row['titre']),
+                "titre": str(row.get('titre', 'Appartement')),
                 "prix": float(row['prix']),
-                "surface": float(row['surface'])
+                "surface": float(row['surface']),
+                "lien": str(row.get('url', '#')) # Si tu as une colonne URL
             })
 
+        print(f"🔮 ANALYSE : {request.address} | Mode: {mode_recherche} | Biens: {len(neighbors)}")
+
+        # 6. ENVOI DE LA RÉPONSE JSON
         return {
             "address": request.address,
             "coords": {"lat": request.lat, "lon": request.lon},
             "stats": {
-                "prix_moyen": round(prix_moyen) if not np.isnan(prix_moyen) else 0,
-                "surface_moyenne": round(surface_moyenne) if not np.isnan(surface_moyenne) else 0,
-                "prix_m2": round(prix_m2_moyen) if not np.isnan(prix_m2_moyen) else 0,
+                "prix_moyen": round(prix_moyen),
+                "surface_moyenne": round(surface_moyenne),
+                "prix_m2": round(prix_m2_moyen, 1),
                 "nb_biens_analyse": len(neighbors)
             },
             "verdict": verdict,
@@ -123,9 +167,5 @@ def analyze_vice(request: AnalysisRequest):
         }
 
     except Exception as e:
-        print(f"❌ Erreur pendant l'analyse : {e}")
+        print(f"❌ Erreur interne pendant l'analyse : {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/")
-def read_root():
-    return {"status": "Online", "columns": list(df.columns) if not df.empty else []}

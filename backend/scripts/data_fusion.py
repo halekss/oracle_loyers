@@ -2,6 +2,12 @@ import pandas as pd
 import re
 import os
 
+# --- 0. CONFIGURATION DES CHEMINS ---
+# Le script est dans backend/scripts/
+# On remonte d'un niveau (..) pour aller dans backend/data/
+script_dir = os.path.dirname(os.path.abspath(__file__))
+data_dir = os.path.join(script_dir, '..', 'data')
+
 # --- 1. FONCTIONS DE NETTOYAGE ---
 
 def clean_price_integer(value):
@@ -76,40 +82,16 @@ def format_description(text):
 # --- 2. CONFIGURATION ---
 
 fichiers_config = [
-    {
-        'file': 'annonces_lyon_century21.csv', 'site': 'Century 21',
-        'col_prix': 'Prix', 'col_surf': 'Lieu_Surface', 
-        'text_cols': ['Titre', 'Lieu_Surface'], 
-        'col_cp': 'Lieu_Surface', 'col_url': 'Lien'
-    },
-    {
-        'file': 'annonces_lyon_orpi.csv', 'site': 'Orpi',
-        'col_prix': 'Prix', 'col_surf': 'Infos', 
-        'text_cols': ['Titre_Lieu', 'Infos'], 
-        'col_cp': 'Titre_Lieu', 'col_url': 'Lien'
-    },
-    {
-        'file': 'annonces_lyon_pap.csv', 'site': 'PAP',
-        'col_prix': 'Prix', 'col_surf': 'Détails', 
-        'text_cols': ['Détails'], 
-        'col_cp': 'Lieu', 'col_url': 'Lien'
-    },
-    {
-        'file': 'annonces_lyon_paruvendu.csv', 'site': 'ParuVendu',
-        'col_prix': 'Prix', 'col_surf': 'Titre', 
-        'text_cols': ['Titre'], 
-        'col_cp': 'Titre', 'col_url': 'Lien'
-    },
-    {
-        'file': 'annonces_lyon_seloger.csv', 'site': 'SeLoger',
-        'col_prix': 'Prix', 'col_surf': 'Infos', 
-        'text_cols': ['Titre', 'Infos'], 
-        'col_cp': 'Lieu', 'col_url': 'Lien'
-    }
+    { 'file': 'annonces_lyon_century21.csv', 'site': 'Century 21', 'col_prix': 'Prix', 'col_surf': 'Lieu_Surface', 'text_cols': ['Titre', 'Lieu_Surface'], 'col_cp': 'Lieu_Surface', 'col_url': 'Lien' },
+    { 'file': 'annonces_lyon_orpi.csv', 'site': 'Orpi', 'col_prix': 'Prix', 'col_surf': 'Infos', 'text_cols': ['Titre_Lieu', 'Infos'], 'col_cp': 'Titre_Lieu', 'col_url': 'Lien' },
+    { 'file': 'annonces_lyon_pap.csv', 'site': 'PAP', 'col_prix': 'Prix', 'col_surf': 'Détails', 'text_cols': ['Détails'], 'col_cp': 'Lieu', 'col_url': 'Lien' },
+    { 'file': 'annonces_lyon_paruvendu.csv', 'site': 'ParuVendu', 'col_prix': 'Prix', 'col_surf': 'Titre', 'text_cols': ['Titre'], 'col_cp': 'Titre', 'col_url': 'Lien' },
+    { 'file': 'annonces_lyon_seloger.csv', 'site': 'SeLoger', 'col_prix': 'Prix', 'col_surf': 'Infos', 'text_cols': ['Titre', 'Infos'], 'col_cp': 'Lieu', 'col_url': 'Lien' }
 ]
 
-dfs = []
-print("🏗️  Construction de la base de données (Avec Type de bien)...\n")
+def run_fusion():
+    dfs = []
+    print("\n🏗️  DÉMARRAGE DE LA FUSION...\n")
 
 for config in fichiers_config:
     fichier = config['file']
@@ -166,32 +148,5 @@ for config in fichiers_config:
     else:
         print(f"❌ Fichier introuvable : {fichier}")
 
-# --- 3. FUSION ET EXPORT ---
-if dfs:
-    master_df = pd.concat(dfs, ignore_index=True)
-    
-    # Calcul Prix m2
-    master_df['prix_m2'] = master_df.apply(
-        lambda row: round(row['prix'] / row['surface'], 2) if row['surface'] and row['surface'] > 9 else None, axis=1
-    )
-
-    # ID Unique
-    master_df.index = master_df.index + 1
-    master_df.reset_index(inplace=True)
-    master_df = master_df.rename(columns={'index': 'id_annonce'})
-
-    # ORDRE DES COLONNES (Avec 'type' après 'prix_m2')
-    cols = ['id_annonce', 'site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'url']
-    master_df = master_df[cols]
-
-    output_file = 'base_de_donnees_immo_lyon_complet.csv'
-    master_df.to_csv(output_file, index=False, encoding='utf-8-sig')
-    
-    print("\n" + "="*50)
-    print(f"🎉 FUSION TERMINÉE ! Fichier : {output_file}")
-    print(f"📊 Total : {len(master_df)} annonces.")
-    print("="*50)
-    print(master_df[['site', 'type', 'prix', 'surface']].head(10))
-
-else:
-    print("❌ Aucun fichier à traiter.")
+if __name__ == "__main__":
+    run_fusion()
