@@ -8,15 +8,19 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # 1. Code source principal
+      # 1. Synchronise tout le code (main.py, etc.)
       - ./backend:/app
-      # 2. 🔥 LA LIGNE CRUCIALE : On force le lien vers le dossier data
+      # 2. 🔥 INDISPENSABLE : Force le lien vers tes CSV
       - ./backend/data:/app/data
-      # 3. On protège le cache Python
+      # 3. Isole le cache Python pour éviter les conflits
       - /app/__pycache__
     environment:
-      # Indispensable sur Mac pour le rechargement automatique
+      # Active le rechargement automatique sur Mac
       - WATCHFILES_FORCE_POLLING=true
+    # 👇 LA COMMANDE MAGIQUE :
+    # Elle lance d'abord la fusion des données, PUIS démarre le serveur.
+    command: >
+      sh -c "python scripts/data_fusion.py && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
   # --- SERVICE FRONTEND (React/Vite) ---
   frontend:
@@ -25,9 +29,9 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      # Synchronise le code React
+      # Synchronise ton code React (App.jsx...)
       - ./frontend:/app
-      # Isole les modules Node (évite les conflits Mac/Linux)
+      # Isole les modules Node (évite les erreurs Mac vs Linux)
       - /app/node_modules
     depends_on:
       - backend
