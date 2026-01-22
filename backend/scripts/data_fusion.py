@@ -158,6 +158,15 @@ def run_fusion():
         print(f"Total avant nettoyage outliers : {len(master_df)}")
         # On supprime les annonces avec un loyer > 10 000 € (nettoie ton erreur à 99k€)
         master_df = master_df[master_df['prix'] < 3500]
+
+        # 2. On vire les "fausses" annonces pas chères (Colocations mal référencées)
+        # Logique : Si le loyer est < 800€ MAIS que la surface est > 60m², c'est louche (c'est sûrement une coloc)
+        condition_coloc = (master_df['prix'] < 800) & (master_df['surface'] > 60)
+        master_df = master_df[~condition_coloc] # Le tilde ~ signifie "inverse" (donc on garde ce qui N'EST PAS une coloc)
+
+        # 3. On vire les surfaces minuscules (erreurs de saisie, ex: 1m²)
+        master_df = master_df[master_df['surface'] > 9]
+        
         print(f"Total après nettoyage : {len(master_df)}")
         # 👆👆👆 FIN DU BLOC À AJOUTER 👆👆👆
 
