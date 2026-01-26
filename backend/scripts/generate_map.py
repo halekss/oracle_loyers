@@ -1,145 +1,148 @@
-import pandas as pd
-import folium
-import os
+def generate_folium_map():
+    """Génère la carte HTML avec Logos Métro (CSS), Lignes, et Immo."""
+    print("🗺️ Génération de la carte interactive avec Logos Métro...")
+    try:
+        # 1. CENTRE ET FOND DE CARTE
+        start_lat, start_lon = 45.7640, 4.8357
+        if not df.empty:
+             start_lat = df['latitude'].mean()
+             start_lon = df['longitude'].mean()
 
-def generate_map():
-    print("--- Démarrage de la génération de la carte par calques ---")
+        m = folium.Map(location=[start_lat, start_lon], zoom_start=13, tiles='CartoDB dark_matter')
 
-    # ==========================================
-    # 1. GESTION DES CHEMINS (MODIFIÉ)
-    # ==========================================
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # 1.1 Localisation des données (CSV)
-    # On suppose que les données sont dans ../data ou au même endroit
-    data_dir = os.path.join(script_dir, '..', 'data')
-    if not os.path.exists(data_dir):
-        data_dir = script_dir # Fallback au dossier courant
+        # --- 2. DÉFINITION DES HUBS MÉTRO (Pour les Logos) ---
+        # Ces points auront le logo "M" stylisé
+        metro_hubs = [
+            {"nom": "Bellecour", "lat": 45.7577, "lon": 4.8322, "lines": "A/D", "color": "#e9003a"}, # Rouge
+            {"nom": "Part-Dieu", "lat": 45.7601, "lon": 4.8590, "lines": "B", "color": "#0073ba"},   # Bleu
+            {"nom": "Hôtel de Ville", "lat": 45.7674, "lon": 4.8335, "lines": "A/C", "color": "#e9003a"},
+            {"nom": "Perrache", "lat": 45.7485, "lon": 4.8266, "lines": "A", "color": "#e9003a"},
+            {"nom": "Charpennes", "lat": 45.7710, "lon": 4.8636, "lines": "A/B", "color": "#0073ba"},
+            {"nom": "Gare de Vaise", "lat": 45.7797, "lon": 4.8051, "lines": "D", "color": "#009e49"}, # Vert
+            {"nom": "Gare de Vénissieux", "lat": 45.7047, "lon": 4.8879, "lines": "D", "color": "#009e49"},
+            {"nom": "Vieux Lyon", "lat": 45.7598, "lon": 4.8268, "lines": "D", "color": "#009e49"},
+            {"nom": "Saxe-Gambetta", "lat": 45.7516, "lon": 4.8486, "lines": "B/D", "color": "#f78e1e"}, # Orange
+            {"nom": "Grange Blanche", "lat": 45.7434, "lon": 4.8763, "lines": "D", "color": "#009e49"},
+            {"nom": "Cuire", "lat": 45.7852, "lon": 4.8338, "lines": "C", "color": "#f78e1e"}
+        ]
 
-    path_cavaliers = os.path.join(data_dir, "cavaliers_lyon.csv")
-    path_immo = os.path.join(data_dir, "master_immo_final.csv")
+        # --- 3. CRÉATION DES CALQUES ---
+        layers = {
+            'MetroLines': folium.FeatureGroup(name="🚇 Lignes (Tracé)"),
+            'MetroStations': folium.FeatureGroup(name="🛑 Stations (Logos)"),
+            'Vice': folium.FeatureGroup(name="🔴 Vice (Bars, Nuit)"),
+            'Gentrification': folium.FeatureGroup(name="🔵 Gentrification"),
+            'Immo': folium.FeatureGroup(name="🏠 Immobilier (Top 200)")
+        }
 
-    # 1.2 Localisation de la sortie (Dossier Public React)
-    # C'est ici qu'on change la destination pour viser le frontend
-    react_public_dir = os.path.join(script_dir, '..', '..', 'frontend', 'public')
+        # --- 4. AJOUT DES LOGOS "M" (DivIcon) ---
+        for station in metro_hubs:
+            # On crée un petit carré ou rond avec un "M" dedans en HTML pur
+            # C'est plus robuste que de charger une image png
+            html_icon = f"""
+            <div style="
+                background-color: {station['color']};
+                color: white;
+                width: 24px;
+                height: 24px;
+                border-radius: 4px;
+                border: 2px solid white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: Arial, sans-serif;
+                font-weight: 900;
+                font-size: 14px;
+                box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+            ">M</div>
+            """
+            
+            folium.Marker(
+                location=[station['lat'], station['lon']],
+                icon=folium.DivIcon(
+                    html=html_icon,
+                    icon_size=(24, 24),
+                    icon_anchor=(12, 12) # Centre l'icône
+                ),
+                popup=f"<b>Métro {station['nom']}</b><br>Lignes: {station['lines']}",
+                tooltip=station['nom']
+            ).add_to(layers['MetroStations'])
 
-    if os.path.exists(react_public_dir):
-        output_dir = react_public_dir
-        print(f"✅ Dossier React 'public' trouvé : {output_dir}")
-    else:
-        print(f"⚠️ Dossier React 'public' introuvable (chemin testé : {react_public_dir})")
-        print(f"   -> Sauvegarde par défaut dans : {data_dir}")
-        output_dir = data_dir
-
-    path_output = os.path.join(output_dir, "map_pings_lyon_calques.html")
-
-    # ==========================================
-    # 2. CHARGEMENT
-    # ==========================================
-    if not os.path.exists(path_cavaliers):
-        print(f"❌ Fichier introuvable : {path_cavaliers}")
-        return
-
-    df_cavaliers = pd.read_csv(path_cavaliers)
-    
-    df_immo = pd.DataFrame()
-    if os.path.exists(path_immo):
-        df_immo = pd.read_csv(path_immo)
-
-    # ==========================================
-    # 3. INITIALISATION DE LA CARTE
-    # ==========================================
-    center_lat = df_cavaliers['latitude'].mean()
-    center_lon = df_cavaliers['longitude'].mean()
-    
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles='CartoDB positron')
-
-    # ==========================================
-    # 4. CRÉATION DES GROUPES (CALQUES)
-    # ==========================================
-    layers = {
-        'Vice': folium.FeatureGroup(name="🔴 Vice (Bars, Sex-shops...)"),
-        'Gentrification': folium.FeatureGroup(name="🔵 Gentrification (Bio, Yoga...)"),
-        'Nuisance': folium.FeatureGroup(name="🟠 Nuisance (Bruit, Pollution)"),
-        'Superstition': folium.FeatureGroup(name="🟣 Superstition (Cimetières...)"),
-        'Autre': folium.FeatureGroup(name="⚪ Autre")
-    }
-
-    def get_style_info(category_str):
-        cat = str(category_str).lower()
-        if 'vice' in cat:
-            return '#e74c3c', 'Vice'          # Rouge
-        elif 'gentrification' in cat:
-            return '#3498db', 'Gentrification' # Bleu
-        elif 'nuisance' in cat:
-            return '#f39c12', 'Nuisance'       # Orange
-        elif 'superstition' in cat:
-            return '#9b59b6', 'Superstition'   # Violet
-        else:
-            return '#95a5a6', 'Autre'         # Gris
-
-    # ==========================================
-    # 5. AJOUT DES POINTS DANS LES BONS CALQUES
-    # ==========================================
-    print("Répartition des cavaliers dans les calques...")
-    
-    for _, row in df_cavaliers.iterrows():
-        cat = row['categorie_cavalier']
-        nom = row['nom_lieu']
+        # --- 5. AJOUT DU TRACÉ GEOJSON (Si disponible) ---
+        metro_json_path = os.path.join(BASE_DIR, "metro_lyon.json")
         
-        color, group_name = get_style_info(cat)
-        
-        popup_html = f"""
-        <div style="font-family: sans-serif; width: 180px;">
-            <b>{nom}</b><br>
-            <span style="color:{color};">{cat}</span>
-        </div>
-        """
-        
-        marker = folium.CircleMarker(
-            location=[row['latitude'], row['longitude']],
-            radius=5,
-            color=color,
-            fill=True,
-            fill_color=color,
-            fill_opacity=0.7,
-            weight=1,
-            popup=folium.Popup(popup_html, max_width=250),
-            tooltip=f"{nom}"
-        )
-        
-        marker.add_to(layers[group_name])
+        def style_metro(feature):
+            props = feature.get('properties', {})
+            line_name = str(props.get('ligne', '')).upper()
+            color = '#888888'
+            if 'A' in line_name: color = '#e9003a'
+            elif 'B' in line_name: color = '#0073ba'
+            elif 'C' in line_name: color = '#f78e1e'
+            elif 'D' in line_name: color = '#009e49'
+            return {'color': color, 'weight': 4, 'opacity': 0.7}
 
-    for layer in layers.values():
-        layer.add_to(m)
-
-    # ==========================================
-    # 6. AJOUT IMMOBILIER (CALQUE SÉPARÉ)
-    # ==========================================
-    if not df_immo.empty:
-        fg_immo = folium.FeatureGroup(name="🏠 Immobilier", show=False)
-        for _, row in df_immo.iterrows():
+        if os.path.exists(metro_json_path):
             try:
+                folium.GeoJson(
+                    metro_json_path,
+                    name="Lignes TCL",
+                    style_function=style_metro
+                ).add_to(layers['MetroLines'])
+            except Exception as e:
+                print(f"⚠️ Erreur GeoJSON: {e}")
+
+        # --- 6. AJOUT CAVALIERS (Vice vs Gentrification) ---
+        if os.path.exists(CAVALIERS_PATH):
+            df_cav = pd.read_csv(CAVALIERS_PATH)
+            for _, row in df_cav.iterrows():
+                cat = str(row.get('categorie_cavalier', 'Autre')).lower()
+                
+                # Style par défaut
+                color = '#95a5a6'
+                radius = 4
+                group_key = 'Gentrification'
+                
+                if any(x in cat for x in ['vice', 'sex', 'bar', 'club', 'night']):
+                    color = '#e74c3c' # Rouge néon
+                    group_key = 'Vice'
+                    radius = 5
+                elif any(x in cat for x in ['gentrification', 'bio', 'yoga', 'concept']):
+                    color = '#3498db' # Bleu futuriste
+                    group_key = 'Gentrification'
+
+                folium.CircleMarker(
+                    location=[row['latitude'], row['longitude']],
+                    radius=radius,
+                    color=color,
+                    fill=True,
+                    fill_color=color,
+                    fill_opacity=0.7,
+                    weight=1,
+                    popup=f"<b>{row.get('nom_lieu', '?')}</b><br>{cat}"
+                ).add_to(layers[group_key])
+
+        # --- 7. AJOUT IMMOBILIER (Vert Matrix) ---
+        if not df.empty:
+            for _, row in df.head(200).iterrows():
                 folium.CircleMarker(
                     location=[row['latitude'], row['longitude']],
                     radius=3,
                     color='#2ecc71',
                     fill=True,
-                    fill_opacity=0.6,
+                    fill_opacity=0.5,
                     weight=0,
-                    popup=f"Prix: {row.get('prix','?')} €<br>{row.get('surface','?')} m²",
-                    tooltip="Annonce"
-                ).add_to(fg_immo)
-            except: pass
-        fg_immo.add_to(m)
+                    popup=f"{row.get('prix')} €<br>{row.get('surface')} m²"
+                ).add_to(layers['Immo'])
 
-    # ==========================================
-    # 7. FINALISATION
-    # ==========================================
-    folium.LayerControl(collapsed=False).add_to(m)
-    
-    m.save(path_output)
-    print(f"🎉 Carte générée avec succès dans : {path_output}")
+        # --- 8. FINALISATION ---
+        for layer in layers.values():
+            layer.add_to(m)
 
-if __name__ == "__main__":
-    generate_map()
+        folium.LayerControl(collapsed=False).add_to(m)
+        
+        output_path = os.path.join(STATIC_DIR, "map_lyon.html")
+        m.save(output_path)
+        print(f"✅ Carte générée avec LOGOS MÉTRO : http://localhost:8000/static/map_lyon.html")
+
+    except Exception as e:
+        print(f"❌ Erreur map : {e}")
