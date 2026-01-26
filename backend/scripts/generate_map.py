@@ -6,20 +6,32 @@ def generate_map():
     print("--- Démarrage de la génération de la carte par calques ---")
 
     # ==========================================
-    # 1. GESTION DES CHEMINS
+    # 1. GESTION DES CHEMINS (MODIFIÉ)
     # ==========================================
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # On suppose que les données sont dans ../data ou au même endroit
-    # Essayons d'abord ../data
-    data_dir = os.path.join(script_dir, '..', 'data')
     
-    # Si le dossier data n'existe pas là, on regarde dans le dossier courant
+    # 1.1 Localisation des données (CSV)
+    # On suppose que les données sont dans ../data ou au même endroit
+    data_dir = os.path.join(script_dir, '..', 'data')
     if not os.path.exists(data_dir):
-        data_dir = script_dir
+        data_dir = script_dir # Fallback au dossier courant
 
     path_cavaliers = os.path.join(data_dir, "cavaliers_lyon.csv")
     path_immo = os.path.join(data_dir, "master_immo_final.csv")
-    path_output = os.path.join(data_dir, "map_pings_lyon_calques.html")
+
+    # 1.2 Localisation de la sortie (Dossier Public React)
+    # C'est ici qu'on change la destination pour viser le frontend
+    react_public_dir = os.path.join(script_dir, '..', '..', 'frontend', 'public')
+
+    if os.path.exists(react_public_dir):
+        output_dir = react_public_dir
+        print(f"✅ Dossier React 'public' trouvé : {output_dir}")
+    else:
+        print(f"⚠️ Dossier React 'public' introuvable (chemin testé : {react_public_dir})")
+        print(f"   -> Sauvegarde par défaut dans : {data_dir}")
+        output_dir = data_dir
+
+    path_output = os.path.join(output_dir, "map_pings_lyon_calques.html")
 
     # ==========================================
     # 2. CHARGEMENT
@@ -45,7 +57,6 @@ def generate_map():
     # ==========================================
     # 4. CRÉATION DES GROUPES (CALQUES)
     # ==========================================
-    # On crée un dictionnaire de FeatureGroups pour chaque couleur/catégorie
     layers = {
         'Vice': folium.FeatureGroup(name="🔴 Vice (Bars, Sex-shops...)"),
         'Gentrification': folium.FeatureGroup(name="🔵 Gentrification (Bio, Yoga...)"),
@@ -54,7 +65,6 @@ def generate_map():
         'Autre': folium.FeatureGroup(name="⚪ Autre")
     }
 
-    # Fonction pour déterminer la couleur et le groupe
     def get_style_info(category_str):
         cat = str(category_str).lower()
         if 'vice' in cat:
@@ -62,9 +72,9 @@ def generate_map():
         elif 'gentrification' in cat:
             return '#3498db', 'Gentrification' # Bleu
         elif 'nuisance' in cat:
-            return '#f39c12', 'Nuisance'      # Orange
+            return '#f39c12', 'Nuisance'       # Orange
         elif 'superstition' in cat:
-            return '#9b59b6', 'Superstition'  # Violet
+            return '#9b59b6', 'Superstition'   # Violet
         else:
             return '#95a5a6', 'Autre'         # Gris
 
@@ -77,10 +87,8 @@ def generate_map():
         cat = row['categorie_cavalier']
         nom = row['nom_lieu']
         
-        # On récupère la couleur et le nom du groupe cible
         color, group_name = get_style_info(cat)
         
-        # Contenu Popup
         popup_html = f"""
         <div style="font-family: sans-serif; width: 180px;">
             <b>{nom}</b><br>
@@ -88,7 +96,6 @@ def generate_map():
         </div>
         """
         
-        # Création du marqueur
         marker = folium.CircleMarker(
             location=[row['latitude'], row['longitude']],
             radius=5,
@@ -101,10 +108,8 @@ def generate_map():
             tooltip=f"{nom}"
         )
         
-        # Ajout du marqueur dans le bon groupe (au lieu de la carte directement)
         marker.add_to(layers[group_name])
 
-    # Ajout de tous les groupes à la carte
     for layer in layers.values():
         layer.add_to(m)
 
@@ -112,7 +117,7 @@ def generate_map():
     # 6. AJOUT IMMOBILIER (CALQUE SÉPARÉ)
     # ==========================================
     if not df_immo.empty:
-        fg_immo = folium.FeatureGroup(name="🏠 Immobilier", show=False) # Masqué par défaut
+        fg_immo = folium.FeatureGroup(name="🏠 Immobilier", show=False)
         for _, row in df_immo.iterrows():
             try:
                 folium.CircleMarker(
@@ -131,11 +136,10 @@ def generate_map():
     # ==========================================
     # 7. FINALISATION
     # ==========================================
-    # Le LayerControl permet d'afficher le menu de sélection
     folium.LayerControl(collapsed=False).add_to(m)
     
     m.save(path_output)
-    print(f"🎉 Carte générée : {path_output}")
+    print(f"🎉 Carte générée avec succès dans : {path_output}")
 
 if __name__ == "__main__":
     generate_map()
