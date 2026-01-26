@@ -5,9 +5,11 @@ import pandas as pd
 import numpy as np
 import os
 import re
+import requests
 
 app = FastAPI()
 
+# Configuration CORS pour permettre la communication avec React
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +22,7 @@ app.add_middleware(
 BASE_DIR = "/app/data"
 DATA_PATH = os.path.join(BASE_DIR, "master_immo_final.csv")
 
-# Mapping des fichiers de référence
+# Mapping des fichiers de référence pour les loyers prédits
 REF_FILES = {
     "t1": "lyon_pred-app_t1_t2.csv",
     "t2": "lyon_pred-app_t1_t2.csv",
@@ -98,9 +100,10 @@ def load_all_data():
         except Exception as e:
             print(f"   ❌ Erreur Réf {key} : {e}")
 
+# Lancement du chargement
 load_all_data()
 
-# --- 4. ANALYSE ---
+# --- 4. ROUTES API ---
 
 class AnalysisRequest(BaseModel):
     address: str
@@ -108,13 +111,15 @@ class AnalysisRequest(BaseModel):
     lon: float
     filter_type: str = "all"
 
+class ChatRequest(BaseModel):
+    message: str
+
 @app.post("/api/analyze/vice")
 def analyze_vice(request: AnalysisRequest):
     global df
     if df.empty: load_all_data()
 
     try:
-        # 1. FILTRE TYPE
         temp_df = df.copy()
         if request.filter_type == "t1": temp_df = temp_df[temp_df['nb_pieces'] == 1]
         elif request.filter_type == "t2": temp_df = temp_df[temp_df['nb_pieces'] == 2]
@@ -124,45 +129,32 @@ def analyze_vice(request: AnalysisRequest):
         if temp_df.empty:
              return {"verdict": "Aucune offre", "stats": {"prix_moyen": 0}, "message": "Aucun bien de ce type."}
 
-        # 2. DISTANCE (Rayon 500m)
+        # Rayon 500m (approximation en degrés)
         temp_df['dist'] = np.sqrt((temp_df['latitude'] - request.lat)**2 + (temp_df['longitude'] - request.lon)**2)
-        
-        # On prend TOUT ce qui est dans le rayon (Pas de limite à 10)
         RAYON_500M = 0.0045
         neighbors = temp_df[temp_df['dist'] <= RAYON_500M]
         
-        # Fallback de sécurité : si le rayon est vide, on prend les 5 plus proches quand même
         if len(neighbors) < 3:
             neighbors = temp_df.sort_values('dist').head(5)
 
-        if neighbors.empty:
-             return {"verdict": "Désert", "stats": {"prix_moyen": 0}}
-
-        # 3. STATISTIQUES COMPLÈTES (Moyenne, Min, Max)
         prix_moyen = neighbors['prix'].mean()
         surface_moyenne = neighbors['surface'].mean()
         my_m2_avg = (neighbors['prix'] / neighbors['surface'].replace(0, 1)).mean()
-        
-        # Nouveaux indicateurs
         prix_min = neighbors['prix'].min()
         prix_max = neighbors['prix'].max()
 
-        # 4. COMPARAISON MARCHÉ (Avec tes fichiers CSV spécifiques)
         ref_price = 0
         market_label = "Pas de Réf."
         diff_pct = 0
-        target_insee = "Inconnu"
         
-        # Choix du bon fichier de référence
         ref_key = request.filter_type if request.filter_type in ref_datasets else "all"
         current_ref_df = ref_datasets.get(ref_key)
 
-        # Recherche code INSEE
         try:
             detected_zip = str(int(neighbors.iloc[0]['code_postal']))
             target_insee = get_insee_from_zip(detected_zip)
         except:
-            target_insee = "69383" # Fallback
+            target_insee = "69383"
 
         if current_ref_df is not None and not current_ref_df.empty:
             match_row = current_ref_df[current_ref_df['INSEE_C'] == target_insee]
@@ -175,10 +167,8 @@ def analyze_vice(request: AnalysisRequest):
                 elif diff_pct < -10: market_label = "Bonne Affaire 💎"
                 else: market_label = "Prix Marché ✅"
         
-        # 5. LISTE COMPLÈTE DES ANNONCES (Sans limite de nombre)
-        # On renvoie tout pour que tu puisses voir la réalité du marché
         top_annonces = []
-        for _, row in neighbors.iterrows(): # Plus de .head(10) ici !
+        for _, row in neighbors.iterrows():
             top_annonces.append({
                 "titre": f"T{int(row['nb_pieces'])} - {row['surface']}m²",
                 "prix": float(row['prix']),
@@ -188,11 +178,10 @@ def analyze_vice(request: AnalysisRequest):
 
         return {
             "address": request.address,
-            "coords": {"lat": request.lat, "lon": request.lon},
             "stats": {
                 "prix_moyen": round(prix_moyen),
-                "prix_min": round(prix_min),  # Ajouté
-                "prix_max": round(prix_max),  # Ajouté
+                "prix_min": round(prix_min),
+                "prix_max": round(prix_max),
                 "surface_moyenne": round(surface_moyenne),
                 "prix_m2": round(my_m2_avg, 1),
                 "nb_biens_analyse": len(neighbors)
@@ -200,13 +189,86 @@ def analyze_vice(request: AnalysisRequest):
             "market_analysis": {
                 "ref_price": round(ref_price, 1),
                 "diff_percent": round(diff_pct, 1),
-                "label": market_label,
-                "dataset_used": ref_key
+                "label": market_label
             },
             "verdict": market_label,
             "top_annonces": top_annonces
         }
 
     except Exception as e:
-        print(f"❌ Erreur : {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chat")
+async def chat_with_oracle(request: ChatRequest):
+    """Route pour discuter avec l'Oracle via LM Studio."""
+    # Utilisation de host.docker.internal pour accéder au localhost du Mac depuis Docker
+    LM_STUDIO_URL = "http://host.docker.internal:1234/v1/chat/completions"
+    
+    payload = {
+    "model": "qwen2.5-7b-instruct-1m",  # ← Nom exact de votre modèle
+    "messages": [
+        {
+            "role": "system", 
+            "content": """Tu es l'Oracle des Loyers de Lyon, un expert immobilier cynique et sarcastique.
+
+Tu analyses les biens immobiliers en révélant les vérités cachées du marché avec les "4 Cavaliers" :
+- La Gentrification (cafés hipsters, magasins bio, studios de yoga)
+- Le Vice (kebabs, PMU, sex-shops)
+- La Nuisance (bars de nuit, axes routiers, terrasses bruyantes)
+- La Superstition (cimetières, hôpitaux, pompes funèbres)
+
+Ton style : Direct, sardonique, mais toujours factuel. Tu expliques pourquoi un prix est justifié avec un humour noir.
+IMPORTANT : Réponds en 3-4 phrases maximum pour être percutant."""
+        },
+        {"role": "user", "content": request.message}
+    ],
+    "temperature": 0.8,
+    "max_tokens": 200  # ← Réduit de 600 à 200 pour des réponses 3x plus rapides
+}
+
+    try:
+        print(f"🔄 Envoi à LM Studio via {LM_STUDIO_URL}")
+        print(f"📦 Payload : {payload}")
+        
+        response = requests.post(LM_STUDIO_URL, json=payload, timeout=60)
+        
+        print(f"📥 Status Code : {response.status_code}")
+        print(f"📥 Réponse brute : {response.text[:300]}...")
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extraction de la réponse de l'Oracle
+        oracle_response = data['choices'][0]['message']['content']
+        print(f"✅ Réponse Oracle : {oracle_response[:100]}...")
+        
+        return {"response": oracle_response}
+        
+    except requests.exceptions.ConnectionError as e:
+        print(f"❌ Impossible de se connecter à LM Studio : {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="LM Studio n'est pas accessible. Vérifiez que le serveur tourne et que docker-compose.yml contient 'extra_hosts'."
+        )
+        
+    except requests.exceptions.Timeout as e:
+        print(f"❌ Timeout LM Studio : {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail="LM Studio met trop de temps à répondre (>60s). Le modèle est peut-être trop lent."
+        )
+        
+    except KeyError as e:
+        print(f"❌ Format de réponse invalide : {e}")
+        print(f"📥 Réponse complète : {response.text}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Format de réponse LM Studio invalide. Vérifiez que le modèle est bien chargé."
+        )
+        
+    except Exception as e:
+        print(f"❌ Erreur inattendue : {type(e).__name__} - {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Erreur Oracle : {str(e)}"
+        )
