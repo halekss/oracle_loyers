@@ -21,47 +21,77 @@ export default function ChatOracle() {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  // --- LOGIQUE DE SIMULATION ---
-  const getCynicalResponse = (userText) => {
-    const lowerText = userText.toLowerCase();
-    
-    if (lowerText.includes('calme') || lowerText.includes('bruit')) 
-      return "Le calme ? C'est un concept abstrait ici. Entre les klaxons et les étudiants en art dramatique, prévois du double vitrage.";
-    
-    if (lowerText.includes('sécurité') || lowerText.includes('dangereux')) 
-      return "Disons que courir vite est une compétence valorisée dans ce secteur après 23h.";
-    
-    if (lowerText.includes('prix') || lowerText.includes('cher')) 
-      return "C'est hors de prix pour ce que c'est. Tu paies la 'vibe', pas les m².";
-    
-    if (lowerText.includes('kebab') || lowerText.includes('manger')) 
-      return "L'offre gastronomique se résume à de la friture et des doutes sanitaires.";
-
-    return "Les astres sont flous... mais mon algorithme me dit que tu vas regretter cet investissement.";
-  };
-
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isTyping) return;
 
-    // 1. User Message
-    const userMsg = { id: Date.now(), sender: 'user', text: input };
+    const userText = input.trim();
+    // 1. Ajouter le message utilisateur à l'écran
+    const userMsg = { id: Date.now(), sender: 'user', text: userText };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsTyping(true);
 
-    // 2. Oracle Response
-    setTimeout(() => {
-      const replyText = getCynicalResponse(userMsg.text);
-      const oracleMsg = { id: Date.now() + 1, sender: 'oracle', text: replyText };
-      
+    // Créer un AbortController avec timeout de 2 minutes
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 secondes
+
+    try {
+      // 2. Appel au backend FastAPI (Docker)
+      const response = await fetch('http://localhost:8000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: userText }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // 3. Ajouter la réponse de l'Oracle (LM Studio via Backend)
+      const oracleMsg = { 
+        id: Date.now() + 1, 
+        sender: 'oracle', 
+        text: data.response 
+      };
       setMessages(prev => [...prev, oracleMsg]);
+
+    } catch (error) {
+      clearTimeout(timeoutId);
+      console.error('Erreur complète:', error);
+      
+      // Message d'erreur adapté selon le type d'erreur
+      let errorMessage = "ERREUR : Ma matrice de réflexion est instable.";
+      
+      if (error.name === 'AbortError') {
+        errorMessage = "⏳ L'Oracle médite profondément... Ça prend plus de 2 minutes. Réessaye avec une question plus courte ou patiente encore.";
+      } else if (error.message.includes('Failed to fetch')) {
+        errorMessage = "🔌 Impossible de contacter le backend. Vérifie que Docker tourne sur le port 8000.";
+      } else if (error.message.includes('500')) {
+        errorMessage = "⚠️ Le backend a rencontré une erreur. Vérifie les logs Docker et que LM Studio est bien démarré.";
+      } else {
+        errorMessage = `ERREUR : ${error.message}`;
+      }
+      
+      const errorMsg = { 
+        id: Date.now() + 1, 
+        sender: 'oracle', 
+        text: errorMessage
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
       setIsTyping(false);
-    }, 1500); 
+    }
   };
 
   return (
-    // ICI : w-full h-full pour remplir le parent de App.jsx
     <div className="w-full h-full flex flex-col bg-transparent">
       
       {/* HEADER DU CHAT */}
@@ -72,7 +102,7 @@ export default function ChatOracle() {
         </h3>
       </div>
 
-      {/* ZONE DE MESSAGES (flex-1 pour prendre la place dispo) */}
+      {/* ZONE DE MESSAGES */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-purple-900 scrollbar-track-transparent">
         {messages.map((msg) => (
           <div 
@@ -109,15 +139,16 @@ export default function ChatOracle() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Posez une question..."
+          placeholder="Posez une question à l'Oracle..."
           className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
+          disabled={isTyping}
         />
         <button 
           type="submit"
           disabled={!input.trim() || isTyping}
-          className="bg-purple-600 hover:bg-purple-500 text-white px-4 rounded-lg font-bold transition-colors disabled:opacity-50"
+          className="bg-purple-600 hover:bg-purple-500 text-white px-4 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          ➤
+          {isTyping ? '⏳' : '➤'}
         </button>
       </form>
     </div>

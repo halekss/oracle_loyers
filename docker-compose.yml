@@ -17,8 +17,10 @@ services:
     environment:
       # Active le rechargement automatique sur Mac
       - WATCHFILES_FORCE_POLLING=true
+    # 👇 AJOUT INDISPENSABLE POUR LM STUDIO SUR MAC :
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # 👇 LA COMMANDE MAGIQUE :
-    # Elle lance d'abord la fusion des données, PUIS démarre le serveur.
     command: >
       sh -c "python scripts/data_fusion.py && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
@@ -31,7 +33,7 @@ services:
     volumes:
       # Synchronise ton code React (App.jsx...)
       - ./frontend:/app
-      # Isole les modules Node (évite les erreurs Mac vs Linux)
+      # Isole les modules Node
       - /app/node_modules
     depends_on:
       - backend
