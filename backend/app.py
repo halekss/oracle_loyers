@@ -51,9 +51,8 @@ def generate_analysis_text(appart_data):
 # --- ROUTES ---
 
 # NOUVELLE ROUTE : Pour servir la carte HTML qui est dans 'data'
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    # On pointe vers le dossier 'data' où tu as mis 'map_pings_lyon_calques.html'
+@app.route('/maps/<path:filename>')  # <--- On change le nom ici
+def serve_map(filename):
     static_folder = os.path.join(base_dir, 'data')
     return send_from_directory(static_folder, filename)
 
