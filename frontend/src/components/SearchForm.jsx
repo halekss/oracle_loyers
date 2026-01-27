@@ -6,6 +6,7 @@ export default function SearchForm({ onSearch, isLoading, currentFilter, onFilte
   const handleSubmit = (e) => {
     e.preventDefault();
     if (input.trim()) {
+      // On envoie juste le texte, App.jsx se débrouillera
       onSearch(input);
     }
   };
@@ -22,17 +23,15 @@ export default function SearchForm({ onSearch, isLoading, currentFilter, onFilte
   return (
     <div className="flex flex-col gap-6 w-full animate-fade-in-down">
       
-      {/* 1. BARRE DE RECHERCHE */}
+      {/* 1. BARRE DE RECHERCHE (Glow effect conservé) */}
       <form onSubmit={handleSubmit} className="relative w-full group z-20">
-        {/* Glow effect derrière la barre */}
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-xl blur opacity-30 group-hover:opacity-100 transition duration-500"></div>
+        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-xl blur opacity-30 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
         
-        <div className="relative flex items-center bg-slate-900 rounded-lg overflow-hidden border border-slate-700 shadow-2xl">
-          <span className="pl-4 text-2xl">📍</span>
+        <div className="relative flex items-stretch bg-slate-900 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10">
           <input
             type="text"
-            className="w-full bg-transparent text-white px-4 py-4 outline-none placeholder-slate-500 font-medium tracking-wide text-lg"
-            placeholder="Quelle zone analyser ? (ex: Part-Dieu)"
+            className="w-full bg-transparent text-white px-6 py-4 outline-none placeholder-slate-500 font-medium"
+            placeholder="Entrez un quartier (ex: Part-Dieu)..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
@@ -48,26 +47,25 @@ export default function SearchForm({ onSearch, isLoading, currentFilter, onFilte
         </div>
       </form>
 
-      {/* 2. FILTRES ICONES (Boutons magiques) */}
+      {/* 2. FILTRES (Conservés tels quels) */}
       <div className="flex flex-wrap justify-center gap-3">
         {filters.map((f) => (
           <button
             key={f.id}
-            type="button" // Important pour ne pas soumettre le formulaire
+            type="button"
             onClick={() => onFilterChange(f.id)}
             className={`
               flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all duration-300 border
               ${currentFilter === f.id 
                 ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_20px_rgba(37,99,235,0.6)] scale-105' 
-                : 'bg-slate-900/40 border-slate-700 text-slate-400 hover:bg-slate-800 hover:border-slate-500 hover:text-white'}
+                : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'}
             `}
           >
-            <span className="text-xl">{f.icon}</span>
+            <span>{f.icon}</span>
             <span>{f.label}</span>
           </button>
         ))}
       </div>
-
     </div>
   );
 }

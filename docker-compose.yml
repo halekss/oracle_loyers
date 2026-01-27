@@ -1,26 +1,21 @@
 version: '3.8'
 
 services:
-  # --- SERVICE BACKEND (Python/FastAPI) ---
+  # --- SERVICE BACKEND (Python/Flask) ---
   backend:
     build: ./backend
     container_name: oracle_backend
     ports:
-      - "8000:8000"
+      - "5000:5000"
     volumes:
-      # 1. Synchronise tout le code (main.py, etc.)
       - ./backend:/app
-      # 2. 🔥 INDISPENSABLE : Force le lien vers tes CSV
       - ./backend/data:/app/data
-      # 3. Isole le cache Python pour éviter les conflits
       - /app/__pycache__
     environment:
-      # Active le rechargement automatique sur Mac
-      - WATCHFILES_FORCE_POLLING=true
-    # 👇 LA COMMANDE MAGIQUE :
-    # Elle lance d'abord la fusion des données, PUIS démarre le serveur.
-    command: >
-      sh -c "python scripts/data_fusion.py && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    # On force la commande pour être sûr qu'il lance Flask
+    command: python app.py
 
   # --- SERVICE FRONTEND (React/Vite) ---
   frontend:
@@ -29,9 +24,11 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      # Synchronise ton code React (App.jsx...)
       - ./frontend:/app
-      # Isole les modules Node (évite les erreurs Mac vs Linux)
       - /app/node_modules
+    environment:
+      # Pour que Vite sache où est le backend (si besoin plus tard)
+      - VITE_API_URL=http://localhost:5000
     depends_on:
       - backend
+    command: ["npm", "run", "dev", "--", "--host"]

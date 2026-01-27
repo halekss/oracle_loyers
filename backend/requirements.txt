@@ -1,10 +1,8 @@
-fastapi
-uvicorn
+flask
+flask-cors
 pandas
-requests
-beautifulsoup4
-selenium
 scikit-learn
+numpy
+scipy
 joblib
-python-multipart
-tqdm
+requests

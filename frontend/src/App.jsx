@@ -1,179 +1,155 @@
 import { useState, useEffect, useRef } from 'react';
-
 import SearchForm from './components/SearchForm';
 import ResultCard from './components/ResultCard';
 import MapComponent from './components/MapComponent';
 import CynicalLoader from './components/CynicalLoader';
 import ChatOracle from './components/ChatOracle';
+import { api } from './services/api';
 
 function App() {
   // --- ÉTATS ---
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [listings, setListings] = useState([]); 
   
-  // On stocke les infos géographiques pour pouvoir les réutiliser quand on change de filtre
-  const [geoContext, setGeoContext] = useState(null); // { lat, lon, address }
-  
+  // On stocke la position trouvée (Lat/Lon) pour pouvoir rejouer la requête si on change de filtre
+  const [geoContext, setGeoContext] = useState(null); 
   const [roomFilter, setRoomFilter] = useState("all"); 
 
-  // Pour éviter que le useEffect ne se lance au tout premier chargement de la page
-  const isFirstRender = useRef(true);
+  // --- 1. CHARGEMENT DES LISTINGS (Carte) ---
+  useEffect(() => {
+    const loadListings = async () => {
+      const data = await api.getListings();
+      setListings(data);
+    };
+    loadListings();
+  }, []);
 
-  // --- 1. RECHERCHE INITIALE (Celle qui trouve le GPS) ---
-  const handleSearch = async (userInput) => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-
-    try {
-      if (!userInput.trim()) throw new Error("L'Oracle ne répond pas au vide.");
-
-      let query = userInput.trim();
-      if (!query.toLowerCase().includes('lyon') && !query.toLowerCase().includes('villeurbanne')) {
-        query += ', Lyon';
-      }
-
-      console.log("🌍 Cartographie :", query);
-      const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`, {
-        headers: { 'User-Agent': 'OracleLoyersApp/1.0' }
-      });
-
-      if (!geoResponse.ok) throw new Error("Erreur Carto.");
-      const geoData = await geoResponse.json();
-      if (!geoData || geoData.length === 0) throw new Error("Adresse introuvable.");
-
-      const place = geoData[0];
-      const lat = parseFloat(place.lat);
-      const lon = parseFloat(place.lon);
-      const postcode = place.address.postcode;
-
-      if (postcode && !postcode.startsWith('69')) {
-         throw new Error(`Hors Zone (Trouvé : ${place.display_name}).`);
-      }
-
-      // ✅ ON SAUVEGARDE LE CONTEXTE GÉOGRAPHIQUE
-      // Cela va déclencher le useEffect ci-dessous automatiquement !
-      setGeoContext({ lat, lon, address: place.display_name });
-
-    } catch (err) {
-      console.error("❌", err);
-      setError(err.message || "Erreur inconnue.");
-      setLoading(false); // On arrête le loading seulement si erreur ici
+  // --- 2. LOGIQUE DE SURFACE AUTOMATIQUE ---
+  const getSurfaceFromFilter = (filter) => {
+    switch(filter) {
+      case 't1': return 25;
+      case 't2': return 45;
+      case 't3': return 65;
+      case 't4+': return 95;
+      default: return 35; 
     }
   };
 
-  // --- 2. EFFET AUTOMATIQUE (Dès que GPS ou FILTRE change) ---
-  useEffect(() => {
-    // Si pas de coordonnées, on ne fait rien
-    if (!geoContext) return;
-
-    const fetchBackendAnalysis = async () => {
-      setLoading(true);
-      setError(null);
+  // --- 3. FONCTION CENTRALE DE REQUÊTE ---
+  // Cette fonction fait l'appel API, qu'il vienne du bouton "Scanner" ou du changement de filtre
+  const fetchPrediction = async (lat, lon, filter) => {
+    setLoading(true);
+    try {
+      const surface = getSurfaceFromFilter(filter);
       
-      try {
-        console.log(`📡 Appel Backend (Filtre: ${roomFilter}) pour ${geoContext.address}...`);
-        
-        const apiResponse = await fetch('http://localhost:8000/api/analyze/vice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              address: geoContext.address,
-              lat: geoContext.lat,
-              lon: geoContext.lon,
-              filter_type: roomFilter // 🔥 Le filtre est passé ici
-          }),
-        });
+      const prediction = await api.getPrediction({
+        latitude: lat,
+        longitude: lon,
+        surface: surface,
+        room_filter: filter // <--- ON ENVOIE LE FILTRE AU BACKEND ICI
+      });
 
-        if (!apiResponse.ok) {
-           if (apiResponse.status === 503) throw new Error("Base de données vide.");
-           throw new Error(`Erreur Backend (${apiResponse.status}).`);
-        }
+      setResult(prediction);
+    } catch (err) {
+      console.error(err);
+      alert("L'Oracle a eu un hoquet (Erreur API)");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        const analysisData = await apiResponse.json();
-        setResult(analysisData);
+  // --- 4. GESTION DES ÉVÉNEMENTS ---
 
-      } catch (err) {
-        console.error("❌ Erreur Backend:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // A. L'utilisateur lance une recherche texte (ex: "Part Dieu")
+  const handleSearch = async (userInput) => {
+    setLoading(true);
+    setResult(null);
 
-    // On lance l'analyse
-    fetchBackendAnalysis();
+    try {
+      const query = userInput.trim() + ", Lyon, France"; 
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
+      const geoData = await geoRes.json();
 
-  }, [geoContext, roomFilter]); // 🔥 Ce tableau dit : "Relance si geoContext OU roomFilter change"
+      if (!geoData.length) throw new Error("Quartier introuvable.");
 
+      const lat = parseFloat(geoData[0].lat);
+      const lon = parseFloat(geoData[0].lon);
 
-  // --- RENDU ---
+      // On sauvegarde le contexte géographique
+      setGeoContext({ lat, lon });
+
+      // On lance la prédiction avec le filtre actuel
+      await fetchPrediction(lat, lon, roomFilter);
+
+    } catch (err) {
+      alert("Erreur : " + err.message);
+      setLoading(false);
+    }
+  };
+
+  // B. L'utilisateur change de filtre (T1 -> T2)
+  const handleFilterChange = (newFilter) => {
+    setRoomFilter(newFilter);
+    
+    // Si on a déjà une localisation, on relance la prédiction automatiquement !
+    if (geoContext) {
+      fetchPrediction(geoContext.lat, geoContext.lon, newFilter);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex flex-col items-center py-10 px-4 relative overflow-x-hidden font-sans text-slate-200 bg-slate-950">
-      
-      <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[120px] -z-10 pointer-events-none"></div>
-
-      <div className="w-full max-w-7xl flex flex-col items-center mb-8 relative z-10">
-        <header className="text-center mb-8 space-y-2">
-          <h1 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 drop-shadow-xl">
-            ORACLE<span className="text-blue-500">.DATA</span>
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-purple-500/30">
+      <div className="max-w-7xl mx-auto p-4 md:p-8">
+        
+        {/* HEADER */}
+        <header className="mb-12 text-center animate-fade-in">
+          <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 mb-4 drop-shadow-[0_0_15px_rgba(168,85,247,0.5)]">
+            ORACLE DES LOYERS
           </h1>
-          <p className="text-slate-400 text-sm md:text-base font-light">
-            Analysez les loyers par type de bien en temps réel.
+          <p className="text-slate-400 text-lg md:text-xl font-light tracking-wide">
+            L'IA qui juge tes choix de vie (et ton budget)
           </p>
         </header>
 
-        <div className="w-full max-w-2xl z-20">
+        {/* BARRE DE RECHERCHE */}
+        <div className="max-w-2xl mx-auto mb-16 relative z-50">
           <SearchForm 
             onSearch={handleSearch} 
-            isLoading={loading} 
+            isLoading={loading}
             currentFilter={roomFilter}
-            onFilterChange={setRoomFilter} // Le clic change le state -> déclenche le useEffect
+            onFilterChange={handleFilterChange} // On utilise notre nouvelle fonction
           />
         </div>
 
-        <div className="w-full min-h-[50px] flex justify-center mt-4">
-          {loading && <CynicalLoader />}
-          {error && (
-            <div className="px-6 py-3 bg-red-950/80 border border-red-500/50 text-red-100 rounded-xl backdrop-blur-md animate-pulse">
-              <span>🚫 {error}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="w-full max-w-[1600px] grid grid-cols-1 lg:grid-cols-3 gap-6 px-0 md:px-4 mb-10 items-start">
-        
-        {/* CARTE */}
-        <div className="lg:col-span-2 w-full h-[500px] lg:h-[700px] rounded-3xl overflow-hidden shadow-2xl shadow-purple-900/20 border border-slate-800 relative bg-slate-900/50">
-          {geoContext ? (
-            <MapComponent lat={geoContext.lat} lon={geoContext.lon} />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-slate-600 relative overflow-hidden">
-               <div className="absolute inset-0 opacity-5 bg-white"></div>
-               <p className="uppercase tracking-widest text-xs font-bold text-purple-400/60">En attente de coordonnées...</p>
-            </div>
-          )}
-        </div>
-
-        {/* RÉSULTATS */}
-        <div className="flex flex-col gap-4 h-auto lg:h-[700px]">
-          {result && (
-            <div className="animate-fade-in-up shrink-0">
-              <ResultCard data={result} />
-            </div>
-          )}
-          <div className="flex-1 w-full min-h-[300px] rounded-3xl overflow-hidden shadow-xl border border-purple-500/20 bg-slate-900/80 backdrop-blur-md relative animate-fade-in-up delay-100">
-             <ChatOracle /> 
+        {/* GRILLE PRINCIPALE */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-0 md:px-4 mb-10 items-start">
+          
+          {/* GAUCHE : CARTE */}
+          <div className="lg:col-span-2 w-full h-[500px] lg:h-[700px] rounded-3xl overflow-hidden shadow-2xl shadow-purple-900/20 border border-slate-800 relative bg-slate-900/50">
+            <MapComponent 
+              listings={listings} 
+              center={geoContext ? [geoContext.lat, geoContext.lon] : [45.75, 4.85]} 
+            />
           </div>
+
+          {/* DROITE : RESULTATS & CHAT */}
+          <div className="flex flex-col gap-4 h-auto lg:h-[700px]">
+            {loading && <CynicalLoader />}
+
+            {result && !loading && (
+              <div className="animate-fade-in-up shrink-0">
+                <ResultCard data={result} />
+              </div>
+            )}
+
+            <div className="flex-1 w-full min-h-[300px] rounded-3xl overflow-hidden shadow-xl border border-purple-500/20 bg-slate-900/80 backdrop-blur-sm relative flex flex-col">
+               <ChatOracle analysis={result?.analysis} />
+            </div>
+          </div>
+
         </div>
-
       </div>
-
-      <footer className="mt-auto text-slate-600 text-[10px] uppercase tracking-widest pb-4">
-        Oracle Data System • V4.0 Reactive
-      </footer>
     </div>
   );
 }
