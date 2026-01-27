@@ -137,14 +137,6 @@ export default function ChatOracle({ analysis }) {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-<<<<<<< HEAD
-          placeholder="Répondre à l'Oracle..."
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors"
-        />
-        <button 
-          type="submit"
-          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors"
-=======
           placeholder="Posez une question à l'Oracle..."
           className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
           disabled={isTyping}
@@ -153,7 +145,6 @@ export default function ChatOracle({ analysis }) {
           type="submit"
           disabled={!input.trim() || isTyping}
           className="bg-purple-600 hover:bg-purple-500 text-white px-4 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
->>>>>>> main
         >
           {isTyping ? '⏳' : '➤'}
         </button>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-// Le Composant Slider (Design)
+// --- LE COMPOSANT SLIDER (Design Équipe) ---
 const ToggleItem = ({ label, color, isActive, onToggle }) => (
   <div className="flex items-center justify-between mb-2 group cursor-pointer select-none" onClick={onToggle}>
     <div className="flex items-center gap-2">
@@ -20,6 +20,7 @@ const ToggleItem = ({ label, color, isActive, onToggle }) => (
   </div>
 );
 
+// --- LE COMPOSANT PRINCIPAL ---
 export default function MapComponent() {
   const [mapUrl, setMapUrl] = useState('');
   const iframeRef = useRef(null);
@@ -36,7 +37,8 @@ export default function MapComponent() {
   });
 
   useEffect(() => {
-    setMapUrl(`http://localhost:8000/static/map_lyon.html?t=${Date.now()}`);
+    // CORRECTION ICI : Port 5000 + Bon nom de fichier
+    setMapUrl(`http://localhost:5000/static/map_pings_lyon_calques.html?t=${Date.now()}`);
   }, []);
 
   // Fonction appelée quand tu cliques sur un slider
@@ -45,25 +47,16 @@ export default function MapComponent() {
     setLayers(prev => ({ ...prev, [layerName]: newState }));
 
     // On envoie l'ordre à l'iframe : "Simule un clic sur le calque X"
+    // (Cela suppose que ton fichier HTML écoute les messages postMessage)
     if (iframeRef.current) {
       iframeRef.current.contentWindow.postMessage({
         type: 'TOGGLE_LAYER',
-        name: layerName, // Doit correspondre exactement au nom dans Python
+        name: layerName, 
         show: newState
       }, '*');
     }
   };
 
-// Composant pour recentrer la carte
-function ChangeView({ center }) {
-  const map = useMap();
-  useEffect(() => {
-    map.flyTo(center, 14, { duration: 1.5 });
-  }, [center, map]);
-  return null;
-}
-
-export default function MapComponent({ listings = [], center }) {
   return (
     <div className="w-full h-full relative z-0 bg-slate-900 overflow-hidden rounded-2xl border border-slate-800 shadow-2xl">
       
@@ -92,7 +85,7 @@ export default function MapComponent({ listings = [], center }) {
         </span>
       </div>
 
-      {/* TES SLIDERS (PANNEAU DE CONTRÔLE) */}
+      {/* PANNEAU DE CONTRÔLE (SLIDERS) */}
       <div className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-4 rounded-xl border border-slate-700/50 shadow-2xl w-64">
         <h3 className="text-[10px] uppercase tracking-widest text-slate-400 mb-3 font-bold border-b border-slate-700 pb-2">
           Contrôle des Calques
