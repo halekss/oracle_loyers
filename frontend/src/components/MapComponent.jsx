@@ -1,6 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 
-// --- LE COMPOSANT SLIDER (Ton Design) ---
+// --- CONFIGURATION : TRADUCTION REACT -> CARTE ---
+// Clé = Ton nom de bouton | Valeur = Le nom exact du calque dans Folium (Python)
+const LAYER_MAPPING = {
+  'Immo': 'Offres Immobilières',
+  'Metro': 'Réseau Métro (API)',
+  'Vice': 'Vice (Sexe/Bar)',
+  'Nuisance': 'Nuisance (Bruit/Jeux)',
+  'Gentrification': 'Gentrification (Bio)',
+  'Superstition': 'Superstition (Mort/Culte)'
+};
+
+// --- LE COMPOSANT SLIDER ---
 const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   <div 
     className={`flex items-center justify-between mb-2 group select-none transition-opacity duration-300 ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} 
@@ -27,55 +38,67 @@ export default function MapComponent() {
   const [mapUrl, setMapUrl] = useState('');
   const iframeRef = useRef(null);
 
-  // État des calques
+  // État des calques (True = Activé par défaut)
   const [layers, setLayers] = useState({
-    'Immo': true,           // Les offres (Vert)
-    'Metro': true,          // Métro (Rouge)
-    'Vice': true,           // Bars/Sexe (Rouge foncé)
-    'Nuisance': false,      // Écoles (Orange) - Désactivé par défaut
-    'Gentrification': false // Bio/Yoga (Bleu) - Désactivé par défaut
+    'Immo': true,
+    'Metro': true,
+    'Vice': true,
+    'Nuisance': false,
+    'Gentrification': false,
+    'Superstition': false
   });
 
-  // Au chargement, on définit l'URL de la carte
   useEffect(() => {
-    // On pointe vers la route Flask '/maps/' qui sert le fichier HTML généré
-    setMapUrl(`http://localhost:5000/maps/map_pings_lyon_calques.html?t=${Date.now()}`);
+    // IMPORTANT : On pointe vers le dossier static de FastAPI
+    setMapUrl(`http://localhost:5000/static/map_lyon.html?t=${Date.now()}`);
   }, []);
 
-  // Fonction pour envoyer l'ordre à l'iframe
-  const toggleLayer = (layerName) => {
-    const newState = !layers[layerName];
-    setLayers(prev => ({ ...prev, [layerName]: newState }));
-
-    // C'est ici que la magie opère : on parle à l'iFrame
-    if (iframeRef.current) {
+  // Fonction magique pour parler à l'Iframe
+  const sendLayerCommand = (layerKey, show) => {
+    if (iframeRef.current && iframeRef.current.contentWindow) {
+      const realLayerName = LAYER_MAPPING[layerKey]; // Traduction ici !
+      
       iframeRef.current.contentWindow.postMessage({
         type: 'TOGGLE_LAYER',
-        name: layerName, // Le nom doit correspondre au 'FeatureGroup' dans Python/Folium
-        show: newState
+        name: realLayerName,
+        show: show
       }, '*');
     }
+  };
+
+  // Gestion du clic
+  const toggleLayer = (layerKey) => {
+    const newState = !layers[layerKey];
+    setLayers(prev => ({ ...prev, [layerKey]: newState }));
+    sendLayerCommand(layerKey, newState);
+  };
+
+  // Synchronisation initiale quand l'iframe a fini de charger
+  const handleIframeLoad = () => {
+    // On force l'état actuel pour être sûr que la carte est synchro avec les boutons
+    Object.keys(layers).forEach(key => {
+      sendLayerCommand(key, layers[key]);
+    });
   };
 
   return (
     <div className="w-full h-full relative z-0 bg-slate-900 overflow-hidden rounded-2xl border border-slate-800 shadow-2xl">
       
-      {/* 1. L'IFRAME (La Carte Moche-mais-Complète de Python) */}
       {mapUrl && (
         <iframe 
           ref={iframeRef}
           src={mapUrl}
           title="Carte Oracle Lyon"
           className="w-full h-full border-none"
-          // On booste un peu le contraste pour que ça fasse moins "Google Maps vieux"
+          onLoad={handleIframeLoad} // Synchro au chargement
           style={{ filter: "contrast(1.1) saturate(1.1)" }}
         />
       )}
 
-      {/* 2. OVERLAY OMBRE (Pour l'ambiance) */}
+      {/* Overlay Ombre */}
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_60px_rgba(2,6,23,0.9)] z-[400]"></div>
       
-      {/* 3. BADGE LIVE */}
+      {/* Badge Live */}
       <div className="absolute top-4 right-4 z-[500] flex items-center gap-2 bg-slate-950/90 backdrop-blur-sm px-3 py-1.5 rounded-full border border-purple-500/30 shadow-lg">
         <span className="relative flex h-2.5 w-2.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -86,13 +109,13 @@ export default function MapComponent() {
         </span>
       </div>
 
-      {/* 4. TON PANNEAU DE CONTRÔLE (La Légende Interactive) */}
+      {/* Panneau de Contrôle */}
       <div className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-4 rounded-xl border border-slate-700/50 shadow-2xl w-64">
         <h3 className="text-[10px] uppercase tracking-widest text-slate-400 mb-3 font-bold border-b border-slate-700 pb-2">
           Contrôle des Calques
         </h3>
         
-        {/* --- SECTION 1 : INFRASTRUCTURE --- */}
+        {/* INFRASTRUCTURE */}
         <ToggleItem 
           label="Réseau Métro" 
           color="#ef4444" 
@@ -102,7 +125,7 @@ export default function MapComponent() {
         
         <div className="h-px bg-slate-800 my-2"></div>
 
-        {/* --- SECTION 2 : L'ORACLE (Vices & Vertus) --- */}
+        {/* ORACLE (Vices) */}
         <ToggleItem 
           label="Vice (Bars/Sexe)" 
           color="#e74c3c" 
@@ -124,18 +147,17 @@ export default function MapComponent() {
           onToggle={() => toggleLayer('Nuisance')} 
         />
 
-        {/* Note : Superstition n'est pas activé car souvent vide, on le met en disabled */}
         <ToggleItem 
           label="Superstition" 
           color="#9b59b6" 
-          isActive={false} 
-          disabled={true} 
-          onToggle={() => {}} 
+          isActive={layers['Superstition']} 
+          onToggle={() => toggleLayer('Superstition')} 
+          disabled={false} // J'ai réactivé superstition au cas où
         />
 
         <div className="h-px bg-slate-800 my-2"></div>
 
-        {/* --- SECTION 3 : IMMOBILIER --- */}
+        {/* IMMOBILIER */}
         <ToggleItem 
           label="Offres Immobilières" 
           color="#22c55e" 
