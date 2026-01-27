@@ -5,8 +5,8 @@ def generate_folium_map():
         # 1. CENTRE ET FOND DE CARTE
         start_lat, start_lon = 45.7640, 4.8357
         if not df.empty:
-             start_lat = df['latitude'].mean()
-             start_lon = df['longitude'].mean()
+            start_lat = df['latitude'].mean()
+            start_lon = df['longitude'].mean()
 
         m = folium.Map(location=[start_lat, start_lon], zoom_start=13, tiles='CartoDB dark_matter')
 
