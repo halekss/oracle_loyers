@@ -6,3 +6,6 @@ numpy
 scipy
 joblib
 requests
+python-multipart
+tqdm
+folium
