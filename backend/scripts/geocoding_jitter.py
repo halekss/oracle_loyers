@@ -1,120 +1,83 @@
 import pandas as pd
-import requests as r
 import numpy as np
 import os
-from tqdm import tqdm
-from shapely.geometry import shape, Point
-from shapely.ops import unary_union
 import random
-import time
+import warnings
+
+warnings.filterwarnings('ignore')
 
 # --- CONFIGURATION ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
+# CORRECTION ICI : On remonte d'un niveau (..) pour trouver le dossier data
 data_dir = os.path.join(script_dir, '..', 'data')
 
 INPUT_CSV = os.path.join(data_dir, "base_de_donnees_immo_lyon_complet.csv")
 OUTPUT_CSV = os.path.join(data_dir, "base_de_donnees_immo_lyon_geocoded.csv")
 
-# Liste des codes postaux qu'on veut cartographier précisément
-TARGET_ZIPS = [
-    "69001", "69002", "69003", "69004", "69005", 
-    "69006", "69007", "69008", "69009", "69100" # Villeurbanne aussi
-]
+# 🗺️ ZONES PAR ARRONDISSEMENT (Mode Manuel / Hors-Ligne)
+LYON_ZONES = {
+    "69001": {"lat": 45.7705, "lon": 4.8306, "radius": 0.005}, 
+    "69002": {"lat": 45.7533, "lon": 4.8327, "radius": 0.008}, 
+    "69003": {"lat": 45.7562, "lon": 4.8655, "radius": 0.015}, 
+    "69004": {"lat": 45.7770, "lon": 4.8270, "radius": 0.007}, 
+    "69005": {"lat": 45.7580, "lon": 4.8050, "radius": 0.008}, 
+    "69006": {"lat": 45.7690, "lon": 4.8550, "radius": 0.007}, 
+    "69007": {"lat": 45.7350, "lon": 4.8380, "radius": 0.015}, 
+    "69008": {"lat": 45.7380, "lon": 4.8700, "radius": 0.010}, 
+    "69009": {"lat": 45.7780, "lon": 4.8030, "radius": 0.012}, 
+    "69100": {"lat": 45.7720, "lon": 4.8850, "radius": 0.020}, 
+}
 
-# Cache pour stocker les formes géométriques (Polygones)
-POLYGON_MAP = {}
-ALL_LYON_POLYGON = None # Pour gérer le cas "69000"
+def get_point_in_circle(center_lat, center_lon, radius):
+    """Génère un point aléatoire uniforme dans un cercle"""
+    angle = random.uniform(0, 2 * np.pi)
+    r = radius * np.sqrt(random.uniform(0, 1)) 
+    lat = center_lat + r * np.cos(angle)
+    lon = center_lon + r * np.sin(angle)
+    return lat, lon
 
-def load_polygons():
-    """Télécharge les formes officielles des arrondissements au démarrage"""
-    global ALL_LYON_POLYGON
-    print("🌍 Téléchargement des frontières officielles des arrondissements...")
-    
-    polygons_list = []
-    
-    for cp in tqdm(TARGET_ZIPS, desc="Chargement cartes"):
-        # On interroge l'API Gouv pour avoir le contour du code postal
-        url = "https://geo.api.gouv.fr/communes"
-        params = {
-            'codePostal': cp,
-            'fields': 'contour',
-            'format': 'geojson',
-            'geometry': 'contour'
-        }
-        
-        try:
-            res = r.get(url, params=params, timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                if data and 'features' in data:
-                    # Conversion JSON -> Objet Mathématique Shapely
-                    geom = shape(data['features'][0]['geometry'])
-                    POLYGON_MAP[cp] = geom
-                    polygons_list.append(geom)
-            time.sleep(0.1) # Politesse API
-        except Exception as e:
-            print(f"⚠️ Impossible de charger la carte pour {cp}: {e}")
+def get_point_for_zipcode(cp):
+    """Attribue des coordonnées GPS en fonction du code postal."""
+    if cp in LYON_ZONES:
+        zone = LYON_ZONES[cp]
+        return get_point_in_circle(zone["lat"], zone["lon"], zone["radius"])
+    else:
+        # Fallback : Centre Lyon
+        return get_point_in_circle(45.7640, 4.8357, 0.02)
 
-    # On crée une forme géante "Grand Lyon" pour les codes postaux pourris (69000)
-    if polygons_list:
-        ALL_LYON_POLYGON = unary_union(polygons_list)
-        print("✅ Carte globale assemblée avec succès.")
-
-def get_random_point_in_polygon(polygon):
-    """Trouve un point GPS valide à l'intérieur d'un polygone"""
-    if not polygon: return 45.76, 4.83 # Fallback centre Lyon
-    
-    min_x, min_y, max_x, max_y = polygon.bounds
-    
-    # On essaie 50 fois de trouver un point DANS la forme
-    for _ in range(50):
-        # On tire au hasard dans le carré englobant
-        p = Point(random.uniform(min_x, max_x), random.uniform(min_y, max_y))
-        # On vérifie si le point est vraiment DANS la forme (pas dans le Rhône ou hors frontières)
-        if polygon.contains(p):
-            return p.y, p.x # Latitude, Longitude
-            
-    # Si échec, on rend le centre du quartier
-    return polygon.centroid.y, polygon.centroid.x
+def clean_zipcode(val):
+    try:
+        return str(int(float(val))).strip()
+    except:
+        return str(val).strip()
 
 # --- MAIN ---
-print("🚀 Démarrage du Jittering par Polygones...")
-
-# 1. On charge les cartes
-load_polygons()
+print("🚀 Démarrage du Géocodage Manuel...")
 
 if not os.path.exists(INPUT_CSV):
     print(f"❌ Fichier non trouvé: {INPUT_CSV}")
+    print(f"👉 Vérifie que le fichier est bien dans : {os.path.abspath(data_dir)}")
     exit()
 
 df = pd.read_csv(INPUT_CSV)
+print(f"📂 {len(df)} annonces chargées.")
+
+# Nettoyage
+df['code_postal'] = df['code_postal'].fillna(69000).apply(clean_zipcode)
+
+# Génération
 lats = []
 lons = []
 
-# 2. On traite chaque ligne
-for index, row in tqdm(df.iterrows(), total=df.shape[0], desc="Placement des annonces"):
-    cp = str(row['code_postal']).replace('.0', '').strip()
-    
-    target_poly = None
-    
-    # Cas 1 : Code Postal connu (ex: 69003)
-    if cp in POLYGON_MAP:
-        target_poly = POLYGON_MAP[cp]
-    
-    # Cas 2 : Code Postal générique (69000) ou inconnu
-    elif ALL_LYON_POLYGON:
-        # On place au hasard n'importe où dans Lyon
-        target_poly = ALL_LYON_POLYGON
-    
-    # Génération du point
-    lat, lon = get_random_point_in_polygon(target_poly)
+for index, row in df.iterrows():
+    cp = row['code_postal']
+    lat, lon = get_point_for_zipcode(cp)
     lats.append(lat)
     lons.append(lon)
 
 df['latitude'] = lats
 df['longitude'] = lons
 
-# Sauvegarde
 df.to_csv(OUTPUT_CSV, index=False)
 print(f"✅ Terminé ! Fichier généré : {OUTPUT_CSV}")
-print("⚠️ N'oublie pas de relancer le calcul des distances (feature engineering) maintenant !")
+print("⚠️ N'oublie pas de relancer 'compute_features.py' pour mettre à jour les distances !")
