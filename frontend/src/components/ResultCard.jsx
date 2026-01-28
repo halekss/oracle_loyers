@@ -1,72 +1,97 @@
 import React from "react";
 
-export default function ResultCard({ data }) {
-  // Sécurisation : si data est null, on met un objet vide
-  const safeData = data || {};
+export default function ResultCard({ data, loading }) {
   
-  // LE FIX EST ICI : On va chercher dans 'stats' envoyé par Python
+  const safeData = data || {};
   const stats = safeData.stats || {};
   
-  // Récupération des valeurs (avec fallback à 0 si manquant)
   const estimatedPrice = safeData.estimated_price || 0;
   const m2PriceRaw = stats.prix_m2 || 0;
-  
-  // Formatage pour l'affichage (ex: "4 500")
-  const formatPrice = (p) => p.toLocaleString('fr-FR');
+  const nbBiens = stats.nb_biens_analyse || 0;
+
+  const formatPrice = (p) => p ? Math.round(p).toLocaleString('fr-FR') : "--";
+
+  // Simulation basique de "Tension" pour l'UI (en attendant une vraie data)
+  // Si le prix m² > 25€ (exemple Lyon), on considère que c'est tendu
+  const isHighTension = m2PriceRaw > 25; 
+
+  if (loading) {
+    return (
+      <div className="animate-pulse w-full space-y-3">
+        <div className="flex gap-3">
+           <div className="h-20 bg-slate-800 rounded-xl w-2/3"></div>
+           <div className="h-20 bg-slate-800 rounded-xl w-1/3"></div>
+        </div>
+        <div className="h-2 bg-slate-800 rounded w-full"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-slate-900/90 backdrop-blur-xl border border-blue-500/30 rounded-3xl p-6 shadow-2xl w-full max-w-2xl mx-auto relative overflow-hidden animate-fade-in-up">
+    <div className="w-full animate-fade-in">
       
-      {/* Effet de brillance */}
-      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50"></div>
-
-      <div className="flex flex-row justify-between items-center gap-6">
+      {/* SECTION PRIX PRINCIPALE */}
+      <div className="flex gap-3 mb-4">
         
-        {/* PARTIE GAUCHE : LOYER TOTAL */}
-        <div className="flex-1 text-center border-r border-white/10 pr-6">
-          <h2 className="text-slate-400 text-xs uppercase tracking-[0.2em] mb-2 font-bold">
-            Estimation Loyer
-          </h2>
-          <div className="flex items-baseline justify-center gap-1">
-            <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-blue-400 drop-shadow-lg">
-              {formatPrice(estimatedPrice)}
-            </span>
-            <span className="text-xl text-slate-500 font-light">€</span>
+        {/* GROS BLOC : LOYER */}
+        <div className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 p-4 rounded-xl border border-purple-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.2)] relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-2 opacity-5 text-6xl font-black text-white pointer-events-none">€</div>
+          
+          <div className="flex justify-between items-start">
+            <div>
+                <p className="text-[10px] uppercase text-purple-400 font-bold tracking-widest mb-1">Estimation Loyer</p>
+                <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-black text-white tracking-tighter shadow-black drop-shadow-lg">
+                    {formatPrice(estimatedPrice)}
+                    </span>
+                    <span className="text-lg text-slate-500">€</span>
+                </div>
+            </div>
+            {/* Indicateur Tendance */}
+            <div className="text-right">
+                <span className="flex items-center justify-end text-xs font-bold text-green-400 bg-green-400/10 px-2 py-1 rounded-full border border-green-400/20">
+                    ↗ +2%
+                </span>
+                <p className="text-[9px] text-slate-600 mt-1">vs mois dernier</p>
+            </div>
           </div>
-          <p className="text-slate-500 text-xs mt-2 italic">
-            charges comprises (environ)
-          </p>
         </div>
 
-        {/* PARTIE DROITE : PRIX AU M² */}
-        <div className="bg-slate-950/50 p-4 rounded-2xl border border-white/5 flex flex-col items-center justify-center min-w-[120px]">
-          <span className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mb-1">
-            Prix au m²
-          </span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-mono font-bold text-yellow-400">
-              {m2PriceRaw > 0 ? formatPrice(m2PriceRaw) : "---"}
-            </span>
-            <span className="text-sm text-yellow-600">€</span>
+        {/* PETIT BLOC : PRIX M2 */}
+        <div className="w-1/3 bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col justify-center items-center relative">
+          <p className="text-[9px] uppercase text-slate-500 font-bold mb-1">Prix m²</p>
+          <div className="text-xl font-bold text-yellow-400 font-mono">
+            {formatPrice(m2PriceRaw)}
           </div>
-          <span className="text-slate-600 text-[9px] uppercase mt-1">
-            Moyenne locale
-          </span>
+          <p className="text-[9px] text-slate-600 mt-1">Moyenne</p>
         </div>
       </div>
 
-      {/* FOOTER : INFOS DEBUG */}
-      <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500">
-        <div className="flex items-center gap-2">
-           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-           <span>IA Active</span>
+      {/* JAUGE DE CONTEXTE (UI UX Advice) */}
+      <div className="bg-slate-950/50 rounded-lg p-3 border border-slate-800/50">
+        <div className="flex justify-between items-end mb-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Indice de Tension Locative</span>
+            <span className={`text-[10px] font-bold ${isHighTension ? 'text-red-400' : 'text-green-400'}`}>
+                {isHighTension ? "MARCHÉ TENDU" : "MARCHÉ FLUIDE"}
+            </span>
         </div>
-        <div>
-          {stats.nb_biens_analyse 
-            ? `Basé sur ${stats.nb_biens_analyse} biens similaires`
-            : "Analyse en cours..."}
+        
+        {/* La barre visuelle */}
+        <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden flex">
+            {/* On simule une jauge remplie selon le prix */}
+            <div 
+                className={`h-full transition-all duration-1000 ${isHighTension ? 'bg-gradient-to-r from-orange-500 to-red-600' : 'bg-gradient-to-r from-green-500 to-emerald-400'}`} 
+                style={{ width: isHighTension ? '85%' : '45%' }}
+            ></div>
+        </div>
+        
+        <div className="mt-2 flex justify-between text-[9px] text-slate-600 font-mono">
+             <span>Faible</span>
+             <span>Moyenne</span>
+             <span>Forte</span>
         </div>
       </div>
+
     </div>
   );
 }

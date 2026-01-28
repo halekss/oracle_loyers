@@ -2,38 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  /* Fond noir profond avec une lueur violette/bleue mystérieuse en haut */
-  background: radial-gradient(circle at center top, #1e1b4b, #020617);
-  color: #f8fafc;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  min-height: 100vh;
-  margin: 0;
+/* --- CUSTOM SCROLLBAR (Style Cyberpunk) --- */
+::-webkit-scrollbar {
+  width: 6px; /* Très fin */
+  height: 6px;
 }
 
-/* Animation de la lueur du marqueur sur la carte */
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.7); }
-  70% { box-shadow: 0 0 0 20px rgba(147, 51, 234, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(147, 51, 234, 0); }
+::-webkit-scrollbar-track {
+  background: #0f172a; /* Slate-900 */
 }
 
-/* Animation d'apparition douce */
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+::-webkit-scrollbar-thumb {
+  background: #334155; /* Slate-700 */
+  border-radius: 3px;
 }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.6s ease-out forwards;
+::-webkit-scrollbar-thumb:hover {
+  background: #a855f7; /* Purple-500 au survol */
 }
 
-.delay-100 {
-  animation-delay: 0.1s;
+/* Animation douce pour l'apparition des éléments */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
 }
