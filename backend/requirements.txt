@@ -10,3 +10,5 @@ python-multipart
 tqdm
 folium
 scipy
+shapely
+requests

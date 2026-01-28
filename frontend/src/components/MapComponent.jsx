@@ -101,7 +101,7 @@ export default function MapComponent({ center }) {
         <iframe 
           ref={iframeRef}
           src={mapUrl}
-          title="Carte Oracle Lyon"
+          title="Carte Oracle"
           className="w-full h-full border-none"
           onLoad={handleIframeLoad} 
           style={{ filter: "contrast(1.1) saturate(1.1)" }}
@@ -117,9 +117,7 @@ export default function MapComponent({ center }) {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
         </span>
-        <span className="text-[10px] font-mono text-purple-200 uppercase tracking-widest font-bold">
-          Oracle Live
-        </span>
+        <span className="text-[10px] font-mono text-purple-200 uppercase tracking-widest font-bold">Oracle Live</span>
       </div>
 
       {/* Panneau Contrôle */}
@@ -130,6 +128,7 @@ export default function MapComponent({ center }) {
         
         <ToggleItem label="Réseau Métro" color="#ef4444" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
         
+        <ToggleItem label="Réseau Métro" color="#ef4444" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
         <div className="h-px bg-slate-800 my-2"></div>
 
         <ToggleItem label="Vice (Bars/Sexe)" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />

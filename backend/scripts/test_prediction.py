@@ -1,53 +1,57 @@
 import pandas as pd
 import joblib
 import os
-import random
+import numpy as np
 
 # --- CONFIGURATION ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(script_dir, '..', 'models', 'price_predictor.pkl')
 data_path = os.path.join(script_dir, '..', 'data', 'master_immo_final.csv')
+model_path = os.path.join(script_dir, '..', 'models', 'price_predictor.pkl')
 
-# --- CHARGEMENT ---
 print("🔮 Chargement de l'Oracle (le modèle)...")
+
+# 1. Charger le modèle
+if not os.path.exists(model_path):
+    print("❌ Erreur : Modèle introuvable. Lance train_model.py d'abord !")
+    exit()
+
 model = joblib.load(model_path)
+
+# 2. Charger les données
+if not os.path.exists(data_path):
+    print("❌ Erreur : Données introuvables.")
+    exit()
+
 df = pd.read_csv(data_path)
 
-# On prépare les données comme pour l'entraînement
-features_to_drop = ['id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'ville', 'type']
-X = df.drop(columns=features_to_drop, errors='ignore')
-X = X.fillna(0) # Sécurité
-
-# --- LE JEU DE LA DIVINATION ---
 print("\n🎲 Pioche de 5 appartements au hasard...")
-random_indices = random.sample(range(len(df)), 5)
 
-for i in random_indices:
-    # Les infos de l'appart
-    appart_data = X.iloc[[i]] # Double crochet pour garder le format DataFrame
-    surface = appart_data['surface'].values[0]
-    
-    # Le vrai prix
-    vrai_prix = df.iloc[i]['prix']
-    
-    # La prédiction
-    prix_estime = model.predict(appart_data)[0]
-    
-    # Calcul de l'écart
-    ecart = prix_estime - vrai_prix
-    ecart_percent = (abs(ecart) / vrai_prix) * 100
-    
-    # Résultat visuel
-    print(f"\n🏠 Appartement n°{df.iloc[i]['id_annonce']} ({surface} m²)")
-    print(f"   💰 Vrai Loyer      : {vrai_prix:.0f} €")
-    print(f"   🤖 Loyer Estimé    : {prix_estime:.0f} €")
-    
-    if abs(ecart_percent) < 10:
-        print(f"   ✅ Bravo ! (Écart : {ecart:+.0f} € / {ecart_percent:.1f}%)")
-    elif abs(ecart_percent) < 20:
-        print(f"   ⚠️ Pas mal... (Écart : {ecart:+.0f} € / {ecart_percent:.1f}%)")
-    else:
-        print(f"   ❌ Aïe, raté. (Écart : {ecart:+.0f} € / {ecart_percent:.1f}%)")
-        print(f"      (Lien : {df.iloc[i]['url']})")
+# On prend 5 lignes au hasard
+samples = df.sample(5)
 
-print("\n✨ Fin du test.")
+# --- C'EST ICI QUE LA MAGIE OPÈRE ---
+# On demande au modèle : "Quelles colonnes veux-tu ?"
+cols_attendues = model.feature_names_in_
+
+for index, row in samples.iterrows():
+    print(f"\n🏠 Appartement n°{row['id_annonce']} ({row['ville']})")
+    print(f"   Surface : {row['surface']} m² | Loyer Réel : {row['prix']} €")
+    
+    # Préparation des données pour la prédiction
+    # 1. On transforme la ligne en DataFrame (une seule ligne)
+    row_df = pd.DataFrame([row])
+    
+    # 2. On filtre pour ne garder QUE les colonnes que le modèle attend
+    # (Ça enlève automatiquement les 'nb_', le code postal, etc.)
+    row_filtered = row_df[cols_attendues]
+    
+    # 3. On remplace les trous par 0 (sécurité)
+    row_filtered = row_filtered.fillna(0)
+
+    # Prédiction
+    prix_estime = model.predict(row_filtered)[0]
+    
+    ecart = prix_estime - row['prix']
+    
+    print(f"   🔮 L'Oracle dit : {prix_estime:.0f} €")
+    print(f"   📊 Différence : {ecart:+.0f} €")
