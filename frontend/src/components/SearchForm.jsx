@@ -5,64 +5,54 @@ export default function SearchForm({ onSearch, isLoading, currentFilter, onFilte
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (input.trim()) {
-      // On envoie juste le texte, App.jsx se débrouillera
-      onSearch(input);
-    }
+    if (input.trim()) onSearch(input);
   };
 
-  // Les filtres avec des ICONES
   const filters = [
-    { id: 'all', label: 'Tout', icon: '🌍' },
-    { id: 't1', label: 'Studio/T1', icon: '🛋️' },
-    { id: 't2', label: 'T2', icon: '🛏️' },
-    { id: 't3', label: 'T3', icon: '👨‍👩‍👧' },
-    { id: 't4+', label: 'Grand (T4+)', icon: '🏰' },
+    { id: 'all', label: 'Tout' },
+    { id: 't1', label: 'T1' },
+    { id: 't2', label: 'T2' },
+    { id: 't3', label: 'T3' },
   ];
 
   return (
-    <div className="flex flex-col gap-6 w-full animate-fade-in-down">
-      
-      {/* 1. BARRE DE RECHERCHE (Glow effect conservé) */}
-      <form onSubmit={handleSubmit} className="relative w-full group z-20">
-        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-xl blur opacity-30 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
-        
-        <div className="relative flex items-stretch bg-slate-900 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10">
+    <div className="flex flex-col gap-3 w-full">
+      {/* Barre de recherche */}
+      <form onSubmit={handleSubmit} className="relative w-full">
+        <div className="relative flex items-center bg-slate-900 rounded-xl overflow-hidden border border-slate-700 focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-500/50 transition-all shadow-lg">
           <input
             type="text"
-            className="w-full bg-transparent text-white px-6 py-4 outline-none placeholder-slate-500 font-medium"
-            placeholder="Entrez un quartier (ex: Part-Dieu)..."
+            className="w-full bg-transparent text-white px-4 py-3 outline-none placeholder-slate-600 text-sm font-medium"
+            placeholder="Rue, Quartier (ex: Garibaldi)..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
           />
-          
           <button
             type="submit"
             disabled={isLoading}
-            className="px-8 py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold transition-all border-l border-slate-700 hover:text-blue-400 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider text-sm"
+            className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-purple-400 font-bold text-xs uppercase tracking-wider border-l border-slate-700 transition-colors hover:text-purple-300"
           >
-            {isLoading ? <span className="animate-spin block">↻</span> : "SCANNER"}
+            {isLoading ? "..." : "SCAN"}
           </button>
         </div>
       </form>
 
-      {/* 2. FILTRES (Conservés tels quels) */}
-      <div className="flex flex-wrap justify-center gap-3">
+      {/* Filtres alignés */}
+      <div className="flex gap-2">
         {filters.map((f) => (
           <button
             key={f.id}
             type="button"
             onClick={() => onFilterChange(f.id)}
             className={`
-              flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all duration-300 border
+              flex-1 py-2 rounded-lg text-[10px] md:text-xs font-bold uppercase tracking-wide transition-all border
               ${currentFilter === f.id 
-                ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_20px_rgba(37,99,235,0.6)] scale-105' 
-                : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'}
+                ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/20' 
+                : 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-600 hover:text-slate-300'}
             `}
           >
-            <span>{f.icon}</span>
-            <span>{f.label}</span>
+            {f.label}
           </button>
         ))}
       </div>

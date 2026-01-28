@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-// --- CONFIGURATION : TRADUCTION REACT -> CARTE ---
-// Clé = Ton nom de bouton | Valeur = Le nom exact du calque dans Folium (Python)
+// --- CONFIGURATION DES CALQUES ---
 const LAYER_MAPPING = {
   'Immo': 'Offres Immobilières',
   'Metro': 'Réseau Métro (API)',
@@ -11,7 +10,7 @@ const LAYER_MAPPING = {
   'Superstition': 'Superstition (Mort/Culte)'
 };
 
-// --- LE COMPOSANT SLIDER ---
+// Composant Bouton Toggle
 const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   <div 
     className={`flex items-center justify-between mb-2 group select-none transition-opacity duration-300 ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} 
@@ -34,11 +33,11 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   </div>
 );
 
-export default function MapComponent() {
+// J'ai ajouté le prop 'center' ici
+export default function MapComponent({ center }) {
   const [mapUrl, setMapUrl] = useState('');
   const iframeRef = useRef(null);
 
-  // État des calques (True = Activé par défaut)
   const [layers, setLayers] = useState({
     'Immo': true,
     'Metro': true,
@@ -49,15 +48,31 @@ export default function MapComponent() {
   });
 
   useEffect(() => {
-    // IMPORTANT : On pointe vers le dossier static de FastAPI
-    setMapUrl(`http://localhost:5000/static/map_lyon.html?t=${Date.now()}`);
+    // ⚠️ Mettez votre URL backend ici
+    const backendUrl = "http://localhost:5000"; 
+    setMapUrl(`${backendUrl}/static/map_lyon.html?t=${Date.now()}`);
   }, []);
 
-  // Fonction magique pour parler à l'Iframe
+  // --- 🎯 C'est ICI que la magie du zoom opère ---
+  useEffect(() => {
+    // Si 'center' change dans App.jsx, on envoie un message à l'iframe
+    if (center && iframeRef.current && iframeRef.current.contentWindow) {
+      console.log("✈️ Envoi commande FLY_TO à l'iframe :", center);
+      
+      iframeRef.current.contentWindow.postMessage({
+        type: 'FLY_TO',
+        lat: center[0], // Latitude
+        lng: center[1], // Longitude
+        zoom: 16        // Niveau de zoom (proche)
+      }, '*');
+    }
+  }, [center]); // Déclencheur : changement de coordonnées
+
+
+  // Fonction pour parler à l'Iframe (Calques)
   const sendLayerCommand = (layerKey, show) => {
     if (iframeRef.current && iframeRef.current.contentWindow) {
-      const realLayerName = LAYER_MAPPING[layerKey]; // Traduction ici !
-      
+      const realLayerName = LAYER_MAPPING[layerKey];
       iframeRef.current.contentWindow.postMessage({
         type: 'TOGGLE_LAYER',
         name: realLayerName,
@@ -66,16 +81,14 @@ export default function MapComponent() {
     }
   };
 
-  // Gestion du clic
   const toggleLayer = (layerKey) => {
     const newState = !layers[layerKey];
     setLayers(prev => ({ ...prev, [layerKey]: newState }));
     sendLayerCommand(layerKey, newState);
   };
 
-  // Synchronisation initiale quand l'iframe a fini de charger
   const handleIframeLoad = () => {
-    // On force l'état actuel pour être sûr que la carte est synchro avec les boutons
+    console.log("🗺️ Carte chargée, synchronisation...");
     Object.keys(layers).forEach(key => {
       sendLayerCommand(key, layers[key]);
     });
@@ -90,12 +103,12 @@ export default function MapComponent() {
           src={mapUrl}
           title="Carte Oracle Lyon"
           className="w-full h-full border-none"
-          onLoad={handleIframeLoad} // Synchro au chargement
+          onLoad={handleIframeLoad} 
           style={{ filter: "contrast(1.1) saturate(1.1)" }}
         />
       )}
 
-      {/* Overlay Ombre */}
+      {/* Overlay Vignettage */}
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_60px_rgba(2,6,23,0.9)] z-[400]"></div>
       
       {/* Badge Live */}
@@ -109,62 +122,24 @@ export default function MapComponent() {
         </span>
       </div>
 
-      {/* Panneau de Contrôle */}
+      {/* Panneau Contrôle */}
       <div className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-4 rounded-xl border border-slate-700/50 shadow-2xl w-64">
         <h3 className="text-[10px] uppercase tracking-widest text-slate-400 mb-3 font-bold border-b border-slate-700 pb-2">
           Contrôle des Calques
         </h3>
         
-        {/* INFRASTRUCTURE */}
-        <ToggleItem 
-          label="Réseau Métro" 
-          color="#ef4444" 
-          isActive={layers['Metro']} 
-          onToggle={() => toggleLayer('Metro')} 
-        />
+        <ToggleItem label="Réseau Métro" color="#ef4444" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
         
         <div className="h-px bg-slate-800 my-2"></div>
 
-        {/* ORACLE (Vices) */}
-        <ToggleItem 
-          label="Vice (Bars/Sexe)" 
-          color="#e74c3c" 
-          isActive={layers['Vice']} 
-          onToggle={() => toggleLayer('Vice')} 
-        />
-
-        <ToggleItem 
-          label="Gentrification (Bio)" 
-          color="#3b82f6" 
-          isActive={layers['Gentrification']} 
-          onToggle={() => toggleLayer('Gentrification')} 
-        />
-
-        <ToggleItem 
-          label="Nuisance (Écoles)" 
-          color="#f39c12" 
-          isActive={layers['Nuisance']} 
-          onToggle={() => toggleLayer('Nuisance')} 
-        />
-
-        <ToggleItem 
-          label="Superstition" 
-          color="#9b59b6" 
-          isActive={layers['Superstition']} 
-          onToggle={() => toggleLayer('Superstition')} 
-          disabled={false} // J'ai réactivé superstition au cas où
-        />
+        <ToggleItem label="Vice (Bars/Sexe)" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
+        <ToggleItem label="Gentrification (Bio)" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
+        <ToggleItem label="Nuisance (Écoles/Boîtes)" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
+        <ToggleItem label="Superstition (Mort)" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
 
         <div className="h-px bg-slate-800 my-2"></div>
 
-        {/* IMMOBILIER */}
-        <ToggleItem 
-          label="Offres Immobilières" 
-          color="#22c55e" 
-          isActive={layers['Immo']} 
-          onToggle={() => toggleLayer('Immo')} 
-        />
-
+        <ToggleItem label="Offres Immobilières" color="#22c55e" isActive={layers['Immo']} onToggle={() => toggleLayer('Immo')} />
       </div>
     </div>
   );
