@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # --- SERVICE BACKEND (Python/Flask) ---
   backend:
@@ -7,6 +5,9 @@ services:
     container_name: oracle_backend
     ports:
       - "5000:5000"
+    # 👇 CRUCIAL : Permet à Docker d'accéder à LM Studio sur votre Mac/Windows
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - ./backend/data:/app/data
@@ -14,8 +15,10 @@ services:
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-    # On force la commande pour être sûr qu'il lance Flask
+      # URL de LM Studio (le backend utilise cette variable)
+      - LM_STUDIO_URL=http://host.docker.internal:1234/v1/chat/completions
     command: python app.py
+    restart: unless-stopped
 
   # --- SERVICE FRONTEND (React/Vite) ---
   frontend:
@@ -27,8 +30,8 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      # Pour que Vite sache où est le backend (si besoin plus tard)
       - VITE_API_URL=http://localhost:5000
     depends_on:
       - backend
     command: ["npm", "run", "dev", "--", "--host"]
+    restart: unless-stopped

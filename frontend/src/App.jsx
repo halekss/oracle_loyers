@@ -8,8 +8,8 @@ import { api } from './services/api';
 function App() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [geoContext, setGeoContext] = useState(null); 
-  const [roomFilter, setRoomFilter] = useState("all"); 
+  const [geoContext, setGeoContext] = useState(null);
+  const [roomFilter, setRoomFilter] = useState("all");
 
   const getSurfaceFromFilter = (filter) => {
     switch(filter) {
@@ -17,7 +17,7 @@ function App() {
       case 't2': return 45;
       case 't3': return 65;
       case 't4+': return 95;
-      default: return 35; 
+      default: return 35;
     }
   };
 
@@ -43,7 +43,7 @@ function App() {
   const handleSearch = async (userInput) => {
     setLoading(true);
     try {
-      const query = userInput.trim() + ", Lyon, France"; 
+      const query = userInput.trim() + ", Lyon, France";
       const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
       const geoData = await geoRes.json();
       if (!geoData.length) throw new Error("Introuvable");
@@ -65,30 +65,26 @@ function App() {
   };
 
   return (
-    // 1. FOND DE PAGE (Le "Bordereau" sombre)
-    // On utilise flex + items-center + justify-center pour centrer le bloc au milieu
     <div className="h-screen w-screen bg-slate-950 text-slate-200 font-sans flex items-center justify-center overflow-hidden">
       
-      {/* 2. LE BLOC PRINCIPAL FLOTTANT (La "fenêtre" de l'app) */}
-      {/* w-[95%] et h-[92%] créent la marge d'environ 2.5% à 5% tout autour */}
       <div className="w-[95%] h-[94%] flex flex-col relative">
 
-        {/* HEADER (Intégré dans le bloc flottant ou juste au dessus) */}
+        {/* HEADER */}
         <header className="flex-none mb-3 px-2 flex items-center justify-between">
           <div>
-              <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
+            <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
               ORACLE IMMOBILIER
-              </h1>
+            </h1>
           </div>
           <div className="flex items-center gap-3">
-             <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 rounded-full border border-slate-800">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Système Actif</span>
-             </div>
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 rounded-full border border-slate-800">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Système Actif</span>
+            </div>
           </div>
         </header>
 
-        {/* MAIN CONTENT (Arrondi et borduré) */}
+        {/* MAIN CONTENT */}
         <main className="flex-1 w-full bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden flex relative ring-1 ring-white/5">
           
           {/* COLONNE GAUCHE (Carte - 60%) */}
@@ -116,9 +112,9 @@ function App() {
               <ResultCard data={result} loading={loading} />
             </div>
 
-            {/* CHAT */}
+            {/* CHAT - 👇 ON PASSE L'ANALYSE AU CHATBOT */}
             <div className="flex-1 min-h-0 relative">
-               <ChatOracle analysis={result?.analysis} />
+              <ChatOracle analysis={result?.analysis} />
             </div>
 
           </div>

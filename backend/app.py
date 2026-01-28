@@ -1,190 +1,191 @@
+import os
+import requests
+import joblib
+import pandas as pd
+import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-import pandas as pd
-import joblib
-import os
-import numpy as np
 from scipy.spatial import distance
 
-# --- IMPORTS DES SERVICES (Architecture Modulaire) ---
+# --- SERVICES ---
 from services.data_loader import DataLoader
 from services.map_generator import MapGenerator
-# On garde ton import utilitaire si besoin
-from services.utils import haversine_distance 
+
+print("🔥 DÉMARRAGE ORACLE CHATBOT v3.2 (FIXED)")
 
 app = Flask(__name__)
 CORS(app)
 
-# --- CONFIGURATION CHEMINS ---
+# --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'price_predictor.pkl')
 
-# Création du dossier static si absent
+# URL de LM Studio
+LM_STUDIO_URL = os.getenv('LM_STUDIO_URL', "http://host.docker.internal:1234/v1/chat/completions")
+print(f"🔗 LM Studio URL : {LM_STUDIO_URL}")
+
 os.makedirs(STATIC_DIR, exist_ok=True)
 
-print("⏳ Démarrage de l'Oracle...")
-
-# 1. CHARGEMENT DES DONNÉES (Via le service dédié)
+# 1. CHARGEMENT DONNÉES
 data_loader = DataLoader(DATA_DIR)
 data_loader.load_csvs()
-df = data_loader.df_immo # Raccourci pour ton code
-
-# Sécurisation de la colonne type pour tes filtres
+df = data_loader.df_immo
 if not df.empty and 'type_local' in df.columns:
     df['type_local'] = df['type_local'].fillna('').astype(str)
 
-# 2. GÉNÉRATION DE LA CARTE (INDISPENSABLE pour l'Espion et l'affichage)
+# 2. GÉNÉRATION CARTE
 map_generator = MapGenerator(STATIC_DIR, DATA_DIR)
 map_generator.generate(data_loader)
 
-# 3. CHARGEMENT DU MODÈLE IA
+# 3. CHARGEMENT MODÈLE
 model = None
 try:
     if os.path.exists(MODEL_PATH):
         model = joblib.load(MODEL_PATH)
-        print("✅ Modèle IA chargé en mémoire.")
-    else:
-        print("⚠️ Fichier modèle introuvable (pas grave, on fera sans).")
+        print("✅ Modèle ML chargé")
 except Exception as e:
-    print(f"❌ Erreur chargement Modèle : {e}")
+    print(f"⚠️ Pas de modèle ML : {e}")
 
-# --- FONCTIONS UTILITAIRES ---
-def generate_analysis_text(appart_data):
-    """Génère le texte cynique."""
-    messages = []
-    # Utilisation de .get() pour éviter les crashs
-    dist_ecole = appart_data.get('dist_nuisance_ecole', 1000) # Attention aux accents dans les noms de colonnes CSV
-    dist_bar = appart_data.get('dist_vice_bar', 1000)
-
-    if dist_ecole < 200:
-        messages.append(f"📉 **Bon plan économie** : Une école est à {int(dist_ecole)}m. C'est bruyant, donc le loyer est moins cher !")
-    if dist_bar < 100:
-        messages.append(f"🍻 **Taxe ambiance** : Bars à {int(dist_bar)}m. Le quartier est vivant, et ça se paie !")
-    
-    if not messages:
-        messages.append("📍 Quartier standard, ni trop bruyant, ni trop fêtard.")
-    return messages
+# --- FONCTION IA (CORRIGÉE) ---
+def ask_mistral(system_prompt, user_message):
+    """Communique avec LM Studio (Mistral) - Format compatible"""
+    try:
+        # ✅ Combine system et user en un seul message
+        # Car Mistral via LM Studio n'accepte pas le rôle "system"
+        combined_message = f"{system_prompt}\n\nUtilisateur : {user_message}\n\nOracle :"
+        
+        payload = {
+            "model": "local-model",
+            "messages": [
+                {"role": "user", "content": combined_message}
+            ],
+            "temperature": 0.9,
+            "max_tokens": 500
+        }
+        
+        print(f"📤 Envoi à LM Studio : {user_message[:50]}...")
+        response = requests.post(LM_STUDIO_URL, json=payload, timeout=60)
+        
+        if response.status_code == 200:
+            answer = response.json()['choices'][0]['message']['content']
+            print(f"✅ Réponse reçue : {answer[:50]}...")
+            return answer
+        else:
+            print(f"❌ Erreur LM Studio {response.status_code} : {response.text[:200]}")
+            return f"⚠️ L'Oracle a un hoquet technique (Code {response.status_code})"
+            
+    except requests.exceptions.ConnectionError:
+        print("❌ Impossible de joindre LM Studio - Vérifiez qu'il tourne sur le port 1234")
+        return "🔴 L'Oracle est injoignable. Vérifiez que LM Studio est démarré sur le port 1234."
+    except requests.exceptions.Timeout:
+        print("❌ Timeout LM Studio")
+        return "⏱️ L'Oracle réfléchit trop longtemps... Réessayez."
+    except Exception as e:
+        print(f"❌ Erreur inattendue : {e}")
+        return f"⚠️ Erreur technique : {str(e)}"
 
 # --- ROUTES ---
 
 @app.route('/')
 def home():
-    return "Oracle Backend Running 🚀"
+    return jsonify({"status": "Oracle Backend v3.2 (Fixed) Alive", "lm_studio": LM_STUDIO_URL})
 
-# Route pour servir la carte (On pointe vers STATIC car c'est là que le générateur la crée)
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     return send_from_directory(STATIC_DIR, filename)
 
-# Compatibilité avec ton frontend (parfois il appelle /maps/)
-@app.route('/maps/<path:filename>')
-def serve_maps(filename):
-    return send_from_directory(STATIC_DIR, filename)
-
 @app.route('/api/listings', methods=['GET'])
 def get_listings():
-    if df.empty: return jsonify({"error": "No data"}), 500
-    # On remplace les NaN par null pour le JSON
+    if df.empty:
+        return jsonify([]), 500
     return jsonify(df.where(pd.notnull(df), None).to_dict(orient='records'))
 
 @app.route('/api/predict', methods=['POST'])
 def predict_smart():
-    # Si le dataframe est vide, on arrête tout
-    if df.empty: return jsonify({"error": "Données non chargées"}), 500
+    """Route SCAN (analyse rapide)"""
+    if df.empty:
+        return jsonify({"error": "Données non chargées"}), 500
 
     try:
         data = request.json
-        user_lat = data.get('latitude')
-        user_lon = data.get('longitude')
-        surface = data.get('surface', 30)
-        room_filter = data.get('room_filter', 'all') # 'all', 't1', 't2', ...
-
-        if user_lat is None or user_lon is None:
-            return jsonify({"error": "Coordonnées GPS manquantes"}), 400
-
-        # --- ÉTAPE 1 : FILTRAGE INTELLIGENT ---
-        df_filtered = df.copy()
-
-        if room_filter == 't1':
-            df_filtered = df[df['type_local'].str.contains('T1|Studio', case=False, na=False)]
-        elif room_filter == 't2':
-            df_filtered = df[df['type_local'].str.contains('T2', case=False, na=False)]
-        elif room_filter == 't3':
-            df_filtered = df[df['type_local'].str.contains('T3', case=False, na=False)]
-        elif room_filter == 't4+':
-            df_filtered = df[df['type_local'].str.contains('T4|T5|Maison', case=False, na=False)]
+        lat = data.get('latitude')
+        lon = data.get('longitude')
+        surface = data.get('surface', 35)
         
-        # Fallback si filtre trop restrictif
-        if df_filtered.empty:
-            df_filtered = df.copy()
-            info_debug = "Filtre ignoré (0 résultats)"
-        else:
-            info_debug = f"Filtre actif : {room_filter}"
-
-        # --- ÉTAPE 2 : VOISIN LE PLUS PROCHE ---
-        locations_filtered = df_filtered[['latitude', 'longitude']].astype(float).values
-        user_point = np.array([[user_lat, user_lon]])
-        
-        # Calcul distance (Scipy est très rapide)
-        distances = distance.cdist(user_point, locations_filtered, 'euclidean')
+        # Trouver le voisin le plus proche
+        locations = df[['latitude', 'longitude']].astype(float).values
+        user_point = np.array([[lat, lon]])
+        distances = distance.cdist(user_point, locations, 'euclidean')
         closest_idx = distances.argmin()
-        neighbor = df_filtered.iloc[closest_idx].to_dict()
+        neighbor = df.iloc[closest_idx].to_dict()
         
-        # --- ÉTAPE 3 : MOYENNE LOCALE (5 plus proches) ---
-        sorted_indices = distances.argsort()[0][:5]
-        closest_neighbors = df_filtered.iloc[sorted_indices]
+        # Estimation prix
+        price = neighbor.get('prix_m2', 0) * surface
         
-        avg_price_m2 = closest_neighbors['prix_m2'].mean()
-        if pd.isna(avg_price_m2): avg_price_m2 = neighbor.get('prix_m2', 0)
-
-        estimated_market_price = avg_price_m2 * surface
-
-        # --- ÉTAPE 4 : PRÉDICTION IA ---
-        prediction_ml = estimated_market_price # Valeur par défaut
-        if model:
-            try:
-                # On prépare les données pour le modèle
-                input_data = neighbor.copy()
-                input_data['surface'] = surface 
-                input_data['latitude'] = user_lat
-                input_data['longitude'] = user_lon
-                
-                # On ne garde que les colonnes connues du modèle
-                if hasattr(model, 'feature_names_in_'):
-                    expected_cols = model.feature_names_in_
-                    model_input = pd.DataFrame(0, index=[0], columns=expected_cols)
-                    for col in expected_cols:
-                        if col in input_data:
-                            model_input[col] = input_data[col]
-                    
-                    prediction_ml = model.predict(model_input)[0]
-                else:
-                    # Fallback si le modèle n'a pas feature_names_in_
-                    pass
-            except Exception as ml_err:
-                print(f"⚠️ Warning ML: {ml_err}")
-
-        # --- VERDICT FINAL ---
-        final_price = round(prediction_ml, 0)
-        analysis_text = generate_analysis_text(neighbor)
-
         return jsonify({
-            "estimated_price": final_price,
-            "currency": "€",
-            "analysis": analysis_text,
+            "estimated_price": round(price),
+            "analysis": "📍 **Zone Analysée**. (Interrogez l'Oracle pour son avis tranché...)",
             "stats": {
-                "prix_moyen": final_price,
-                "prix_m2": round(avg_price_m2, 0),
-                "nb_biens_analyse": len(df_filtered)
-            },
-            "info_debug": f"{info_debug}. Voisin à {int(distances[0][closest_idx]*111000)}m"
+                "prix_m2": round(neighbor.get('prix_m2', 0)),
+                "nb_biens_analyse": 1
+            }
         })
-
     except Exception as e:
-        print(f"❌ Erreur API : {e}")
-        return jsonify({"error": str(e)}), 400
+        print(f"❌ Erreur predict : {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/chat', methods=['POST'])
+def chat_oracle():
+    """Route CHAT : Communication avec Mistral via LM Studio"""
+    try:
+        data = request.json
+        user_msg = data.get('message', '').strip()
+        
+        if not user_msg:
+            return jsonify({"response": "⚠️ Message vide."})
+        
+        print(f"💬 Question reçue : {user_msg}")
+        
+        # Prompt pour Mistral (personnalité de l'Oracle)
+        system_prompt = (
+            "Tu es l'Oracle de Lyon, un expert immobilier cynique et sarcastique. "
+            "Tu parles de manière directe, utilises l'argot lyonnais (Gones, Fenottes), "
+            "et tu donnes des avis tranchés sur les quartiers. "
+            "Tu inventes des détails croustillants si nécessaire (embouteillages, voisins, pollution). "
+            "Ne dis JAMAIS que tu es une IA. Reste dans le personnage. "
+            "Réponds en 2-3 phrases maximum, de manière percutante."
+        )
+        
+        # Appel à LM Studio
+        response = ask_mistral(system_prompt, user_msg)
+        
+        return jsonify({"response": response})
+        
+    except Exception as e:
+        print(f"❌ Erreur chat : {e}")
+        return jsonify({"response": f"⚠️ Erreur interne : {str(e)}"})
+
+# Test de connexion LM Studio au démarrage
+def test_lm_studio_connection():
+    """Vérifie si LM Studio est accessible"""
+    try:
+        test_url = LM_STUDIO_URL.replace('/v1/chat/completions', '/v1/models')
+        response = requests.get(test_url, timeout=2)
+        if response.status_code == 200:
+            print("✅ LM Studio connecté")
+            return True
+        else:
+            print(f"⚠️ LM Studio répond mais code {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"⚠️ LM Studio non joignable : {e}")
+        print("   → Assurez-vous que LM Studio est démarré avec le serveur actif sur le port 1234")
+        return False
+
+# Test au démarrage
+test_lm_studio_connection()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
