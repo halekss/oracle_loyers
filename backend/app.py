@@ -4,187 +4,230 @@ import pandas as pd
 import joblib
 import os
 import numpy as np
+import requests  # Indispensable pour parler à LM Studio
 from scipy.spatial import distance
 
-# --- IMPORTS DES SERVICES (Architecture Modulaire) ---
+# --- IMPORTS DES SERVICES ---
+# (Assurez-vous que les fichiers data_loader.py et map_generator.py existent bien dans /services)
 from services.data_loader import DataLoader
 from services.map_generator import MapGenerator
-# On garde ton import utilitaire si besoin
-from services.utils import haversine_distance 
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Autorise le Frontend React à parler au Backend
 
-# --- CONFIGURATION CHEMINS ---
+# --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'price_predictor.pkl')
 
-# Création du dossier static si absent
+# URL Spéciale pour Docker (permet de sortir du conteneur pour atteindre le Mac)
+# Si "host.docker.internal" ne marche pas, remplacez par votre IP locale (ex: 192.168.1.XX)
+LM_STUDIO_URL = "http://host.docker.internal:1234/v1/chat/completions"
+
 os.makedirs(STATIC_DIR, exist_ok=True)
 
-print("⏳ Démarrage de l'Oracle...")
+print("⏳ Démarrage de l'Oracle All-in-One...")
 
-# 1. CHARGEMENT DES DONNÉES (Via le service dédié)
+# 1. CHARGEMENT DONNÉES
 data_loader = DataLoader(DATA_DIR)
 data_loader.load_csvs()
-df = data_loader.df_immo # Raccourci pour ton code
+df = data_loader.df_immo
 
-# Sécurisation de la colonne type pour tes filtres
+# Nettoyage préventif
 if not df.empty and 'type_local' in df.columns:
     df['type_local'] = df['type_local'].fillna('').astype(str)
 
-# 2. GÉNÉRATION DE LA CARTE (INDISPENSABLE pour l'Espion et l'affichage)
+# 2. GÉNÉRATION CARTE
 map_generator = MapGenerator(STATIC_DIR, DATA_DIR)
 map_generator.generate(data_loader)
 
-# 3. CHARGEMENT DU MODÈLE IA
+# 3. CHARGEMENT MODÈLE ML
 model = None
 try:
     if os.path.exists(MODEL_PATH):
         model = joblib.load(MODEL_PATH)
-        print("✅ Modèle IA chargé en mémoire.")
+        print("✅ Modèle IA (ML) chargé avec succès.")
     else:
-        print("⚠️ Fichier modèle introuvable (pas grave, on fera sans).")
+        print("⚠️ Pas de modèle .pkl trouvé. Le système utilisera la moyenne simple.")
 except Exception as e:
-    print(f"❌ Erreur chargement Modèle : {e}")
+    print(f"❌ Erreur chargement ML : {e}")
 
-# --- FONCTIONS UTILITAIRES ---
-def generate_analysis_text(appart_data):
-    """Génère le texte cynique."""
-    messages = []
-    # Utilisation de .get() pour éviter les crashs
-    dist_ecole = appart_data.get('dist_nuisance_ecole', 1000) # Attention aux accents dans les noms de colonnes CSV
-    dist_bar = appart_data.get('dist_vice_bar', 1000)
 
-    if dist_ecole < 200:
-        messages.append(f"📉 **Bon plan économie** : Une école est à {int(dist_ecole)}m. C'est bruyant, donc le loyer est moins cher !")
-    if dist_bar < 100:
-        messages.append(f"🍻 **Taxe ambiance** : Bars à {int(dist_bar)}m. Le quartier est vivant, et ça se paie !")
-    
-    if not messages:
-        messages.append("📍 Quartier standard, ni trop bruyant, ni trop fêtard.")
-    return messages
+# --- FONCTION HELPER : PARLER À L'IA ---
+def ask_phi3(system_prompt, user_prompt):
+    """Envoie une requête à LM Studio et attend la réponse."""
+    try:
+        payload = {
+            # 👇 NOM EXACT DU MODÈLE (VU DANS VOTRE CAPTURE D'ÉCRAN)
+            "model": "phi-3-mini-4k-instruct:2", 
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 200
+        }
+        # 👇 TIMEOUT AUGMENTÉ À 30 SECONDES (Pour éviter l'erreur si le Mac est lent)
+        r = requests.post(LM_STUDIO_URL, json=payload, timeout=30)
+        
+        if r.status_code == 200:
+            return r.json()['choices'][0]['message']['content']
+        else:
+            print(f"⚠️ Erreur LM Studio: {r.status_code} - {r.text}")
+            return None
+    except Exception as e:
+        print(f"⚠️ Exception connexion LLM: {e}")
+        return None
 
-# --- ROUTES ---
+
+# --- ROUTES API ---
 
 @app.route('/')
 def home():
-    return "Oracle Backend Running 🚀"
+    return "Oracle Backend is Alive 🔮"
 
-# Route pour servir la carte (On pointe vers STATIC car c'est là que le générateur la crée)
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    return send_from_directory(STATIC_DIR, filename)
-
-# Compatibilité avec ton frontend (parfois il appelle /maps/)
-@app.route('/maps/<path:filename>')
-def serve_maps(filename):
+    """Sert la carte HTML générée."""
     return send_from_directory(STATIC_DIR, filename)
 
 @app.route('/api/listings', methods=['GET'])
 def get_listings():
+    """Envoie toutes les données pour afficher les points sur la carte."""
     if df.empty: return jsonify({"error": "No data"}), 500
-    # On remplace les NaN par null pour le JSON
+    # Remplace les NaN par None pour le JSON valide
     return jsonify(df.where(pd.notnull(df), None).to_dict(orient='records'))
 
 @app.route('/api/predict', methods=['POST'])
 def predict_smart():
-    # Si le dataframe est vide, on arrête tout
-    if df.empty: return jsonify({"error": "Données non chargées"}), 500
+    """
+    Route 'SCAN' : INSTANTANÉE ⚡️
+    Utilise Maths + Logique (Pas d'IA générative ici pour la vitesse).
+    """
+    if df.empty: return jsonify({"error": "Data not loaded"}), 500
 
     try:
         data = request.json
-        user_lat = data.get('latitude')
-        user_lon = data.get('longitude')
-        surface = data.get('surface', 30)
-        room_filter = data.get('room_filter', 'all') # 'all', 't1', 't2', ...
+        lat = data.get('latitude')
+        lon = data.get('longitude')
+        surface = data.get('surface', 35)
+        room_filter = data.get('room_filter', 'all')
 
-        if user_lat is None or user_lon is None:
-            return jsonify({"error": "Coordonnées GPS manquantes"}), 400
-
-        # --- ÉTAPE 1 : FILTRAGE INTELLIGENT ---
+        # --- A. FILTRAGE ---
         df_filtered = df.copy()
-
-        if room_filter == 't1':
-            df_filtered = df[df['type_local'].str.contains('T1|Studio', case=False, na=False)]
-        elif room_filter == 't2':
-            df_filtered = df[df['type_local'].str.contains('T2', case=False, na=False)]
-        elif room_filter == 't3':
-            df_filtered = df[df['type_local'].str.contains('T3', case=False, na=False)]
-        elif room_filter == 't4+':
-            df_filtered = df[df['type_local'].str.contains('T4|T5|Maison', case=False, na=False)]
+        if room_filter in ['t1', 't2', 't3']:
+            df_filtered = df[df['type_local'].str.contains(room_filter.upper(), case=False, na=False)]
         
-        # Fallback si filtre trop restrictif
-        if df_filtered.empty:
+        # Si le filtre est trop strict et renvoie vide, on reprend tout
+        if df_filtered.empty: 
             df_filtered = df.copy()
-            info_debug = "Filtre ignoré (0 résultats)"
-        else:
-            info_debug = f"Filtre actif : {room_filter}"
 
-        # --- ÉTAPE 2 : VOISIN LE PLUS PROCHE ---
-        locations_filtered = df_filtered[['latitude', 'longitude']].astype(float).values
-        user_point = np.array([[user_lat, user_lon]])
-        
-        # Calcul distance (Scipy est très rapide)
-        distances = distance.cdist(user_point, locations_filtered, 'euclidean')
+        # --- B. RECHERCHE DU VOISIN LE PLUS PROCHE ---
+        locations = df_filtered[['latitude', 'longitude']].astype(float).values
+        user_point = np.array([[lat, lon]])
+        distances = distance.cdist(user_point, locations, 'euclidean')
         closest_idx = distances.argmin()
         neighbor = df_filtered.iloc[closest_idx].to_dict()
         
-        # --- ÉTAPE 3 : MOYENNE LOCALE (5 plus proches) ---
-        sorted_indices = distances.argsort()[0][:5]
-        closest_neighbors = df_filtered.iloc[sorted_indices]
-        
-        avg_price_m2 = closest_neighbors['prix_m2'].mean()
+        # --- C. CALCUL PRIX (Moyenne + ML) ---
+        # Moyenne des 5 voisins les plus proches
+        avg_price_m2 = df_filtered.iloc[distances.argsort()[0][:5]]['prix_m2'].mean()
         if pd.isna(avg_price_m2): avg_price_m2 = neighbor.get('prix_m2', 0)
-
-        estimated_market_price = avg_price_m2 * surface
-
-        # --- ÉTAPE 4 : PRÉDICTION IA ---
-        prediction_ml = estimated_market_price # Valeur par défaut
+        
+        estimated_price = avg_price_m2 * surface
+        
+        # Correction par le Machine Learning (si dispo)
         if model:
             try:
-                # On prépare les données pour le modèle
-                input_data = neighbor.copy()
-                input_data['surface'] = surface 
-                input_data['latitude'] = user_lat
-                input_data['longitude'] = user_lon
+                input_vector = pd.DataFrame([neighbor])
+                input_vector['surface'] = surface
+                input_vector['latitude'] = lat
+                input_vector['longitude'] = lon
                 
-                # On ne garde que les colonnes connues du modèle
+                # Alignement des colonnes avec celles apprises par le modèle
                 if hasattr(model, 'feature_names_in_'):
-                    expected_cols = model.feature_names_in_
-                    model_input = pd.DataFrame(0, index=[0], columns=expected_cols)
-                    for col in expected_cols:
-                        if col in input_data:
-                            model_input[col] = input_data[col]
-                    
-                    prediction_ml = model.predict(model_input)[0]
-                else:
-                    # Fallback si le modèle n'a pas feature_names_in_
-                    pass
-            except Exception as ml_err:
-                print(f"⚠️ Warning ML: {ml_err}")
+                    model_input = pd.DataFrame(0, index=[0], columns=model.feature_names_in_)
+                    for col in model.feature_names_in_:
+                        if col in input_vector:
+                            model_input[col] = input_vector[col]
+                    estimated_price = model.predict(model_input)[0]
+            except Exception as e:
+                print(f"Warning ML (fallback moyenne): {e}")
 
-        # --- VERDICT FINAL ---
-        final_price = round(prediction_ml, 0)
-        analysis_text = generate_analysis_text(neighbor)
+        final_price = round(estimated_price)
+
+        # --- D. ANALYSE INSTANTANÉE (Algorithmique) ---
+        # On évite LM Studio ici pour que le résultat s'affiche en < 1 seconde
+        dist_bar = neighbor.get('dist_vice_bar', 999)
+        dist_ecole = neighbor.get('dist_nuisance_ecole', 999)
+        dist_metro = neighbor.get('dist_metro', 999)
+        
+        details = []
+        ambiance = "Quartier Standard"
+        
+        if dist_bar < 100:
+            ambiance = "Quartier Fêtard"
+            details.append(f"🍻 Bars à {int(dist_bar)}m (bruyant le soir).")
+        
+        if dist_ecole < 150:
+            if ambiance == "Quartier Fêtard": ambiance = "Zone Chaotique"
+            else: ambiance = "Zone Familiale"
+            details.append(f"👶 École à {int(dist_ecole)}m (bruyant le matin).")
+            
+        if dist_metro < 300:
+            details.append(f"🚇 Métro à {int(dist_metro)}m (pratique).")
+
+        if not details:
+            details.append("Rien de spécial à proximité immédiate. Calme absolu.")
+
+        # Construction du texte
+        ai_analysis_text = f"📍 **{ambiance}** : {' '.join(details)}"
 
         return jsonify({
             "estimated_price": final_price,
-            "currency": "€",
-            "analysis": analysis_text,
+            "analysis": ai_analysis_text,
             "stats": {
-                "prix_moyen": final_price,
-                "prix_m2": round(avg_price_m2, 0),
+                "prix_m2": round(avg_price_m2),
                 "nb_biens_analyse": len(df_filtered)
-            },
-            "info_debug": f"{info_debug}. Voisin à {int(distances[0][closest_idx]*111000)}m"
+            }
         })
 
     except Exception as e:
-        print(f"❌ Erreur API : {e}")
-        return jsonify({"error": str(e)}), 400
+        print(f"❌ Erreur Predict: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chat', methods=['POST'])
+def chat_oracle():
+    """
+    Route 'CHAT' : Interactive 🤖
+    C'est ici qu'on appelle vraiment l'IA (LM Studio).
+    """
+    try:
+        data = request.json
+        user_msg = data.get('message', '')
+        
+        print(f"💬 Question reçue : {user_msg}")
+        
+        # Prompt système pour donner une personnalité à l'Oracle
+        system_prompt = (
+            "Tu es l'Oracle Immobilier de Lyon. Tu es un expert cynique, drôle et un peu hautain. "
+            "Tu connais tout sur les loyers, le bruit et la gentrification. "
+            "Réponds en français, sois concis (max 2 phrases) et sarcastique."
+        )
+        
+        response = ask_phi3(system_prompt, user_msg)
+        
+        if not response:
+            return jsonify({"response": "🔇 L'Oracle médite (Vérifiez LM Studio : Serveur ON ? Network ON ? Port 1234 ?)."})
+            
+        return jsonify({"response": response})
+
+    except Exception as e:
+        return jsonify({"response": f"Erreur interne: {str(e)}"})
+
 
 if __name__ == '__main__':
+    # Écoute sur 0.0.0.0 pour être accessible depuis l'extérieur du conteneur Docker
     app.run(host='0.0.0.0', port=5000, debug=True)
