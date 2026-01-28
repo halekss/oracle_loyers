@@ -128,10 +128,9 @@ export default function MapComponent({ center }) {
         
         <ToggleItem label="Réseau Métro" color="#ef4444" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
         
-        <ToggleItem label="Réseau Métro" color="#ef4444" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
         <div className="h-px bg-slate-800 my-2"></div>
 
-        <ToggleItem label="Vice (Bars/Sexe)" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
+        <ToggleItem label="Vice (Bars/Vie Nocture)" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
         <ToggleItem label="Gentrification (Bio)" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
         <ToggleItem label="Nuisance (Écoles/Boîtes)" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
         <ToggleItem label="Superstition (Mort)" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />

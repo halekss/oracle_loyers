@@ -11,12 +11,13 @@ function App() {
   const [geoContext, setGeoContext] = useState(null);
   const [roomFilter, setRoomFilter] = useState("all");
 
+  // Logique de surface par défaut mise à jour
   const getSurfaceFromFilter = (filter) => {
     switch(filter) {
       case 't1': return 25;
       case 't2': return 45;
       case 't3': return 65;
-      case 't4+': return 95;
+      case 't4+': return 95; // ✅ Prise en charge T4+
       default: return 35;
     }
   };
@@ -61,7 +62,10 @@ function App() {
 
   const handleFilterChange = (newFilter) => {
     setRoomFilter(newFilter);
-    if (geoContext) fetchPrediction(geoContext.lat, geoContext.lon, newFilter);
+    // On relance la prédiction si on a déjà une localisation
+    if (geoContext) {
+      fetchPrediction(geoContext.lat, geoContext.lon, newFilter);
+    }
   };
 
   return (
@@ -73,14 +77,10 @@ function App() {
         <header className="flex-none mb-3 px-2 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
-              ORACLE IMMOBILIER
+              ORACLE LOYERS
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 rounded-full border border-slate-800">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Système Actif</span>
-            </div>
           </div>
         </header>
 
@@ -97,7 +97,7 @@ function App() {
           {/* COLONNE DROITE (Dashboard - 40%) */}
           <div className="w-[40%] h-full flex flex-col bg-slate-900/95 backdrop-blur-md relative z-10">
             
-            {/* SEARCH */}
+            {/* SEARCH & FILTERS */}
             <div className="p-5 border-b border-slate-800 bg-slate-950/50 z-20">
               <SearchForm 
                 onSearch={handleSearch} 
@@ -107,12 +107,12 @@ function App() {
               />
             </div>
 
-            {/* RESULTAT */}
+            {/* RESULTAT (Sans indice de tension) */}
             <div className="shrink-0 p-5 border-b border-slate-800 bg-slate-900/30">
               <ResultCard data={result} loading={loading} />
             </div>
 
-            {/* CHAT - 👇 ON PASSE L'ANALYSE AU CHATBOT */}
+            {/* CHAT - A maintenant plus de place */}
             <div className="flex-1 min-h-0 relative">
               <ChatOracle analysis={result?.analysis} />
             </div>
