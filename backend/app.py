@@ -6,10 +6,9 @@ import os
 import numpy as np
 from scipy.spatial import distance
 
-# --- IMPORTS DES SERVICES (Architecture Modulaire) ---
+# --- IMPORTS DES SERVICES (On garde ton architecture) ---
 from services.data_loader import DataLoader
 from services.map_generator import MapGenerator
-# On garde ton import utilitaire si besoin
 from services.utils import haversine_distance 
 
 app = Flask(__name__)
@@ -26,165 +25,190 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 
 print("⏳ Démarrage de l'Oracle...")
 
-# 1. CHARGEMENT DES DONNÉES (Via le service dédié)
+# 1. CHARGEMENT DES DONNÉES
 data_loader = DataLoader(DATA_DIR)
 data_loader.load_csvs()
-df = data_loader.df_immo # Raccourci pour ton code
+df = data_loader.df_immo 
 
 # Sécurisation de la colonne type pour tes filtres
-if not df.empty and 'type_local' in df.columns:
-    df['type_local'] = df['type_local'].fillna('').astype(str)
+if not df.empty and 'type_local' not in df.columns:
+    # Fallback si la colonne n'existe pas encore proprement
+    df['type_local'] = df['type'] 
 
-# 2. GÉNÉRATION DE LA CARTE (INDISPENSABLE pour l'Espion et l'affichage)
-map_generator = MapGenerator(STATIC_DIR, DATA_DIR)
-map_generator.generate(data_loader)
+# 2. CHARGEMENT DU MODÈLE XGBOOST
+print("🔮 Chargement du Cerveau XGBoost...")
+if os.path.exists(MODEL_PATH):
+    model = joblib.load(MODEL_PATH)
+    print("✅ Modèle chargé.")
+else:
+    print("❌ Modèle introuvable.")
+    model = None
 
-# 3. CHARGEMENT DU MODÈLE IA
-model = None
+# 3. INITIALISATION DU GÉNÉRATEUR DE CARTE
+map_gen = MapGenerator(data_loader, STATIC_DIR)
+# On lance la génération au démarrage pour être sûr
 try:
-    if os.path.exists(MODEL_PATH):
-        model = joblib.load(MODEL_PATH)
-        print("✅ Modèle IA chargé en mémoire.")
-    else:
-        print("⚠️ Fichier modèle introuvable (pas grave, on fera sans).")
+    map_gen.generate_full_map()
 except Exception as e:
-    print(f"❌ Erreur chargement Modèle : {e}")
+    print(f"⚠️ Erreur génération map au boot: {e}")
+
 
 # --- FONCTIONS UTILITAIRES ---
-def generate_analysis_text(appart_data):
-    """Génère le texte cynique."""
-    messages = []
-    # Utilisation de .get() pour éviter les crashs
-    dist_ecole = appart_data.get('dist_nuisance_ecole', 1000) # Attention aux accents dans les noms de colonnes CSV
-    dist_bar = appart_data.get('dist_vice_bar', 1000)
 
-    if dist_ecole < 200:
-        messages.append(f"📉 **Bon plan économie** : Une école est à {int(dist_ecole)}m. C'est bruyant, donc le loyer est moins cher !")
-    if dist_bar < 100:
-        messages.append(f"🍻 **Taxe ambiance** : Bars à {int(dist_bar)}m. Le quartier est vivant, et ça se paie !")
+def infer_type_local(surface):
+    """Devine le type de bien selon la surface (Logique identique à l'entraînement)"""
+    try:
+        s = float(surface)
+        if s < 35: return 'Studio/T1'
+        elif s < 55: return 'T2'
+        elif s < 75: return 'T3'
+        else: return 'Grand (T4+)'
+    except:
+        return 'Studio/T1'
+
+def generate_analysis_text(neighbor_row):
+    """Génère le texte cynique basé sur le voisin le plus proche"""
+    if neighbor_row is None:
+        return "Zone inconnue. Probablement un terrain vague ou une faille spatio-temporelle."
     
-    if not messages:
-        messages.append("📍 Quartier standard, ni trop bruyant, ni trop fêtard.")
-    return messages
+    # Logique cynique simple basée sur les distances du voisin
+    txt = "Analyse du secteur : "
+    if neighbor_row.get('dist_gentrification_torréfacteur', 1000) < 300:
+        txt += "Quartier Bobo confirmé (Torréfacteur à proximité). Prépare ton lait d'avoine. "
+    elif neighbor_row.get('dist_vice_kebab', 1000) < 200:
+        txt += "Zone étudiante ou fêtarde (Kebab stratégique détecté). "
+    else:
+        txt += "Quartier calme... ou mort. À toi de voir. "
+    return txt
+
 
 # --- ROUTES ---
 
 @app.route('/')
 def home():
-    return "Oracle Backend Running 🚀"
-
-# Route pour servir la carte (On pointe vers STATIC car c'est là que le générateur la crée)
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    return send_from_directory(STATIC_DIR, filename)
-
-# Compatibilité avec ton frontend (parfois il appelle /maps/)
-@app.route('/maps/<path:filename>')
-def serve_maps(filename):
-    return send_from_directory(STATIC_DIR, filename)
-
-@app.route('/api/listings', methods=['GET'])
-def get_listings():
-    if df.empty: return jsonify({"error": "No data"}), 500
-    # On remplace les NaN par null pour le JSON
-    return jsonify(df.where(pd.notnull(df), None).to_dict(orient='records'))
+    return jsonify({"status": "Oracle Online", "model": "XGBoost Contextualisé"})
 
 @app.route('/api/predict', methods=['POST'])
-def predict_smart():
-    # Si le dataframe est vide, on arrête tout
-    if df.empty: return jsonify({"error": "Données non chargées"}), 500
-
+def predict():
     try:
         data = request.json
-        user_lat = data.get('latitude')
-        user_lon = data.get('longitude')
-        surface = data.get('surface', 30)
-        room_filter = data.get('room_filter', 'all') # 'all', 't1', 't2', ...
-
-        if user_lat is None or user_lon is None:
-            return jsonify({"error": "Coordonnées GPS manquantes"}), 400
-
-        # --- ÉTAPE 1 : FILTRAGE INTELLIGENT ---
-        df_filtered = df.copy()
-
-        if room_filter == 't1':
-            df_filtered = df[df['type_local'].str.contains('T1|Studio', case=False, na=False)]
-        elif room_filter == 't2':
-            df_filtered = df[df['type_local'].str.contains('T2', case=False, na=False)]
-        elif room_filter == 't3':
-            df_filtered = df[df['type_local'].str.contains('T3', case=False, na=False)]
-        elif room_filter == 't4+':
-            df_filtered = df[df['type_local'].str.contains('T4|T5|Maison', case=False, na=False)]
+        surface = float(data.get('surface', 30))
+        lat = float(data.get('latitude', 45.76))
+        lon = float(data.get('longitude', 4.83))
         
-        # Fallback si filtre trop restrictif
-        if df_filtered.empty:
-            df_filtered = df.copy()
-            info_debug = "Filtre ignoré (0 résultats)"
-        else:
-            info_debug = f"Filtre actif : {room_filter}"
-
-        # --- ÉTAPE 2 : VOISIN LE PLUS PROCHE ---
-        locations_filtered = df_filtered[['latitude', 'longitude']].astype(float).values
-        user_point = np.array([[user_lat, user_lon]])
+        # 1. TROUVER LE VOISIN LE PLUS PROCHE (KNN)
+        # On en a besoin pour récupérer les distances (écoles, bars...) et le Code Postal
+        # car le frontend n'envoie pas ces infos.
         
-        # Calcul distance (Scipy est très rapide)
-        distances = distance.cdist(user_point, locations_filtered, 'euclidean')
+        # On calcule les distances avec tous les points connus
+        coords_ref = df[['latitude', 'longitude']].to_numpy()
+        coords_user = np.array([[lat, lon]])
+        
+        # Distance Euclidienne rapide (suffisant pour trouver le plus proche)
+        distances = distance.cdist(coords_user, coords_ref, metric='euclidean')
         closest_idx = distances.argmin()
-        neighbor = df_filtered.iloc[closest_idx].to_dict()
+        neighbor = df.iloc[closest_idx]
         
-        # --- ÉTAPE 3 : MOYENNE LOCALE (5 plus proches) ---
-        sorted_indices = distances.argsort()[0][:5]
-        closest_neighbors = df_filtered.iloc[sorted_indices]
+        # 2. PRÉPARATION DES DONNÉES POUR XGBOOST
+        prediction_val = 0
         
-        avg_price_m2 = closest_neighbors['prix_m2'].mean()
-        if pd.isna(avg_price_m2): avg_price_m2 = neighbor.get('prix_m2', 0)
-
-        estimated_market_price = avg_price_m2 * surface
-
-        # --- ÉTAPE 4 : PRÉDICTION IA ---
-        prediction_ml = estimated_market_price # Valeur par défaut
         if model:
-            try:
-                # On prépare les données pour le modèle
-                input_data = neighbor.copy()
-                input_data['surface'] = surface 
-                input_data['latitude'] = user_lat
-                input_data['longitude'] = user_lon
+            # A. On déduit le type
+            type_estime = infer_type_local(surface)
+            
+            # B. On prépare un DataFrame vide avec TOUTES les colonnes attendues par le modèle
+            expected_cols = model.feature_names_in_
+            model_input = pd.DataFrame(0, index=[0], columns=expected_cols)
+            
+            # C. On remplit les données de base
+            if 'surface' in expected_cols: model_input['surface'] = surface
+            if 'latitude' in expected_cols: model_input['latitude'] = lat
+            if 'longitude' in expected_cols: model_input['longitude'] = lon
+            
+            # D. On remplit les distances (en copiant celles du voisin !)
+            # C'est l'astuce : on assume que l'appart cible a le même environnement que son voisin
+            for col in expected_cols:
+                if col.startswith('dist_') and col in neighbor:
+                    model_input[col] = neighbor[col]
+            
+            # E. On active le One-Hot Encoding pour le TYPE
+            col_type = f"type_local_{type_estime}" # ex: type_local_T2
+            if col_type in expected_cols:
+                model_input[col_type] = 1
                 
-                # On ne garde que les colonnes connues du modèle
-                if hasattr(model, 'feature_names_in_'):
-                    expected_cols = model.feature_names_in_
-                    model_input = pd.DataFrame(0, index=[0], columns=expected_cols)
-                    for col in expected_cols:
-                        if col in input_data:
-                            model_input[col] = input_data[col]
-                    
-                    prediction_ml = model.predict(model_input)[0]
-                else:
-                    # Fallback si le modèle n'a pas feature_names_in_
-                    pass
-            except Exception as ml_err:
-                print(f"⚠️ Warning ML: {ml_err}")
+            # F. On active le One-Hot Encoding pour le CODE POSTAL (celui du voisin)
+            cp_voisin = neighbor.get('code_postal', '69000') # ex: 69003
+            col_cp = f"code_postal_{cp_voisin}"
+            if col_cp in expected_cols:
+                model_input[col_cp] = 1
+            elif f"code_postal_{float(cp_voisin)}" in expected_cols: # Gestion du format float parfois
+                 model_input[f"code_postal_{float(cp_voisin)}"] = 1
 
-        # --- VERDICT FINAL ---
-        final_price = round(prediction_ml, 0)
-        analysis_text = generate_analysis_text(neighbor)
+            # G. Prédiction
+            try:
+                prediction_val = model.predict(model_input)[0]
+            except Exception as e:
+                print(f"⚠️ Erreur XGBoost : {e}")
+                prediction_val = 0
+
+        # --- FALLBACK / STATS ---
+        # Si le modèle échoue ou donne 0, on utilise la moyenne du quartier
+        # On prend les 10 voisins les plus proches pour une stat locale
+        closest_indices = distances.argsort()[0][:10]
+        neighbors_df = df.iloc[closest_indices]
+        avg_price_local = neighbors_df['prix'].mean()
+        
+        final_price = prediction_val if prediction_val > 100 else avg_price_local
+        
+        # Calcul prix m²
+        price_m2 = final_price / surface if surface > 0 else 0
 
         return jsonify({
-            "estimated_price": final_price,
+            "estimated_price": round(float(final_price), 0),
             "currency": "€",
-            "analysis": analysis_text,
+            "analysis": generate_analysis_text(neighbor),
             "stats": {
-                "prix_moyen": final_price,
-                "prix_m2": round(avg_price_m2, 0),
-                "nb_biens_analyse": len(df_filtered)
+                "prix_moyen": round(float(final_price), 0),
+                "prix_m2": round(float(price_m2), 0),
+                "nb_biens_analyse": 10 # Nombre de voisins consultés pour cohérence
             },
-            "info_debug": f"{info_debug}. Voisin à {int(distances[0][closest_idx]*111000)}m"
+            "details": {
+                "type_estime": infer_type_local(surface),
+                "quartier_ref": str(neighbor.get('code_postal', 'Inconnu'))
+            }
         })
 
     except Exception as e:
-        print(f"❌ Erreur API : {e}")
-        return jsonify({"error": str(e)}), 400
+        print(f"❌ Erreur API Predict : {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/listings', methods=['GET'])
+def get_listings():
+    """Renvoie les points pour la carte (filtrage optionnel)"""
+    try:
+        # On peut filtrer par type si un paramètre ?type=T2 est passé
+        filter_type = request.args.get('type')
+        
+        data_to_send = df.copy()
+        
+        if filter_type and filter_type != 'all':
+            # On utilise la colonne type_local si elle existe
+            if 'type_local' in data_to_send.columns:
+                data_to_send = data_to_send[data_to_send['type_local'] == filter_type]
+        
+        # Optimisation : on n'envoie que ce qui sert à la carte
+        cols_map = ['latitude', 'longitude', 'prix', 'surface', 'type_local', 'id_annonce']
+        # On vérifie que les colonnes existent
+        cols_exist = [c for c in cols_map if c in data_to_send.columns]
+        
+        return jsonify(data_to_send[cols_exist].fillna(0).to_dict(orient='records'))
+    except Exception as e:
+        print(f"Erreur Listings: {e}")
+        return jsonify([])
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    return send_from_directory(app.static_folder, filename)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True, port=8000)
