@@ -251,13 +251,13 @@ def predict():
                 "nom": "Proximité métro",
                 "impact": "+8%" if metro_dist < 400 else "+3%",
                 "valeur": f"{metro_dist}m",
-                "explication": f"Métro {metro_name} à {metro_dist}m, accès {"excellent" if metro_dist < 400 else "correct"}"
+                "explication": f"Métro {metro_name} à {metro_dist}m, accès {'excellent' if metro_dist < 400 else 'correct'}"
             },
             {
                 "nom": "Environnement",
                 "impact": "+5%" if pois['gentrification'] > 2 else "+2%",
                 "valeur": f"{pois['gentrification']} commerces",
-                "explication": f"Zone {"en gentrification" if pois['gentrification'] > 2 else "stable"} avec {pois['vice']} bars"
+                "explication": f"Zone {'en gentrification' if pois['gentrification'] > 2 else 'stable'} avec {pois['vice']} bars"
             }
         ]
         
@@ -343,6 +343,7 @@ def chat():
         if ml_context and ml_context.get('ml_ready'):
             # 🔥 INJECTION STRUCTURÉE DES DONNÉES ML
             ml_injection = f"""
+            
 
 ---
 
@@ -377,58 +378,9 @@ def chat():
   }},
   "facteurs_cles": {json.dumps(ml_context.get('facteurs_cles', []), ensure_ascii=False, indent=2)}
 }}
-```
-
-**RÈGLE ABSOLUE** : Ces chiffres viennent du modèle ML entraîné sur 10 000+ annonces réelles. 
-- Cite-les EXACTEMENT
-- Ne les modifie PAS
-- Ne les arrondis PAS (sauf si demandé explicitement)
-- Construis ton raisonnement AUTOUR de ces données
-
 ---
 """
             system_prompt += ml_injection
-        else:
-            # Pas de contexte ML disponible
-            system_prompt += "\n\n⚠️ ATTENTION : Aucun scan ML actif. L'utilisateur doit lancer un scan d'abord.\n"
-        
-        # --- APPEL À LM STUDIO ---
-        payload = {
-            "model": "mistralai/mistral-7b-instruct-v0.3",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": user_message
-                }
-            ],
-            "temperature": 0.3,  # 🔥 CRITIQUE : Réduit l'hallucination
-            "max_tokens": 800,
-            "top_p": 0.9,
-            "frequency_penalty": 0.2,
-            "presence_penalty": 0.1
-        }
-        
-        print(f"💬 CHAT : Envoi à LM Studio...")
-        print(f"   - Message : {user_message[:50]}...")
-        print(f"   - ML Context : {"Oui" if ml_context and ml_context.get('ml_ready') else "Non"}")
-        
-        response = requests.post(
-            LM_STUDIO_URL,
-            json=payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            llm_response = response.json()['choices'][0]['message']['content']
-            print(f"✅ CHAT : Réponse reçue ({len(llm_response)} chars)")
-            return jsonify({"response": llm_response})
-        else:
-            print(f"❌ CHAT : Erreur LM Studio {response.status_code}")
-            return jsonify({"error": f"LM Studio error: {response.status_code}"}), 500
             
     except requests.exceptions.ConnectionError:
         print("❌ CHAT : Impossible de joindre LM Studio")
