@@ -84,7 +84,7 @@ class MapGenerator:
     def get_category_data(self, row):
         # 1. Nettoyage
         text = (str(row['categorie_cavalier']) + " " + str(row['nom_lieu'])).lower()
-        
+       
         # 2. Logique de Tri
         cat = 'Defaut'
         if any(x in text for x in ['nuisance', 'disco', 'boite', 'bruit', 'ecole', 'lycee', 'stade', 'usine']):
@@ -106,31 +106,40 @@ class MapGenerator:
         print("🗺️  Génération de la carte (Style Sobre & Complet)...")
         df_immo = data_loader.df_immo
         df_cav = data_loader.df_cav
-        
+       
         start_lat, start_lon = 45.7577, 4.8322
         if not df_immo.empty:
             start_lat, start_lon = df_immo['latitude'].mean(), df_immo['longitude'].mean()
 
         m = folium.Map(location=[start_lat, start_lon], zoom_start=13, tiles='CartoDB dark_matter', prefer_canvas=True)
 
-        # 1. IMMOBILIER (Points Verts simples)
+        # 1. IMMOBILIER (Points Verts avec tooltip ET popup détaillé)
         if not df_immo.empty:
             folium.GeoJson(
-                self.df_to_geojson(df_immo.head(300), ['prix'], '#2ecc71'),
+                self.df_to_geojson(df_immo.head(300), ['type', 'surface', 'prix', 'code_postal'], '#2ecc71'),
                 name="Offres Immobilières",
                 marker=folium.CircleMarker(radius=3, fill=True, color='#2ecc71', fill_opacity=0.6, weight=0),
-                tooltip=folium.GeoJsonTooltip(fields=['prix'], aliases=['Prix :'])
+                tooltip=folium.GeoJsonTooltip(
+                    fields=['prix', 'type'],
+                    aliases=['Prix :', 'Type :']
+                ),
+                popup=folium.GeoJsonPopup(
+                    fields=['type', 'surface', 'prix', 'code_postal'],
+                    aliases=['Type :', 'Surface (m²) :', 'Prix (€) :', 'Code Postal :'],
+                    localize=True,
+                    style='background-color: rgba(30, 41, 59, 0.95); color: #e2e8f0; font-family: sans-serif; padding: 10px; border-radius: 6px;'
+                )
             ).add_to(m)
 
         # 2. MÉTRO (DESIGN DISCRET MAIS LISIBLE)
         metro_group = folium.FeatureGroup(name="Réseau Métro (API)")
-        
+       
         if os.path.exists(self.metro_json_path):
             try:
                 with open(self.metro_json_path, 'r') as f: metro_data = json.load(f)
                 folium.GeoJson(
-                    metro_data, 
-                    name="Lignes", 
+                    metro_data,
+                    name="Lignes",
                     style_function=lambda x: {'color': '#555', 'weight': 2, 'opacity': 0.3}
                 ).add_to(metro_group)
             except: pass
@@ -155,13 +164,13 @@ class MapGenerator:
                 cursor: pointer;
             ">M</div>
             """
-            
+           
             folium.Marker(
                 location=[s['lat'], s['lon']],
                 icon=DivIcon(html=icon_html, icon_size=(14, 14), icon_anchor=(7, 7)),
                 tooltip=f"{s['nom']}" # On garde le survol que tu aimes
             ).add_to(metro_group)
-        
+       
         metro_group.add_to(m)
 
         # 3. CAVALIERS (Retour aux points classiques propres)
@@ -171,7 +180,7 @@ class MapGenerator:
             for _, row in df_cav.iterrows():
                 if pd.isna(row['latitude']): continue
                 cat_name, color = self.get_category_data(row)
-                
+               
                 feature = {
                     "type": "Feature",
                     "geometry": {"type": "Point", "coordinates": [float(row['longitude']), float(row['latitude'])]},
@@ -190,12 +199,12 @@ class MapGenerator:
                         tooltip=folium.GeoJsonTooltip(fields=['nom', 'cat'], aliases=['Lieu :', 'Type :'])
                     ).add_to(m)
 
-        # 4. DARK UI (Tooltip sombre mais propre)
+        # 4. DARK UI (Tooltip et Popup sombres mais propres)
         folium.LayerControl(position='topleft', collapsed=False).add_to(m)
         hack_script = """
         <style>
             .leaflet-control-layers { display: none !important; }
-            
+           
             /* Tooltip Sombre Minimaliste */
             .leaflet-tooltip {
                 background-color: rgba(30, 41, 59, 0.95) !important;
@@ -212,6 +221,33 @@ class MapGenerator:
             .leaflet-tooltip-bottom:before { border-bottom-color: rgba(30, 41, 59, 0.95); }
             .leaflet-tooltip-left:before { border-left-color: rgba(30, 41, 59, 0.95); }
             .leaflet-tooltip-right:before { border-right-color: rgba(30, 41, 59, 0.95); }
+            
+            /* Popup Sombre pour les annonces immobilières */
+            .leaflet-popup-content-wrapper {
+                background-color: rgba(30, 41, 59, 0.95) !important;
+                border: 1px solid rgba(255,255,255,0.15);
+                color: #e2e8f0;
+                border-radius: 6px;
+                box-shadow: 0 6px 12px rgba(0, 0, 0, 0.5);
+            }
+            .leaflet-popup-content {
+                font-family: sans-serif;
+                font-size: 13px;
+                line-height: 1.6;
+                margin: 12px;
+                color: #e2e8f0;
+            }
+            .leaflet-popup-tip {
+                background-color: rgba(30, 41, 59, 0.95) !important;
+                border: 1px solid rgba(255,255,255,0.15);
+            }
+            .leaflet-popup-close-button {
+                color: #e2e8f0 !important;
+                font-size: 18px;
+            }
+            .leaflet-popup-close-button:hover {
+                color: #ffffff !important;
+            }
         </style>
         <script>
             window.addEventListener("message", function(event) {
