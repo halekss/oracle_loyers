@@ -10,6 +10,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [geoContext, setGeoContext] = useState(null);
   const [roomFilter, setRoomFilter] = useState("all");
+  const [mlContext, setMlContext] = useState(null); // 🔥 ÉTAT FUSION
 
   // Logique de surface par défaut mise à jour
   const getSurfaceFromFilter = (filter) => {
@@ -17,7 +18,7 @@ function App() {
       case 't1': return 25;
       case 't2': return 45;
       case 't3': return 65;
-      case 't4+': return 95; // ✅ Prise en charge T4+
+      case 't4+': return 95;
       default: return 35;
     }
   };
@@ -32,10 +33,23 @@ function App() {
         surface: surface,
         room_filter: filter
       });
+      
       setResult(prediction);
+      
+      // 🔥 FUSION : Extraire et stocker le contexte ML pour le chatbot
+      if (prediction.details) {
+        setMlContext({
+          ...prediction.details,
+          ml_ready: true,
+          timestamp: Date.now() // Pour forcer le refresh
+        });
+        console.log("🧠 Contexte ML prêt pour le chatbot:", prediction.details);
+      }
+      
     } catch (err) {
       console.error(err);
       alert("Erreur Oracle : Impossible de récupérer l'estimation.");
+      setMlContext(null); // Reset du contexte en cas d'erreur
     } finally {
       setLoading(false);
     }
@@ -79,6 +93,11 @@ function App() {
             <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
               ORACLE LOYERS
             </h1>
+            {mlContext && mlContext.ml_ready && (
+              <p className="text-xs text-purple-400 mt-1">
+                🧠 Contexte ML actif : {mlContext.zone} - {mlContext.prix_estime}€
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3">
           </div>
@@ -107,14 +126,17 @@ function App() {
               />
             </div>
 
-            {/* RESULTAT (Sans indice de tension) */}
+            {/* RESULTAT */}
             <div className="shrink-0 p-5 border-b border-slate-800 bg-slate-900/30">
               <ResultCard data={result} loading={loading} />
             </div>
 
-            {/* CHAT - A maintenant plus de place */}
+            {/* CHAT - 🔥 FUSION : On passe mlContext comme prop */}
             <div className="flex-1 min-h-0 relative">
-              <ChatOracle analysis={result?.analysis} />
+              <ChatOracle 
+                analysis={result?.analysis} 
+                mlContext={mlContext}
+              />
             </div>
 
           </div>

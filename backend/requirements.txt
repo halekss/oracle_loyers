@@ -13,3 +13,4 @@ scipy
 shapely
 requests
 xgboost
+geopy==2.4.1

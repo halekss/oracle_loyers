@@ -1,28 +1,43 @@
+version: '3.8'
+
 services:
   # --- SERVICE BACKEND (Python/Flask) ---
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: oracle_backend
     ports:
       - "5000:5000"
-    # 👇 CRUCIAL : Permet à Docker d'accéder à LM Studio sur votre Mac/Windows
+    # 🔥 CRUCIAL : Permet à Docker d'accéder à LM Studio sur votre machine hôte
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - ./backend/data:/app/data
+      - ./backend/models:/app/models
       - /app/__pycache__
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
       # URL de LM Studio (le backend utilise cette variable)
       - LM_STUDIO_URL=http://host.docker.internal:1234/v1/chat/completions
+      - PYTHONUNBUFFERED=1
     command: python app.py
     restart: unless-stopped
+    networks:
+      - oracle_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # --- SERVICE FRONTEND (React/Vite) ---
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: oracle_frontend
     ports:
       - "5173:5173"
@@ -31,7 +46,19 @@ services:
       - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:5000
+      - NODE_ENV=development
     depends_on:
-      - backend
-    command: ["npm", "run", "dev", "--", "--host"]
+      backend:
+        condition: service_healthy
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
     restart: unless-stopped
+    networks:
+      - oracle_network
+
+networks:
+  oracle_network:
+    driver: bridge
+
+volumes:
+  backend_data:
+  backend_models:

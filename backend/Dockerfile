@@ -1,17 +1,23 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Optimisation : on ne garde pas les fichiers cache de Python
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# Installation des dépendances système
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# 1. Copie des requirements et installation
+# Copie des requirements
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# 2. Copie du reste du code
+# Installation des dépendances Python
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Copie du code
 COPY . .
 
-# 3. Lancement du serveur (Flask sur le port 5000)
+# Port d'écoute
+EXPOSE 5000
+
+# Commande de démarrage
 CMD ["python", "app.py"]

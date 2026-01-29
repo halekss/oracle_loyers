@@ -1,17 +1,18 @@
-# frontend/Dockerfile
-FROM node:20-slim
-
+FROM node:20-alpine
 
 WORKDIR /app
 
+# Copie des fichiers de dépendances
+COPY package*.json ./
+
 # Installation des dépendances
-COPY package.json package-lock.json ./
 RUN npm install
 
-# Copie du code
+# Copie du code source
 COPY . .
 
+# Port d'écoute
 EXPOSE 5173
 
-# Lancement avec --host pour que Docker puisse y accéder
-CMD ["npm", "run", "dev", "--", "--host"]
+# Commande de démarrage
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
