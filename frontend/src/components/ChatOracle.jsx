@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 
-export default function ChatOracle({ analysis }) {
+export default function ChatOracle({ analysis, predictionData }) {
   const [messages, setMessages] = useState([
     { 
       sender: 'oracle', 
@@ -12,12 +12,31 @@ export default function ChatOracle({ analysis }) {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Stocke le dernier contexte de prédiction
+  const [currentContext, setCurrentContext] = useState(null);
+
   // Mise à jour quand une nouvelle analyse arrive du scan
   useEffect(() => {
     if (analysis) {
       setMessages(prev => [...prev, { sender: 'oracle', text: analysis }]);
     }
   }, [analysis]);
+
+  // Mise à jour du contexte quand une nouvelle prédiction arrive
+  useEffect(() => {
+    if (predictionData) {
+      // On construit un contexte texte pour Mistral
+      const contextText = `
+Prix estimé : ${predictionData.estimated_price} €
+Surface : ${predictionData.stats?.surface || 'N/A'} m²
+Prix au m² : ${predictionData.stats?.prix_m2 || 'N/A'} €/m²
+Méthode : ${predictionData.stats?.method || 'ML'}
+Position : ${predictionData.details?.latitude}, ${predictionData.details?.longitude}
+      `.trim();
+      
+      setCurrentContext(contextText);
+    }
+  }, [predictionData]);
 
   // Auto-scroll vers le bas
   useEffect(() => {
@@ -36,8 +55,8 @@ export default function ChatOracle({ analysis }) {
     setIsLoading(true);
 
     try {
-      // Appel API vers le backend
-      const oracleResponse = await api.sendChatMessage(userMsg);
+      // Appel API vers le backend avec le contexte
+      const oracleResponse = await api.sendChatMessage(userMsg, currentContext);
       
       // Ajouter la réponse de l'Oracle
       setMessages(prev => [...prev, { 
@@ -111,6 +130,13 @@ export default function ChatOracle({ analysis }) {
             </svg>
           </button>
         </form>
+        
+        {/* Indicateur de contexte actif */}
+        {currentContext && (
+          <p className="text-xs text-purple-400 mt-2 text-center">
+            💡 L'Oracle connaît le prix estimé de votre dernière recherche
+          </p>
+        )}
         
         {isLoading && (
           <p className="text-xs text-slate-500 mt-2 text-center">

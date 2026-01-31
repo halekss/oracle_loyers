@@ -27,15 +27,26 @@ export const api = {
     }
   },
 
-  // 👇 AJOUTER CETTE FONCTION
-  sendChatMessage: async (message) => {
+  // 👇 FONCTION CHAT MODIFIÉE : Accepte maintenant un contexte optionnel
+  sendChatMessage: async (message, context = null) => {
     try {
       console.log("📤 Envoi message:", message);
+      if (context) {
+        console.log("📊 Avec contexte ML");
+      }
+      
+      // Construction du payload
+      const payload = { message };
+      
+      // Si un contexte est fourni (résultat du ML), on l'ajoute
+      if (context) {
+        payload.context = context;
+      }
       
       const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify(payload),
       });
       
       if (!response.ok) {
