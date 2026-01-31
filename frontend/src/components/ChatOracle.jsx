@@ -1,42 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 
-export default function ChatOracle({ analysis, predictionData }) {
+export default function ChatOracle({ analysis, context, quartier }) {
   const [messages, setMessages] = useState([
     { 
       sender: 'oracle', 
-      text: "🔮 Bienvenue, mortel. Je suis l'Oracle de Lyon. Sélectionne une zone sur la carte ou pose-moi une question sur un quartier..." 
+      text: "🔮 Bienvenue, mortel. Tape une adresse dans la barre de recherche (ex: 'Ainay'), puis pose-moi tes questions..." 
     }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Stocke le dernier contexte de prédiction
-  const [currentContext, setCurrentContext] = useState(null);
-
-  // Mise à jour quand une nouvelle analyse arrive du scan
+  // Mise à jour quand une nouvelle analyse arrive
   useEffect(() => {
     if (analysis) {
       setMessages(prev => [...prev, { sender: 'oracle', text: analysis }]);
     }
   }, [analysis]);
-
-  // Mise à jour du contexte quand une nouvelle prédiction arrive
-  useEffect(() => {
-    if (predictionData) {
-      // On construit un contexte texte pour Mistral
-      const contextText = `
-Prix estimé : ${predictionData.estimated_price} €
-Surface : ${predictionData.stats?.surface || 'N/A'} m²
-Prix au m² : ${predictionData.stats?.prix_m2 || 'N/A'} €/m²
-Méthode : ${predictionData.stats?.method || 'ML'}
-Position : ${predictionData.details?.latitude}, ${predictionData.details?.longitude}
-      `.trim();
-      
-      setCurrentContext(contextText);
-    }
-  }, [predictionData]);
 
   // Auto-scroll vers le bas
   useEffect(() => {
@@ -55,8 +36,8 @@ Position : ${predictionData.details?.latitude}, ${predictionData.details?.longit
     setIsLoading(true);
 
     try {
-      // Appel API vers le backend avec le contexte
-      const oracleResponse = await api.sendChatMessage(userMsg, currentContext);
+      // 🎯 APPEL API AVEC LE CONTEXTE AUTOMATIQUE
+      const oracleResponse = await api.sendChatMessage(userMsg, context);
       
       // Ajouter la réponse de l'Oracle
       setMessages(prev => [...prev, { 
@@ -67,7 +48,7 @@ Position : ${predictionData.details?.latitude}, ${predictionData.details?.longit
       console.error('❌ Erreur chat:', error);
       setMessages(prev => [...prev, { 
         sender: 'oracle', 
-        text: "⚠️ Une erreur s'est produite. Vérifie que LM Studio est lancé sur le port 1234." 
+        text: "⚠️ Une erreur s'est produite. Vérifie que LM Studio tourne sur le port 1234." 
       }]);
     } finally {
       setIsLoading(false);
@@ -115,7 +96,7 @@ Position : ${predictionData.details?.latitude}, ${predictionData.details?.longit
           <input
             type="text"
             className="flex-1 bg-slate-950 border border-slate-700 text-slate-200 text-xs px-4 py-3 rounded-full focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            placeholder="Interroge l'Oracle (ex: 'Croix-Rousse c'est bien ?')..."
+            placeholder="Interroge l'Oracle (ex: 'C'est cher ?')..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
@@ -132,9 +113,9 @@ Position : ${predictionData.details?.latitude}, ${predictionData.details?.longit
         </form>
         
         {/* Indicateur de contexte actif */}
-        {currentContext && (
+        {context && (
           <p className="text-xs text-purple-400 mt-2 text-center">
-            💡 L'Oracle connaît le prix estimé de votre dernière recherche
+            💡 Scan actif : {quartier || 'Zone détectée'}
           </p>
         )}
         
