@@ -3,6 +3,7 @@ import requests
 import joblib
 import pandas as pd
 import numpy as np
+import uuid
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from scipy.spatial import distance
@@ -11,7 +12,17 @@ from scipy.spatial import distance
 from services.data_loader import DataLoader
 from services.map_generator import MapGenerator
 
-print("🔥 DÉMARRAGE ORACLE CHATBOT v4.0 (ML + CHAT FUSIONNÉS)")
+# --- NOUVEAUX MODULES ---
+from conversation_manager import ConversationManager
+from prompt_system import (
+    build_constrained_prompt, 
+    LYON_QUARTIERS, 
+    is_off_topic,
+    extract_quartiers_mentioned
+)
+from smart_agent import SmartAgent
+
+print("🔥 DÉMARRAGE ORACLE CHATBOT v5.0 (ML + AGENT INTELLIGENT + MÉMOIRE)")
 
 app = Flask(__name__)
 CORS(app)
@@ -59,6 +70,20 @@ try:
         print("⚠️ Modèle ou CSV introuvable")
 except Exception as e:
     print(f"⚠️ Erreur chargement ML : {e}")
+
+# 4. INITIALISATION CONVERSATION MANAGER (Sauvegarde)
+conversation_manager = ConversationManager(db_path=os.path.join(DATA_DIR, 'conversations.db'))
+print("✅ Gestionnaire de conversations initialisé")
+
+# 5. INITIALISATION SMART AGENT (IA qui déclenche le ML automatiquement)
+smart_agent = None
+if model and not df_full.empty:
+    # On passe la fonction predict_price_ml au SmartAgent
+    smart_agent = SmartAgent(
+        ml_predictor=lambda s, lat, lon: predict_price_ml(s, lat, lon),
+        df_data=df_full
+    )
+    print("✅ Agent intelligent initialisé")
 
 
 # --- FONCTION ML : PREPROCESSING (Logique exacte de test_prediction.py) ---
@@ -274,36 +299,137 @@ def predict_smart():
 @app.route('/api/chat', methods=['POST'])
 def chat_oracle():
     """
-    Route CHAT : Discussion avec l'Oracle (Mistral).
-    Accepte maintenant un champ 'context' avec les infos du ML.
+    Route CHAT v2.0 : 
+    - Utilise l'agent intelligent pour détecter les intentions
+    - Déclenche le ML automatiquement si nécessaire
+    - Sauvegarde la conversation
+    - Utilise un prompt anti-hallucination
     """
     try:
         data = request.json
         user_msg = data.get('message', '').strip()
-        context = data.get('context', None)  # Nouveau : contexte du ML
+        context = data.get('context', None)  # Contexte manuel du frontend
+        session_id = data.get('session_id', str(uuid.uuid4()))  # ID de session
         
         if not user_msg:
-            return jsonify({"response": "⚠️ Le silence est d'or, mais j'ai besoin d'une question."})
+            return jsonify({
+                "response": "⚠️ Le silence est d'or, mais j'ai besoin d'une question.",
+                "session_id": session_id
+            })
         
-        print(f"💬 Question reçue : {user_msg}")
-        if context:
-            print(f"📊 Contexte fourni : {context[:100]}...")
+        print(f"💬 [{session_id}] Question : {user_msg}")
         
-        # Prompt de personnalité
-        system_instruction = (
-            "Tu es l'Oracle de Lyon, un expert immobilier cynique, drôle et un peu hautain. "
-            "Tu connais tout sur Lyon (Croix-Rousse, Presqu'île, Guillotière, Vaise, Part-Dieu, etc.). "
-            "Tu utilises l'argot lyonnais occasionnellement (gone, mâchon, bouchon). "
-            "Tes réponses sont courtes (max 4 phrases) et percutantes. "
-            "Tu donnes des conseils immobiliers basés sur les données que tu connais."
+        # ÉTAPE 1 : Récupérer l'historique de conversation
+        history_formatted = conversation_manager.format_history_for_llm(session_id, limit=5)
+        
+        # ÉTAPE 2 : Utiliser l'agent intelligent pour analyser la question
+        enriched_context = context or ""
+        agent_data = {}
+        
+        if smart_agent:
+            intent_result = smart_agent.analyze_question(user_msg)
+            print(f"🧠 Intent détecté : {intent_result['intent']} → Action : {intent_result['action']}")
+            
+            # L'agent exécute l'action (peut déclencher le ML)
+            if intent_result['action'] != 'chat_only':
+                action_result = smart_agent.execute_action(intent_result, user_msg)
+                enriched_context += "\n" + action_result['context']
+                agent_data = action_result.get('data', {})
+        
+        # ÉTAPE 3 : Construire le prompt anti-hallucination
+        quartiers_mentioned = extract_quartiers_mentioned(user_msg)
+        quartiers_data = {k: v for k, v in LYON_QUARTIERS.items() 
+                         if any(q in k for q in quartiers_mentioned)} if quartiers_mentioned else LYON_QUARTIERS
+        
+        full_prompt = build_constrained_prompt(
+            user_message=user_msg,
+            context=enriched_context if enriched_context else None,
+            history=history_formatted if history_formatted else None,
+            quartiers_data=quartiers_data
         )
         
-        response = ask_mistral(system_instruction, user_msg, context)
-        return jsonify({"response": response})
+        # ÉTAPE 4 : Appeler LM Studio avec le prompt optimisé
+        oracle_response = ask_mistral_direct(full_prompt)
+        
+        # ÉTAPE 5 : Sauvegarder la conversation
+        conversation_manager.save_message(
+            session_id=session_id,
+            user_message=user_msg,
+            oracle_response=oracle_response,
+            context=enriched_context if enriched_context else None
+        )
+        
+        print(f"💾 Conversation sauvegardée [session: {session_id}]")
+        
+        return jsonify({
+            "response": oracle_response,
+            "session_id": session_id,
+            "agent_data": agent_data  # Données ML si déclenchées
+        })
         
     except Exception as e:
         print(f"❌ Erreur chat : {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"response": "⚠️ Erreur interne du serveur."})
+
+
+def ask_mistral_direct(combined_prompt: str) -> str:
+    """
+    Version simplifiée qui envoie un prompt pré-construit à LM Studio.
+    """
+    try:
+        payload = {
+            "model": "local-model",
+            "messages": [
+                {"role": "user", "content": combined_prompt}
+            ],
+            "temperature": 0.5,  # Plus bas = moins de créativité/hallucinations
+            "max_tokens": 400
+        }
+        
+        print(f"📤 Envoi à LM Studio...")
+        response = requests.post(LM_STUDIO_URL, json=payload, timeout=60)
+        
+        if response.status_code == 200:
+            answer = response.json()['choices'][0]['message']['content']
+            return answer
+        else:
+            print(f"❌ Erreur LM Studio {response.status_code} : {response.text}")
+            return f"⚠️ L'Oracle a un hoquet technique (Code {response.status_code})"
+            
+    except requests.exceptions.ConnectionError:
+        print("❌ Impossible de joindre LM Studio")
+        return "🔴 L'Oracle est injoignable. Vérifiez que LM Studio tourne bien sur le port 1234."
+    except Exception as e:
+        print(f"❌ Erreur technique : {e}")
+        return "⚠️ Erreur technique interne."
+
+
+@app.route('/api/history/<session_id>', methods=['GET'])
+def get_conversation_history(session_id):
+    """
+    Récupère l'historique d'une conversation.
+    """
+    try:
+        history = conversation_manager.get_history(session_id, limit=50)
+        return jsonify({"history": history})
+    except Exception as e:
+        print(f"❌ Erreur récupération historique : {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/clear-history/<session_id>', methods=['DELETE'])
+def clear_conversation(session_id):
+    """
+    Efface l'historique d'une session.
+    """
+    try:
+        conversation_manager.clear_session(session_id)
+        return jsonify({"message": "Historique effacé"})
+    except Exception as e:
+        print(f"❌ Erreur suppression historique : {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # --- LANCEMENT ---

@@ -27,7 +27,6 @@ export const api = {
     }
   },
 
-  // 👇 FONCTION CHAT MODIFIÉE : Accepte maintenant un contexte optionnel
   sendChatMessage: async (message, context = null) => {
     try {
       console.log("📤 Envoi message:", message);
@@ -35,10 +34,8 @@ export const api = {
         console.log("📊 Avec contexte ML");
       }
       
-      // Construction du payload
       const payload = { message };
       
-      // Si un contexte est fourni (résultat du ML), on l'ajoute
       if (context) {
         payload.context = context;
       }
@@ -61,5 +58,5 @@ export const api = {
       console.error("❌ Erreur Chat:", error);
       return "🔴 L'Oracle est injoignable. Vérifiez que le backend et LM Studio sont démarrés.";
     }
-  },
+  }
 };
