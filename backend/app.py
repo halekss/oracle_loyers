@@ -12,7 +12,7 @@ from scipy.spatial import distance
 from services.data_loader import DataLoader
 from services.map_generator import MapGenerator
 
-print("🔥 ORACLE v6.1 ULTRA - Prompt Agressif + Bible Enrichie")
+print("🔥 ORACLE v7.0 PREMIUM - Scores + Calculs Financiers + Vie Pratique")
 
 app = Flask(__name__)
 CORS(app)
@@ -30,150 +30,275 @@ print(f"🔗 LM Studio URL : {LM_STUDIO_URL}")
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 # ============================================================================
-# 🔮 BIBLE ULTIME DES QUARTIERS - ENRICHIE AVEC PRIX MOYENS
+# 🔮 BIBLE PREMIUM DES QUARTIERS - ENRICHIE AU MAX
 # ============================================================================
 LYON_BIBLE = {
     # --- LYON 1er ---
     "terreaux": {
         "description": "L'épicentre du bruit. Skateurs, bars, zéro silence.",
         "prix_m2": 30,
-        "ambiance": "festif_bruyant"
+        "ambiance": 8,
+        "transports": 9,
+        "commerces": 9,
+        "vie_nocturne": 9,
+        "metro": "Hôtel de Ville (A, C)",
+        "verdict": "Central mais bruyant"
     },
     "pentes": {
-        "description": "Mollets en béton requis. Bobos et graffitis partout.",
+        "description": "Mollets en béton requis. Bobos et graffitis.",
         "prix_m2": 28,
-        "ambiance": "bobo_sportif"
+        "ambiance": 7,
+        "transports": 7,
+        "commerces": 8,
+        "vie_nocturne": 8,
+        "metro": "Croix-Paquet (C)",
+        "verdict": "Bobo mais fatiguant"
     },
     "69001": {
         "description": "Lyon 1er : Cœur historique. Oublie le calme.",
         "prix_m2": 29,
-        "ambiance": "central_vivant"
+        "ambiance": 8,
+        "transports": 9,
+        "commerces": 9,
+        "vie_nocturne": 9,
+        "metro": "Hôtel de Ville",
+        "verdict": "Ultra central"
     },
 
     # --- LYON 2ème ---
     "ainay": {
         "description": "Aristocratie lyonnaise. Mocassins à glands obligatoires.",
         "prix_m2": 34,
-        "ambiance": "chic_snob"
+        "ambiance": 6,
+        "transports": 9,
+        "commerces": 8,
+        "vie_nocturne": 5,
+        "metro": "Ampère-Victor Hugo (A)",
+        "verdict": "Chic mais coincé"
     },
     "confluence": {
         "description": "Quartier SimCity. Cubes modernes, vide le soir.",
         "prix_m2": 32,
-        "ambiance": "moderne_desert"
+        "ambiance": 5,
+        "transports": 7,
+        "commerces": 6,
+        "vie_nocturne": 3,
+        "metro": "Confluence (T1)",
+        "verdict": "Moderne mais mort"
     },
     "bellecour": {
         "description": "Centre du monde. Métro pratique, manifestations garanties.",
         "prix_m2": 36,
-        "ambiance": "ultra_central"
+        "ambiance": 7,
+        "transports": 10,
+        "commerces": 10,
+        "vie_nocturne": 7,
+        "metro": "Bellecour (A, D)",
+        "verdict": "Top mais cher"
     },
     "69002": {
         "description": "Lyon 2ème : Presqu'île chic. Beau, plat, cher.",
         "prix_m2": 34,
-        "ambiance": "prestige"
+        "ambiance": 7,
+        "transports": 9,
+        "commerces": 9,
+        "vie_nocturne": 6,
+        "metro": "Bellecour",
+        "verdict": "Prestigieux"
     },
 
     # --- LYON 3ème ---
     "part-dieu": {
         "description": "Béton, gares, dépression architecturale.",
         "prix_m2": 26,
-        "ambiance": "business_froid"
+        "ambiance": 4,
+        "transports": 10,
+        "commerces": 8,
+        "vie_nocturne": 5,
+        "metro": "Part-Dieu (B)",
+        "verdict": "Pratique mais moche"
     },
     "part dieu": {
         "description": "Béton, gares, dépression architecturale.",
         "prix_m2": 26,
-        "ambiance": "business_froid"
+        "ambiance": 4,
+        "transports": 10,
+        "commerces": 8,
+        "vie_nocturne": 5,
+        "metro": "Part-Dieu (B)",
+        "verdict": "Pratique mais moche"
     },
     "montchat": {
         "description": "Village des familles parfaites. Calme de campagne.",
         "prix_m2": 24,
-        "ambiance": "familial_calme"
+        "ambiance": 6,
+        "transports": 6,
+        "commerces": 7,
+        "vie_nocturne": 3,
+        "metro": "Grange Blanche (D)",
+        "verdict": "Familial tranquille"
     },
     "guillotière": {
         "description": "Far West lyonnais. Ça vit, ça crie.",
         "prix_m2": 20,
-        "ambiance": "street_populaire"
+        "ambiance": 7,
+        "transports": 8,
+        "commerces": 9,
+        "vie_nocturne": 8,
+        "metro": "Guillotière (D)",
+        "verdict": "Vivant mais crade"
     },
     "69003": {
-        "description": "Lyon 3ème : Mélange business et vie de famille.",
+        "description": "Lyon 3ème : Mélange business et famille.",
         "prix_m2": 24,
-        "ambiance": "mixte"
+        "ambiance": 5,
+        "transports": 8,
+        "commerces": 8,
+        "vie_nocturne": 6,
+        "metro": "Part-Dieu",
+        "verdict": "Mixte"
     },
 
     # --- LYON 4ème ---
     "croix-rousse": {
         "description": "Plateau bobo. Pentes et entre-soi garanti.",
         "prix_m2": 30,
-        "ambiance": "bobo_superieur"
+        "ambiance": 8,
+        "transports": 7,
+        "commerces": 8,
+        "vie_nocturne": 7,
+        "metro": "Croix-Rousse (C)",
+        "verdict": "Bobo mais sympa"
     },
     "croix rousse": {
         "description": "Plateau bobo. Pentes et entre-soi garanti.",
         "prix_m2": 30,
-        "ambiance": "bobo_superieur"
+        "ambiance": 8,
+        "transports": 7,
+        "commerces": 8,
+        "vie_nocturne": 7,
+        "metro": "Croix-Rousse (C)",
+        "verdict": "Bobo mais sympa"
     },
     "69004": {
-        "description": "Lyon 4ème : Colline qui télétravaille au chai latte.",
+        "description": "Lyon 4ème : Colline qui télétravaille.",
         "prix_m2": 30,
-        "ambiance": "bobo"
+        "ambiance": 8,
+        "transports": 7,
+        "commerces": 8,
+        "vie_nocturne": 7,
+        "metro": "Croix-Rousse",
+        "verdict": "Branché"
     },
 
     # --- LYON 5ème ---
     "vieux lyon": {
         "description": "Disneyland médiéval. Pavés + 4000 touristes.",
         "prix_m2": 28,
-        "ambiance": "touristique"
+        "ambiance": 6,
+        "transports": 8,
+        "commerces": 7,
+        "vie_nocturne": 6,
+        "metro": "Vieux Lyon (D)",
+        "verdict": "Joli mais touristique"
     },
     "69005": {
-        "description": "Lyon 5ème : Pavés, histoire, touristes en masse.",
+        "description": "Lyon 5ème : Pavés et histoire.",
         "prix_m2": 27,
-        "ambiance": "historique"
+        "ambiance": 6,
+        "transports": 7,
+        "commerces": 7,
+        "vie_nocturne": 6,
+        "metro": "Vieux Lyon",
+        "verdict": "Historique"
     },
 
     # --- LYON 6ème ---
     "brotteaux": {
         "description": "Bunker des riches. Propre, large, calme, ennuyeux.",
         "prix_m2": 38,
-        "ambiance": "riche_ennuyeux"
+        "ambiance": 5,
+        "transports": 9,
+        "commerces": 8,
+        "vie_nocturne": 4,
+        "metro": "Foch (A), Masséna (A)",
+        "verdict": "Riche mais chiant"
     },
     "69006": {
-        "description": "Lyon 6ème : Le plus riche. Ennuyeux à mourir le dimanche.",
+        "description": "Lyon 6ème : Le plus riche.",
         "prix_m2": 38,
-        "ambiance": "bourgeois"
+        "ambiance": 5,
+        "transports": 9,
+        "commerces": 8,
+        "vie_nocturne": 4,
+        "metro": "Foch",
+        "verdict": "Bourgeois"
     },
 
     # --- LYON 7ème ---
     "gerland": {
         "description": "Stades, bureaux, vide le soir.",
         "prix_m2": 22,
-        "ambiance": "industriel_calme"
+        "ambiance": 3,
+        "transports": 6,
+        "commerces": 4,
+        "vie_nocturne": 2,
+        "metro": "Debourg (T1)",
+        "verdict": "Pas cher mais ennuyeux"
     },
     "69007": {
-        "description": "Lyon 7ème : Street-life crade + gentrification hipster.",
+        "description": "Lyon 7ème : Street-life + gentrification.",
         "prix_m2": 23,
-        "ambiance": "contraste"
+        "ambiance": 6,
+        "transports": 7,
+        "commerces": 7,
+        "vie_nocturne": 6,
+        "metro": "Jean Macé (B, D)",
+        "verdict": "Contrasté"
     },
 
     # --- LYON 8ème ---
     "monplaisir": {
-        "description": "Village familial. 'Sympa' = rien à faire le soir.",
+        "description": "Village familial. 'Sympa' = rien à faire.",
         "prix_m2": 20,
-        "ambiance": "familial_ennuyeux"
+        "ambiance": 5,
+        "transports": 6,
+        "commerces": 6,
+        "vie_nocturne": 3,
+        "metro": "Monplaisir Lumière (D)",
+        "verdict": "Calme familial"
     },
     "69008": {
-        "description": "Lyon 8ème : Calme absolu. Bon compromis si t'es loin du centre.",
+        "description": "Lyon 8ème : Calme absolu.",
         "prix_m2": 20,
-        "ambiance": "peripherique"
+        "ambiance": 5,
+        "transports": 6,
+        "commerces": 6,
+        "vie_nocturne": 3,
+        "metro": "Monplaisir",
+        "verdict": "Périphérique"
     },
 
     # --- LYON 9ème ---
     "vaise": {
-        "description": "Silicon Valley lyonnaise (en moins cher). Tech et immeubles neufs.",
+        "description": "Silicon Valley lyonnaise. Tech et immeubles neufs.",
         "prix_m2": 24,
-        "ambiance": "startup_loin"
+        "ambiance": 5,
+        "transports": 7,
+        "commerces": 6,
+        "vie_nocturne": 4,
+        "metro": "Valmy (D), Gorge de Loup (D)",
+        "verdict": "Tech mais loin"
     },
     "69009": {
-        "description": "Lyon 9ème : Ouest lointain. Start-ups et barres.",
+        "description": "Lyon 9ème : Ouest lointain.",
         "prix_m2": 23,
-        "ambiance": "eloigne"
+        "ambiance": 5,
+        "transports": 6,
+        "commerces": 6,
+        "vie_nocturne": 4,
+        "metro": "Vaise",
+        "verdict": "Éloigné"
     }
 }
 
@@ -205,36 +330,100 @@ except Exception as e:
     print(f"⚠️ Erreur chargement ML : {e}")
 
 
-# --- FONCTION : TROUVER LA DESCRIPTION DU QUARTIER ---
+# --- FONCTION : TROUVER LES INFOS DU QUARTIER ---
 def get_quartier_info(ville_ou_code_postal):
-    """
-    Recherche les infos du quartier dans la BIBLE.
-    Retourne {description, prix_m2, ambiance} ou fallback.
-    """
+    """Recherche les infos enrichies du quartier"""
     if not ville_ou_code_postal:
         return {
             "description": "Un quartier lambda de Lyon.",
             "prix_m2": 25,
-            "ambiance": "inconnu"
+            "ambiance": 5,
+            "transports": 5,
+            "commerces": 5,
+            "vie_nocturne": 5,
+            "metro": "N/A",
+            "verdict": "Moyen"
         }
     
     search_key = str(ville_ou_code_postal).lower().replace('-', ' ').strip()
     
-    # Chercher directement
     if search_key in LYON_BIBLE:
         return LYON_BIBLE[search_key]
     
-    # Chercher par correspondance partielle
     for key, info in LYON_BIBLE.items():
         if search_key in key or key in search_key:
             return info
     
-    # Fallback
     return {
-        "description": f"Un coin de Lyon sans grand caractère.",
+        "description": "Quartier sans données précises.",
         "prix_m2": 25,
-        "ambiance": "moyen"
+        "ambiance": 5,
+        "transports": 5,
+        "commerces": 5,
+        "vie_nocturne": 5,
+        "metro": "N/A",
+        "verdict": "Données limitées"
     }
+
+
+# --- FONCTION : COMPARAISON AVEC SCORES ---
+def compare_quartiers(quartier1, prix1, quartier2):
+    """
+    Compare 2 quartiers avec scores visuels.
+    Retourne un texte formaté avec émojis.
+    """
+    info1 = get_quartier_info(quartier1)
+    info2 = get_quartier_info(quartier2)
+    
+    # Calculer le prix du quartier 2 pour la même surface
+    surface = prix1 / info1["prix_m2"] if info1["prix_m2"] > 0 else 45
+    prix2 = info2["prix_m2"] * surface
+    
+    # Calcul économie
+    economie = prix2 - prix1
+    pourcentage = (abs(economie) / prix2 * 100) if prix2 > 0 else 0
+    
+    # Construction du texte de comparaison
+    comparison = f"""
+{quartier1.upper()} vs {quartier2.upper()} (T2, {surface:.0f}m²)
+
+💰 Prix : {quartier1.title()} {prix1:.0f}€ vs {quartier2.title()} {prix2:.0f}€
+   → {quartier1.title() if prix1 < prix2 else quartier2.title()} GAGNE (-{pourcentage:.0f}%)
+
+🎉 Ambiance : {quartier1.title()} {info1['ambiance']}/10 vs {quartier2.title()} {info2['ambiance']}/10
+   → {quartier1.title() if info1['ambiance'] > info2['ambiance'] else quartier2.title()} GAGNE
+
+🚇 Transports : {quartier1.title()} {info1['transports']}/10 vs {quartier2.title()} {info2['transports']}/10
+   → {'Match nul' if info1['transports'] == info2['transports'] else (quartier1.title() if info1['transports'] > info2['transports'] else quartier2.title()) + ' GAGNE'}
+
+🛒 Commerces : {quartier1.title()} {info1['commerces']}/10 vs {quartier2.title()} {info2['commerces']}/10
+
+🌙 Vie nocturne : {quartier1.title()} {info1['vie_nocturne']}/10 vs {quartier2.title()} {info2['vie_nocturne']}/10
+
+💡 ÉCONOMIE ANNUELLE à {quartier1.title()} : {abs(economie) * 12:.0f}€/an
+
+🏆 VERDICT : {info1['verdict']} vs {info2['verdict']}
+"""
+    return comparison.strip()
+
+
+# --- FONCTION : CALCUL FINANCIER ---
+def calcul_financier(prix_mensuel, surface):
+    """Retourne un texte avec calculs sur 1 an, 5 ans, 10 ans"""
+    prix_annuel = prix_mensuel * 12
+    prix_5ans = prix_annuel * 5
+    prix_10ans = prix_annuel * 10
+    
+    return f"""
+💰 SIMULATION FINANCIÈRE ({surface:.0f}m²)
+
+📅 1 mois : {prix_mensuel:.0f}€
+📅 1 an : {prix_annuel:,.0f}€
+📅 5 ans : {prix_5ans:,.0f}€
+📅 10 ans : {prix_10ans:,.0f}€
+
+💡 En 10 ans, tu payes {prix_10ans:,.0f}€ de loyer.
+"""
 
 
 # --- FONCTION ML : PREPROCESSING ---
@@ -273,7 +462,7 @@ def preprocess_for_ml(surface, latitude, longitude):
 
 # --- FONCTION ML : PRÉDICTION ---
 def predict_price_ml(surface, latitude, longitude):
-    """Prédit le prix avec XGBoost + correction des aberrations"""
+    """Prédit le prix avec XGBoost"""
     if model is None:
         return None
     
@@ -287,7 +476,7 @@ def predict_price_ml(surface, latitude, longitude):
         prix_estime_brut = model.predict(X_prepared)[0]
         
         if prix_estime_brut > PRIX_MAX_LOCATION:
-            print(f"⚠️ Prix aberrant : {prix_estime_brut:.0f}€ → Fallback voisin")
+            print(f"⚠️ Prix aberrant : {prix_estime_brut:.0f}€")
             prix_voisin = neighbor_row.get('prix', None)
             prix_m2_voisin = neighbor_row.get('prix_m2', None)
             
@@ -300,7 +489,7 @@ def predict_price_ml(surface, latitude, longitude):
                 method = "Voisin (ML corrigé)"
             else:
                 prix_estime = 15 * surface
-                method = "Moyenne (ML défaillant)"
+                method = "Moyenne"
         else:
             prix_estime = prix_estime_brut
             method = "ML (XGBoost)"
@@ -328,118 +517,142 @@ def detect_intent(message):
     
     # Comparaison
     if any(word in msg_lower for word in ['compar', 'vs', 'différence', 'mieux', 'plutôt']):
-        return 'compare'
+        # Extraire les quartiers mentionnés
+        quartiers = []
+        for key in LYON_BIBLE.keys():
+            if key in msg_lower and not key.startswith('690'):
+                quartiers.append(key)
+        
+        if len(quartiers) >= 2:
+            return ('compare', quartiers[:2])
+        elif len(quartiers) == 1:
+            return ('compare_with_scan', quartiers[0])
+        else:
+            return ('compare_unknown', None)
     
-    # Demande de prix d'un autre quartier
-    quartiers_mentions = []
-    for key in LYON_BIBLE.keys():
-        if key in msg_lower and key not in ['69001', '69002', '69003', '69004', '69005', '69006', '69007', '69008', '69009']:
-            quartiers_mentions.append(key)
+    # Calcul financier
+    if any(word in msg_lower for word in ['coût', 'cout', 'économ', 'épargn', 'annuel', 'calculer', 'simulation']):
+        return ('calcul_financier', None)
     
-    if len(quartiers_mentions) > 0:
-        return 'autre_quartier'
+    # Mauvaise foi détectée
+    if any(word in msg_lower for word in ['pauvre', 'clochard', 'crade', 'ghetto', 'sans avenir']):
+        return ('mauvaise_foi', None)
     
     # Question générale
-    return 'general'
+    return ('general', None)
 
 
-# --- FONCTION IA : MISTRAL AVEC RAG RIGIDE ---
-def ask_mistral_rag(user_message, prix_estime, prix_m2, surface, quartier):
-    """Appelle Mistral avec un prompt RAG ULTRA-RIGIDE et COURT"""
+# --- FONCTION IA : MISTRAL PREMIUM ---
+def ask_mistral_premium(user_message, prix_estime, prix_m2, surface, quartier):
+    """Appelle Mistral avec prompt PREMIUM"""
     try:
-        # Récupérer les infos du quartier
         quartier_info = get_quartier_info(quartier)
-        description_quartier = quartier_info["description"]
-        prix_m2_quartier = quartier_info["prix_m2"]
         
         # Détection d'intention
-        intent = detect_intent(user_message)
+        intent_type, intent_data = detect_intent(user_message)
         
-        # Construction du prompt selon l'intention
-        if intent == 'autre_quartier':
-            # L'utilisateur demande un autre quartier
-            prompt_rigide = f"""### DONNÉES DU SCAN ACTUEL :
-Quartier scanné : {quartier}
-Loyer : {prix_estime} €
-Prix/m² : {prix_m2} €/m²
+        # --- INTENT : COMPARAISON ---
+        if intent_type == 'compare' and intent_data and len(intent_data) >= 2:
+            comparison = compare_quartiers(quartier, prix_estime, intent_data[1])
+            
+            prompt = f"""Tu es l'Oracle de Lyon, cynique et direct.
 
-### RÈGLE :
-T'as scanné {quartier}. Si on te demande un autre quartier, tu réorientes SEC.
+{comparison}
 
-### QUESTION :
-{user_message}
+Commente cette comparaison en 2-3 phrases max, sans répéter les chiffres.
+Utilise un ton cash avec de l'argot lyonnais (gone).
 
-### RÉPONSE (2 PHRASES MAX, CASH) :"""
+Réponse :"""
 
-        elif intent == 'compare':
-            # L'utilisateur veut comparer
-            prompt_rigide = f"""### DONNÉES DU SCAN :
-Quartier : {quartier} ({prix_m2}€/m²)
-Description : {description_quartier}
+        # --- INTENT : COMPARAISON AVEC LE SCAN ---
+        elif intent_type == 'compare_with_scan' and intent_data:
+            comparison = compare_quartiers(quartier, prix_estime, intent_data)
+            
+            prompt = f"""Tu es l'Oracle de Lyon.
 
-### BASE DE DONNÉES (Prix moyens au m²) :
-{format_bible_for_comparison()}
+{comparison}
 
-### QUESTION :
-{user_message}
+Commente en 2-3 phrases max, ton cash.
 
-### RÉPONSE (MAX 3 PHRASES, AVEC CHIFFRES RÉELS) :"""
+Réponse :"""
 
+        # --- INTENT : CALCUL FINANCIER ---
+        elif intent_type == 'calcul_financier':
+            calculs = calcul_financier(prix_estime, surface)
+            
+            prompt = f"""Tu es l'Oracle de Lyon.
+
+{calculs}
+
+Commente ces chiffres en 2 phrases, ton cash.
+
+Réponse :"""
+
+        # --- INTENT : MAUVAISE FOI ---
+        elif intent_type == 'mauvaise_foi':
+            prompt = f"""Tu es l'Oracle de Lyon.
+
+L'utilisateur a dit : "{user_message}"
+
+Contexte : {quartier} coûte {prix_estime}€ ({prix_m2}€/m²)
+
+RÈGLE : Il insulte un quartier populaire. Corrige-le fermement mais respectueusement.
+Explique que "moins cher" ≠ "pour les pauvres".
+
+Réponse (2-3 phrases max) :"""
+
+        # --- INTENT : GÉNÉRAL ---
         else:
-            # Question générale sur le quartier scanné
-            prompt_rigide = f"""### DONNÉES DU SCAN :
+            prompt = f"""Tu es l'Oracle de Lyon, cynique et cash.
+
+DONNÉES DU SCAN :
 - Quartier : {quartier}
-- Loyer : {prix_estime} €
-- Prix/m² : {prix_m2} €/m²
-- Ambiance : {description_quartier}
+- Loyer : {prix_estime}€
+- Prix/m² : {prix_m2}€/m²
+- Surface : {surface}m²
+- Ambiance : {quartier_info['description']}
+- Métro : {quartier_info['metro']}
 
-### TON RÔLE :
-Oracle de Lyon, cynique et cash. Argot lyonnais (gone, mâchon).
-INTERDIT d'inventer des prix.
-MAX 2-3 PHRASES.
+RÈGLES :
+- MAX 2-3 PHRASES
+- Argot lyonnais (gone)
+- INTERDIT d'inventer des prix
 
-### EXEMPLES DE BONNES RÉPONSES :
-Q: "C'est cher ?"
-R: "Pour Ainay, {prix_estime}€ c'est dans la norme, gone. Les aristos payent cher leurs mocassins."
+QUESTION : {user_message}
 
-Q: "C'est bien ?"
-R: "{description_quartier} Si t'aimes ça, vas-y."
-
-### QUESTION :
-{user_message}
-
-### RÉPONSE (2-3 PHRASES MAX) :"""
+RÉPONSE :"""
 
         payload = {
             "model": "local-model",
-            "messages": [{"role": "user", "content": prompt_rigide}],
-            "temperature": 0.3,  # Encore plus bas
-            "max_tokens": 200  # Encore plus court
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": 250
         }
         
-        print(f"📤 Envoi RAG à LM Studio (température 0.3)...")
+        print(f"📤 Intent détecté : {intent_type}")
         response = requests.post(LM_STUDIO_URL, json=payload, timeout=60)
         
         if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content']
+            answer = response.json()['choices'][0]['message']['content']
+            
+            # Si c'est une comparaison, ajouter le tableau au début
+            if intent_type in ['compare', 'compare_with_scan']:
+                return comparison + "\n\n" + answer
+            elif intent_type == 'calcul_financier':
+                return calculs + "\n\n" + answer
+            else:
+                return answer
         else:
             print(f"❌ Erreur LM Studio {response.status_code}")
-            return f"⚠️ Hoquet technique (Code {response.status_code})"
+            return "⚠️ Erreur technique"
             
     except requests.exceptions.ConnectionError:
-        return "🔴 L'Oracle est injoignable. Vérifie LM Studio (port 1234)."
+        return "🔴 L'Oracle est injoignable (LM Studio port 1234)"
     except Exception as e:
         print(f"❌ Erreur : {e}")
-        return "⚠️ Erreur technique."
-
-
-def format_bible_for_comparison():
-    """Formate la Bible pour les comparaisons"""
-    lines = []
-    for key, info in LYON_BIBLE.items():
-        if not key.startswith('690'):  # Ignorer les codes postaux
-            lines.append(f"- {key.title()}: {info['prix_m2']}€/m²")
-    return "\n".join(lines[:15])  # Top 15
+        import traceback
+        traceback.print_exc()
+        return "⚠️ Erreur interne"
 
 
 # --- ROUTES API ---
@@ -447,9 +660,9 @@ def format_bible_for_comparison():
 @app.route('/')
 def home():
     return jsonify({
-        "status": "Oracle v6.1 ULTRA - Prompt Agressif", 
+        "status": "Oracle v7.0 PREMIUM", 
         "model_loaded": model is not None,
-        "lm_studio": LM_STUDIO_URL,
+        "features": ["Scores", "Calculs financiers", "Vie pratique"],
         "bible_size": len(LYON_BIBLE)
     })
 
@@ -461,7 +674,6 @@ def serve_static(filename):
 
 @app.route('/api/listings', methods=['GET'])
 def get_listings():
-    """Renvoie les données pour la carte"""
     if df.empty:
         return jsonify([]), 500
     return jsonify(df.where(pd.notnull(df), None).to_dict(orient='records'))
@@ -469,7 +681,6 @@ def get_listings():
 
 @app.route('/api/predict', methods=['POST'])
 def predict_smart():
-    """Route SCAN"""
     if df.empty:
         return jsonify({"error": "Données non chargées"}), 500
 
@@ -509,7 +720,7 @@ def predict_smart():
             
             return jsonify({
                 "estimated_price": round(price),
-                "analysis": f"📍 Basé sur le voisin",
+                "analysis": f"📍 Voisin le plus proche",
                 "stats": {
                     "prix_m2": round(prix_m2),
                     "method": "Nearest Neighbor",
@@ -528,7 +739,6 @@ def predict_smart():
 
 @app.route('/api/chat', methods=['POST'])
 def chat_oracle():
-    """Route CHAT avec RAG rigide"""
     try:
         data = request.json
         user_msg = data.get('message', '').strip()
@@ -536,8 +746,6 @@ def chat_oracle():
         
         if not user_msg:
             return jsonify({"response": "⚠️ Parle, gone."})
-        
-        print(f"💬 Question : {user_msg}")
         
         if not context:
             return jsonify({
@@ -574,8 +782,7 @@ def chat_oracle():
         
         print(f"📊 Contexte : {quartier} | {prix_estime}€ | {prix_m2}€/m² | {surface}m²")
         
-        # Appel Mistral
-        response = ask_mistral_rag(user_msg, prix_estime, prix_m2, surface, quartier)
+        response = ask_mistral_premium(user_msg, prix_estime, prix_m2, surface, quartier)
         
         return jsonify({"response": response})
         
@@ -583,9 +790,8 @@ def chat_oracle():
         print(f"❌ Erreur chat : {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"response": "⚠️ Erreur interne."})
+        return jsonify({"response": "⚠️ Erreur interne"})
 
 
-# --- LANCEMENT ---
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
