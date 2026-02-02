@@ -125,7 +125,7 @@ class MapGenerator:
                 ),
                 popup=folium.GeoJsonPopup(
                     fields=['type', 'surface', 'prix', 'code_postal'],
-                    aliases=['Type :', 'Surface (m²) :', 'Prix (€) :', 'Code Postal :'],
+                    aliases=['Type :', 'Surface :', 'Prix :', 'Code Postal :'],
                     localize=True,
                     style='background-color: rgba(30, 41, 59, 0.95); color: #e2e8f0; font-family: sans-serif; padding: 10px; border-radius: 6px;'
                 )
