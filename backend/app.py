@@ -570,7 +570,7 @@ def chat_oracle():
        response = ask_mistral_corrected(user_msg, prix_estime, prix_m2, surface, quartier, lat, lon)
       
        return jsonify({"response": response})
-      
+    
    except Exception as e:
        print(f"❌ Erreur chat : {e}")
        import traceback
