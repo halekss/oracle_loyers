@@ -159,22 +159,3 @@ oracle-des-loyers/
         └── services/
             └── api.js         # Pont vers le backend
 ```
-
----
-
-## 🧠 Fonctionnalités Clés
-
-### 1. La Carte Interactive 🗺️
-Visualisation de toutes les annonces. Les marqueurs changent de couleur selon le prix au m², révélant les zones de tension. Les points sont placés intelligemment pour respecter la géographie des quartiers.
-
-### 2. Prédiction de Prix (Machine Learning) 🤖
-L'utilisateur clique sur un point ou entre une surface. L'Oracle prédit le loyer "juste" en se basant sur :
-* La surface.
-* La localisation précise (Latitude/Longitude).
-* La proximité immédiate des 4 Cavaliers (ex: "Ce bien vaut moins cher car il est collé à une boîte de nuit").
-
-### 3. Chatbot Contextuel (LLM) 💬
-Une interface de chat permet de discuter avec l'Oracle.
-* Il connaît le prix moyen réel par quartier (grâce aux données CSV).
-* Il adopte une personnalité cynique et locale.
-* Il utilise le contexte géographique (RAG) pour répondre précisément aux questions comme *"C'est cher la Croix-Rousse ?"*.
