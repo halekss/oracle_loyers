@@ -27,15 +27,23 @@ export const api = {
     }
   },
 
-  // 👇 AJOUTER CETTE FONCTION
-  sendChatMessage: async (message) => {
+  sendChatMessage: async (message, context = null) => {
     try {
       console.log("📤 Envoi message:", message);
+      if (context) {
+        console.log("📊 Avec contexte ML");
+      }
+      
+      const payload = { message };
+      
+      if (context) {
+        payload.context = context;
+      }
       
       const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify(payload),
       });
       
       if (!response.ok) {
@@ -50,5 +58,5 @@ export const api = {
       console.error("❌ Erreur Chat:", error);
       return "🔴 L'Oracle est injoignable. Vérifiez que le backend et LM Studio sont démarrés.";
     }
-  },
+  }
 };
