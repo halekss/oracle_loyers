@@ -8,152 +8,93 @@ import { api } from './services/api';
 function App() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [geoContext, setGeoContext] = useState(null);
-  const [roomFilter, setRoomFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState(''); // 🆕 Pour savoir quel quartier
-  const [chatContext, setChatContext] = useState(null); // 🆕 Contexte pour le chatbot
+  const [error, setError] = useState(null);
+  const [chatContext, setChatContext] = useState(null);
 
-  // Logique de surface par défaut
-  const getSurfaceFromFilter = (filter) => {
-    switch(filter) {
-      case 't1': return 25;
-      case 't2': return 45;
-      case 't3': return 65;
-      case 't4+': return 95;
-      default: return 35;
-    }
-  };
-
-  // 🆕 FONCTION : Construire le contexte pour le chatbot
-  const buildChatContext = (predictionResult, quartier, surface) => {
-    if (!predictionResult) return null;
-
-    const context = `Prix estimé : ${predictionResult.estimated_price} €
-Surface : ${surface} m²
-Prix au m² : ${predictionResult.stats?.prix_m2 || 'N/A'} €/m²
-Ville : ${quartier}
-Méthode : ${predictionResult.stats?.method || 'ML'}`;
-
-    return context;
-  };
-
-  const fetchPrediction = async (lat, lon, filter, quartierName) => {
+  // Fonction déclenchée par le bouton SCAN ou les filtres T1/T2
+  const handleScan = async (quartier, typeLocal) => {
     setLoading(true);
+    setError(null);
+    setResult(null);
+
     try {
-      const surface = getSurfaceFromFilter(filter);
-      const prediction = await api.getPrediction({
-        latitude: lat,
-        longitude: lon,
-        surface: surface,
-        room_filter: filter
-      });
+      // Appel au nouveau endpoint Backend
+      const data = await api.getQuartierStats(quartier, typeLocal);
       
-      setResult(prediction);
+      if (data.found) {
+        // On formate les données pour ResultCard.jsx
+        // ResultCard attend { estimated_price: ..., stats: { prix_m2: ... } }
+        setResult({
+          estimated_price: data.prix_moyen,
+          stats: { prix_m2: data.prix_m2_moyen },
+          quartier: data.quartier_detecte,
+          count: data.count,
+          type: data.type_filtre,
+          // Message d'analyse simple
+          analysis: `Analyse basée sur ${data.count} annonces réelles à ${data.quartier_detecte}.`
+        });
 
-      // 🆕 Construire et stocker le contexte pour le chatbot
-      const context = buildChatContext(prediction, quartierName, surface);
-      setChatContext(context);
+        // Mise à jour du contexte pour le Chatbot
+        setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
 
+      } else {
+        setError(data.message || "Aucun résultat trouvé.");
+      }
     } catch (err) {
       console.error(err);
-      alert("Erreur Oracle : Impossible de récupérer l'estimation.");
+      setError("Erreur lors de l'analyse du secteur.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearch = async (userInput) => {
-    setLoading(true);
-    setSearchQuery(userInput); // 🆕 Stocker la recherche
-    
-    try {
-      const query = userInput.trim() + ", Lyon, France";
-      const geoRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`
-      );
-      const geoData = await geoRes.json();
-      
-      if (!geoData.length) {
-        throw new Error("Adresse introuvable. Essayez 'Ainay' ou 'Croix-Rousse'.");
-      }
-
-      const lat = parseFloat(geoData[0].lat);
-      const lon = parseFloat(geoData[0].lon);
-
-      setGeoContext({ lat, lon });
-      await fetchPrediction(lat, lon, roomFilter, userInput); // 🆕 Passer le nom du quartier
-      
-    } catch (err) {
-      alert(err.message);
-      setLoading(false);
-    }
-  };
-
-  const handleFilterChange = (newFilter) => {
-    setRoomFilter(newFilter);
-    // On relance la prédiction si on a déjà une localisation
-    if (geoContext) {
-      fetchPrediction(geoContext.lat, geoContext.lon, newFilter, searchQuery);
-    }
-  };
-
   return (
-    <div className="h-screen w-screen bg-slate-950 text-slate-200 font-sans flex items-center justify-center overflow-hidden">
+    <div className="flex h-screen w-screen bg-slate-950 text-slate-200 overflow-hidden font-sans selection:bg-purple-500/30">
       
-      <div className="w-[95%] h-[94%] flex flex-col relative">
+      {/* COLONNE GAUCHE (Carte - 60%) */}
+      <div className="w-[60%] h-full relative border-r border-slate-800">
+        <MapComponent />
+      </div>
 
-        {/* HEADER */}
-        <header className="flex-none mb-3 px-2 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]">
-              🔮 ORACLE LOYERS
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Espace pour futurs boutons/infos */}
-          </div>
-        </header>
-
-        {/* MAIN CONTENT */}
-        <main className="flex-1 w-full bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden flex relative ring-1 ring-white/5">
+      {/* COLONNE DROITE (Interface - 40%) */}
+      <div className="w-[40%] h-full flex flex-col bg-slate-900/95 backdrop-blur-md relative z-10">
+        
+        {/* En-tête / Recherche */}
+        <div className="p-5 border-b border-slate-800 bg-slate-950/50 z-20">
+          <h1 className="text-xl font-black tracking-tighter text-white mb-4">
+            ORACLE <span className="text-purple-500">DES LOYERS</span>
+          </h1>
           
-          {/* COLONNE GAUCHE (Carte - 60%) */}
-          <div className="w-[60%] h-full relative border-r border-slate-800">
-            <MapComponent 
-              center={geoContext ? [geoContext.lat, geoContext.lon] : null} 
-            />
-          </div>
-
-          {/* COLONNE DROITE (Dashboard - 40%) */}
-          <div className="w-[40%] h-full flex flex-col bg-slate-900/95 backdrop-blur-md relative z-10">
-            
-            {/* SEARCH & FILTERS */}
-            <div className="p-5 border-b border-slate-800 bg-slate-950/50 z-20">
-              <SearchForm 
-                onSearch={handleSearch} 
-                isLoading={loading}
-                currentFilter={roomFilter}
-                onFilterChange={handleFilterChange} 
-              />
+          <SearchForm 
+            onScan={handleScan} 
+            isLoading={loading} 
+          />
+          
+          {error && (
+            <div className="mt-3 text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
+              {error}
             </div>
+          )}
+        </div>
 
-            {/* RESULTAT */}
-            <div className="shrink-0 p-5 border-b border-slate-800 bg-slate-900/30">
-              <ResultCard data={result} loading={loading} />
-            </div>
+        {/* Résultat */}
+        <div className="shrink-0 p-5 border-b border-slate-800 bg-slate-900/30">
+           <ResultCard data={result} loading={loading} />
+           
+           {result && (
+             <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
+               Données réelles ({result.count} biens)
+             </div>
+           )}
+        </div>
 
-            {/* CHAT - 🆕 Avec contexte automatique */}
-            <div className="flex-1 min-h-0 relative">
-              <ChatOracle 
-                analysis={result?.analysis}
-                context={chatContext}  // 🆕 Passage du contexte
-                quartier={searchQuery}  // 🆕 Nom du quartier
-              />
-            </div>
-
-          </div>
-        </main>
-      
+        {/* Chat */}
+        <div className="flex-1 min-h-0 relative">
+          <ChatOracle 
+            analysis={result?.analysis}
+            context={chatContext}
+          />
+        </div>
       </div>
     </div>
   );

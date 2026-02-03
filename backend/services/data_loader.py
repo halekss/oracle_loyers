@@ -1,48 +1,40 @@
-# backend/services/data_loader.py
 import pandas as pd
 import os
-import requests
 from services.utils import guess_room_count_smart
 
 class DataLoader:
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-        self.immo_path = os.path.join(data_dir, "master_immo_final.csv")
-        self.cav_path = os.path.join(data_dir, "cavaliers_lyon.csv")
-        
-        # Dataframes en mémoire
-        self.df_immo = pd.DataFrame()
-        self.df_cav = pd.DataFrame()
+    def __init__(self, csv_path):
+        self.csv_path = csv_path
+        self.df = None
+        self.load_data()
 
-    def load_csvs(self):
-        print("📂 Chargement des fichiers CSV...")
-        
-        # 1. IMMOBILIER
-        if os.path.exists(self.immo_path):
-            try:
-                df = pd.read_csv(self.immo_path)
-                # Nettoyage et typage
-                for c in ['latitude', 'longitude', 'prix', 'surface']:
-                    if c not in df.columns: df[c] = 0
-                
-                # On retire les points sans coordonnées (Océan)
-                df = df[(df['latitude'] != 0) & (df['longitude'] != 0)]
-                
-                # Calcul pièces intelligent
-                df['nb_pieces'] = df.apply(guess_room_count_smart, axis=1)
-                
-                self.df_immo = df
-                print(f"✅ Immo: {len(self.df_immo)} annonces chargées.")
-            except Exception as e:
-                print(f"❌ Erreur CSV Immo: {e}")
-        else:
-            print("⚠️ CSV Immo introuvable.")
+    def load_data(self):
+        """Charge le CSV en mémoire et applique un nettoyage de base."""
+        if not os.path.exists(self.csv_path):
+            print(f"❌ Erreur : Fichier introuvable {self.csv_path}")
+            return
 
-        # 2. CAVALIERS
-        if os.path.exists(self.cav_path):
-            try:
-                self.df_cav = pd.read_csv(self.cav_path)
-                self.df_cav = self.df_cav[(self.df_cav['latitude'] != 0)]
-                print(f"✅ Cavaliers: {len(self.df_cav)} lieux chargés.")
-            except Exception as e:
-                print(f"❌ Erreur CSV Cavaliers: {e}")
+        try:
+            self.df = pd.read_csv(self.csv_path)
+            
+            # Nettoyage et conversion des types essentiels
+            if 'surface' in self.df.columns:
+                self.df['surface'] = pd.to_numeric(self.df['surface'], errors='coerce')
+            
+            if 'prix' in self.df.columns:
+                self.df['prix'] = pd.to_numeric(self.df['prix'], errors='coerce')
+                
+            # Remplissage intelligent des types manquants
+            if 'type_local' in self.df.columns and 'surface' in self.df.columns:
+                # On applique la fonction seulement là où type_local est manquant
+                mask_missing = self.df['type_local'].isna()
+                self.df.loc[mask_missing, 'type_local'] = self.df.loc[mask_missing, 'surface'].apply(guess_room_count_smart)
+
+            print(f"✅ Données chargées : {len(self.df)} annonces.")
+            
+        except Exception as e:
+            print(f"❌ Erreur lors du chargement des données : {e}")
+
+    def get_data(self):
+        """Renvoie le DataFrame brut."""
+        return self.df

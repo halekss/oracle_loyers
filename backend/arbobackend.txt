@@ -1,0 +1,63 @@
+Structure du dossier
+Le numéro de série du volume est 56DC-7DA5
+C:.
+¦   app.py
+¦   arbobackend.txt
+¦   conversation_manager.py
+¦   Dockerfile
+¦   main.py
+¦   prompt_system.py
+¦   requirements.txt
+¦   smart_agent.py
+¦   
++---core
+¦       constants.py
+¦       __init__.py
+¦       
++---data
+¦       annonces_lyon_century21.csv
+¦       annonces_lyon_orpi.csv
+¦       annonces_lyon_pap.csv
+¦       annonces_lyon_paruvendu.csv
+¦       annonces_lyon_seloger.csv
+¦       base_de_donnees_immo_lyon_complet.csv
+¦       cavaliers_lyon.csv
+¦       conversations.db
+¦       lyon_pred-appartements.csv
+¦       lyon_pred-app_t1_t2.csv
+¦       lyon_pred-app_t3.csv
+¦       lyon_pred-maison.csv
+¦       master_immo_final.csv
+¦       metro_lyon.json
+¦       
++---models
+¦       .gitkeep
+¦       price_predictor.pkl
+¦       
++---scripts
+¦       analyze_impact.py
+¦       clean_immo.py
+¦       data_fusion.py
+¦       enrich_cavaliers_cp.py
+¦       generate_map.py
+¦       test_api.py
+¦       test_prediction.py
+¦       train_model.py
+¦       
++---services
+¦       data_loader.py
+¦       map_generator.py
+¦       utils.py
+¦       __init__.py
+¦       
++---src
+¦   +---api
+¦   ¦       .gitkeep
+¦   ¦       
+¦   +---ml_engine
+¦           .gitkeep
+¦           
++---static
+¦       map_lyon.html
+¦       
++---__pycache__

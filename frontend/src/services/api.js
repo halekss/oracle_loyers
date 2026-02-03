@@ -1,6 +1,19 @@
 const API_URL = "http://localhost:5000/api";
 
 export const api = {
+  // Récupérer les annonces pour la carte
+  getListings: async () => {
+    try {
+      const response = await fetch(`${API_URL}/listings`);
+      if (!response.ok) throw new Error("Erreur listings");
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Erreur Listings:", error);
+      return [];
+    }
+  },
+
+  // Prédiction ML (Feature existante)
   getPrediction: async (searchData) => {
     try {
       const response = await fetch(`${API_URL}/predict`, {
@@ -16,29 +29,31 @@ export const api = {
     }
   },
 
-  getListings: async () => {
+  // NOUVELLE FONCTION : SCAN QUARTIER
+  getQuartierStats: async (quartierName, typeLocal = 'Tout') => {
     try {
-      const response = await fetch(`${API_URL}/listings`);
-      if (!response.ok) throw new Error("Erreur listings");
+      const response = await fetch(`${API_URL}/quartier-stats`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quartier: quartierName,
+          type_local: typeLocal
+        }),
+      });
+      
+      if (!response.ok) throw new Error("Erreur scan quartier");
       return await response.json();
     } catch (error) {
-      console.error("❌ Erreur Listings:", error);
-      return [];
+      console.error("❌ Erreur Scan:", error);
+      throw error;
     }
   },
 
+  // Chatbot
   sendChatMessage: async (message, context = null) => {
     try {
-      console.log("📤 Envoi message:", message);
-      if (context) {
-        console.log("📊 Avec contexte ML");
-      }
-      
       const payload = { message };
-      
-      if (context) {
-        payload.context = context;
-      }
+      if (context) payload.context = context;
       
       const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
@@ -46,17 +61,11 @@ export const api = {
         body: JSON.stringify(payload),
       });
       
-      if (!response.ok) {
-        throw new Error(`Erreur HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log("📥 Réponse reçue:", data.response);
-      
-      return data.response;
+      if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
+      return await response.json();
     } catch (error) {
       console.error("❌ Erreur Chat:", error);
-      return "🔴 L'Oracle est injoignable. Vérifiez que le backend et LM Studio sont démarrés.";
+      return { response: "L'Oracle est indisponible." };
     }
   }
 };

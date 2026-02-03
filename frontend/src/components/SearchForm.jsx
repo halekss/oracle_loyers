@@ -1,22 +1,27 @@
 import React, { useState } from 'react';
 
-export default function SearchForm({ onSearch, isLoading, currentFilter, onFilterChange }) {
+export default function SearchForm({ onScan, isLoading }) {
   const [input, setInput] = useState('');
+  const [currentFilter, setCurrentFilter] = useState('Tout');
 
+  // Soumission du formulaire (Bouton SCAN ou Entrée)
   const handleSubmit = (e) => {
     e.preventDefault();
     if (input.trim()) {
-      onSearch(input);
+      onScan(input, currentFilter);
     }
   };
 
-  const filters = [
-    { id: 'all', label: 'TOUT' },
-    { id: 't1', label: 'T1' },
-    { id: 't2', label: 'T2' },
-    { id: 't3', label: 'T3' },
-    { id: 't4+', label: 'T4+' }, // ✅ Ajout du bouton ici
-  ];
+  // Clic sur un bouton de filtre (T1, T2...)
+  const handleFilterClick = (filterId) => {
+    setCurrentFilter(filterId);
+    // Si l'utilisateur a déjà tapé un quartier, on relance le scan immédiatement
+    if (input.trim()) {
+      onScan(input, filterId);
+    }
+  };
+
+  const filters = ['Tout', 'T1', 'T2', 'T3', 'T4+'];
 
   return (
     <div className="w-full space-y-3">
@@ -26,7 +31,7 @@ export default function SearchForm({ onSearch, isLoading, currentFilter, onFilte
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Adresse, quartier (ex: Ainay)..."
+          placeholder="Entrez un quartier (ex: Ainay)..."
           className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:border-purple-500 transition-colors text-sm placeholder-slate-500"
         />
         <button
@@ -42,15 +47,16 @@ export default function SearchForm({ onSearch, isLoading, currentFilter, onFilte
       <div className="flex gap-2">
         {filters.map((f) => (
           <button
-            key={f.id}
-            onClick={() => onFilterChange(f.id)}
+            key={f}
+            type="button"
+            onClick={() => handleFilterClick(f)}
             className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${
-              currentFilter === f.id
-                ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/50'
-                : 'bg-slate-900 border-slate-800 text-slate-500 hover:bg-slate-800 hover:text-slate-300'
+              currentFilter === f
+                ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/40' // Style Actif
+                : 'bg-transparent border-slate-700 text-slate-400 hover:bg-slate-800' // Style Inactif
             }`}
           >
-            {f.label}
+            {f}
           </button>
         ))}
       </div>
