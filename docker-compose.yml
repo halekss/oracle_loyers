@@ -5,17 +5,16 @@ services:
     container_name: oracle_backend
     ports:
       - "5000:5000"
-    # 👇 CRUCIAL : Permet à Docker d'accéder à LM Studio sur votre Mac/Windows
+    # Permet au conteneur de voir "host.docker.internal" pour taper sur ton LM Studio local
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - ./backend/data:/app/data
-      - /app/__pycache__
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      # URL de LM Studio (le backend utilise cette variable)
+      # URL vers LM Studio sur ta machine (Port 1234 par défaut)
       - LM_STUDIO_URL=http://host.docker.internal:1234/v1/chat/completions
     command: python app.py
     restart: unless-stopped
@@ -28,7 +27,7 @@ services:
       - "5173:5173"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - /app/node_modules # Évite d'écraser les modules si tu as un dossier local
     environment:
       - VITE_API_URL=http://localhost:5000
     depends_on:
