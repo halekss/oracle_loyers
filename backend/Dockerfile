@@ -13,5 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 2. Copie du reste du code
 COPY . .
 
+EXPOSE 5000
+
 # 3. Lancement du serveur (Flask sur le port 5000)
 CMD ["python", "app.py"]
