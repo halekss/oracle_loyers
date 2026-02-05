@@ -1,13 +1,18 @@
-flask
-flask-cors
+# --- Cœur de l'API (Remplaçants de Flask) ---
+fastapi
+uvicorn
+
+# --- Tes outils Data Science (On garde tout !) ---
 pandas
 scikit-learn
 numpy
 scipy
 joblib
+xgboost
+shapely
+
+# --- Utilitaires ---
 requests
 python-multipart
 tqdm
 folium
-shapely
-xgboost

@@ -35,14 +35,17 @@ export default function ChatOracle({ analysis, context, quartier }) {
 
     const userMsg = input.trim();
     
-    // Affiche le message de l'utilisateur tout de suite
-    setMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
+    // On met à jour l'interface tout de suite (Optimistic UI)
+    const newMessages = [...messages, { sender: 'user', text: userMsg }];
+    
+    setMessages(newMessages);
     setInput('');
     setIsLoading(true);
 
     try {
-      // Envoie le message + le contexte (prix, quartier...) au Backend
-      const oracleResponse = await api.sendChatMessage(userMsg, context);
+      // MODIFICATION CRITIQUE : On passe l'historique complet (newMessages)
+      // Cela permet à l'Oracle d'avoir de la mémoire
+      const oracleResponse = await api.sendChatMessage(userMsg, newMessages);
       
       // Affiche la réponse de l'Oracle
       setMessages(prev => [...prev, { sender: 'oracle', text: oracleResponse }]);
@@ -50,7 +53,7 @@ export default function ChatOracle({ analysis, context, quartier }) {
       console.error('❌ Erreur chat:', error);
       setMessages(prev => [...prev, { 
         sender: 'oracle', 
-        text: "⚠️ **Erreur de connexion.** L'Oracle est en pause café (vérifie ton terminal backend)." 
+        text: "⚠️ **Erreur de connexion.** L'Oracle est en pause café (vérifie ton terminal backend sur le port 8000)." 
       }]);
     } finally {
       setIsLoading(false);

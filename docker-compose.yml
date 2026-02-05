@@ -1,23 +1,30 @@
 services:
-  # --- SERVICE BACKEND (Python/Flask) ---
+  # --- SERVICE BACKEND (Python/FastAPI) ---
   backend:
     build: ./backend
     container_name: oracle_backend
     ports:
-      - "5000:5000"
-    # 👇 CRUCIAL : Permet à Docker d'accéder à LM Studio sur votre Mac/Windows
+      - "5000:5000"  # On garde le port 5000 comme tu le souhaites
+    
+    # 👇 CRUCIAL : Permet à Docker de parler à LM Studio sur le Mac
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    
     volumes:
-      - ./backend:/app
-      - ./backend/data:/app/data
+      - ./backend:/app       # On synchronise le code pour le rechargement auto
+      - ./backend/data:/app/data  # On s'assure que le dossier data est bien monté
+      # On évite de synchroniser les caches Python locaux vers Docker
       - /app/__pycache__
+    
     environment:
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
-      # URL de LM Studio (le backend utilise cette variable)
+      # On pointe vers l'adresse interne de Docker pour LM Studio
       - LM_STUDIO_URL=http://host.docker.internal:1234/v1/chat/completions
-    command: python app.py
+      - PYTHONPATH=/app
+
+    # 👇 LA CORRECTION EST ICI : On lance Uvicorn (FastAPI) au lieu de python app.py
+    # --reload permet de mettre à jour le code sans redémarrer le conteneur
+    command: uvicorn main:app --host 0.0.0.0 --port 5000 --reload
+    
     restart: unless-stopped
 
   # --- SERVICE FRONTEND (React/Vite) ---
@@ -30,6 +37,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
+      # L'URL doit être localhost car c'est le navigateur de l'utilisateur qui fait la requête
       - VITE_API_URL=http://localhost:5000
     depends_on:
       - backend

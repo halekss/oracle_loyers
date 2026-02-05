@@ -204,7 +204,6 @@ class MapGenerator:
         hack_script = """
         <style>
             .leaflet-control-layers { display: none !important; }
-           
             /* Tooltip Sombre Minimaliste */
             .leaflet-tooltip {
                 background-color: rgba(30, 41, 59, 0.95) !important;

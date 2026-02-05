@@ -1,18 +1,19 @@
 # backend/main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import requests
+import pandas as pd
 
-# Import des services qu'on vient de créer
+# Import des services
 from services.data_loader import DataLoader
 from services.map_generator import MapGenerator
 
-app = FastAPI()
+app = FastAPI(title="Immotep API", version="Final")
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION CORS ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,129 +22,143 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Chemins (Gestion Docker et Local)
+# --- CHEMINS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "../data")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 if not os.path.exists(DATA_DIR):
-    DATA_DIR = "/app/data" # Fallback Docker
+    DATA_DIR = "/app/data"
 
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# --- INSTANCIATION DES SERVICES ---
-# On crée les objets une seule fois
+# --- INSTANCIATION DES SERVICES (CORRIGÉE) ---
+print(f"📂 Data Dir: {DATA_DIR}")
+print(f"📂 Static Dir: {STATIC_DIR}")
+
 data_loader = DataLoader(DATA_DIR)
-map_generator = MapGenerator(STATIC_DIR)
+
+# 👇 FIX : On donne à manger les deux dossiers au générateur de carte
+try:
+    map_generator = MapGenerator(DATA_DIR, STATIC_DIR)
+except TypeError:
+    # Fallback si ton MapGenerator n'attend qu'un seul argument (dépend de ton fichier service)
+    print("⚠️ MapGenerator n'attendait qu'un argument, on s'adapte.")
+    map_generator = MapGenerator(STATIC_DIR)
+
+
+# Variable globale pour le contexte Chatbot
+CONTEXTE_IMMOBILIER = ""
 
 # --- AU DÉMARRAGE ---
 @app.on_event("startup")
 def startup_event():
-    print("🚀 Démarrage Oracle Backend (Architecture Modulaire)...")
+    global CONTEXTE_IMMOBILIER
+    print("🚀 Démarrage Oracle Backend...")
     
-    # 1. Charger les données (CSV + API)
-    data_loader.load_csvs()
-    data_loader.fetch_tcl_api()
+    # 1. Chargement pour la Carte
+    try:
+        data_loader.load_csvs()
+        # On passe le data_loader au generateur
+        map_generator.generate(data_loader)
+    except Exception as e:
+        print(f"⚠️ Warning Services: {e}")
+
+    # 2. Chargement pour le Chatbot
+    print("🔍 Préparation du cerveau d'Immotep...")
+    target_file = None
+    if os.path.exists(DATA_DIR):
+        for file in os.listdir(DATA_DIR):
+            if file.endswith(".csv"):
+                target_file = os.path.join(DATA_DIR, file)
+                break
     
-    # 2. Générer la carte avec les données chargées
-    map_generator.generate(data_loader)
+    if target_file:
+        try:
+            df = pd.read_csv(target_file, sep=',')
+            nb_max = 60
+            if len(df) > nb_max:
+                df = df.sample(nb_max)
+            
+            liste_compacte = ""
+            for index, row in df.iterrows():
+                try:
+                    id_a = row.get('id_annonce', index)
+                    quartier = str(row.get('quartier', 'Inconnu'))
+                    prix = float(row.get('prix', row.get('loyer', 0)))
+                    surf = float(row.get('surface', 0))
+                    type_b = row.get('type_local', row.get('type', '?'))
+                    if prix > 0 and surf > 0:
+                        liste_compacte += f"[ID:{id_a}] {type_b} | {quartier} | {prix}€ | {surf}m²\n"
+                except: continue
+            
+            CONTEXTE_IMMOBILIER = liste_compacte
+            print(f"📦 Immotep est prêt ({len(liste_compacte)} caractères chargés).")
+        except Exception as e:
+            print(f"❌ Erreur lecture CSV Chat : {e}")
+            CONTEXTE_IMMOBILIER = "Erreur chargement données."
+    else:
+        print(f"⚠️ Aucun fichier CSV trouvé dans {DATA_DIR}")
 
 # --- ROUTES API ---
 
 class ChatRequest(BaseModel):
     message: str
-class AnalysisRequest(BaseModel):
-    address: str
+    history: list = []
 
-@app.post("/api/analyze/vice")
-def analyze_vice(request: AnalysisRequest):
-    return {"verdict": "Analyse OK", "stats": {}, "market_analysis": {}, "top_annonces": []}
+class QuartierRequest(BaseModel):
+    quartier: str
+    type_local: str = "Tout"
 
-@app.post("/api/chat")
-async def chat_with_oracle(request: ChatRequest):
-    LM_STUDIO_URL = "http://host.docker.internal:1234/v1/chat/completions"
-    payload = {
-        "model": "mistralai/mistral-7b-instruct-v0.3",
-        "messages": [{"role": "system", "content": "Tu es l'Oracle."}, {"role": "user", "content": request.message}]
-    }
-    try:
-        r = requests.post(LM_STUDIO_URL, json=payload, timeout=45)
-        r.raise_for_status()
-        return {"response": r.json()['choices'][0]['message']['content']}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/api/listings")
+def get_listings():
+    if hasattr(data_loader, 'df_main') and data_loader.df_main is not None:
+        return data_loader.df_main.head(100).fillna("").to_dict(orient="records")
+    return []
+
+@app.post("/api/quartier-stats")
+def get_quartier_stats(req: QuartierRequest):
+    return {"quartier": req.quartier, "prix_m2": 0, "verdict": "Analyse en cours...", "ambiance": "Inconnue"}
 
 @app.post("/api/chat")
 async def chat_with_oracle(request: ChatRequest):
-    """Route pour discuter avec l'Oracle via LM Studio."""
-    # Utilisation de host.docker.internal pour accéder au localhost du Mac depuis Docker
     LM_STUDIO_URL = "http://host.docker.internal:1234/v1/chat/completions"
     
+    system_prompt = """
+    Tu es Immotep, l'agent immobilier le plus désagréable et cynique de Lyon.
+    RÈGLE D'OR : UN SEUL FORMAT AUTORISÉ.
+    
+    FORMAT DE RÉPONSE OBLIGATOIRE :
+    --------------------------------------------------
+    LE CANDIDAT : [Type] à [Quartier]
+    PRIX : [Prix]€ pour [Surface]m²
+    VERDICT : [Paragraphe sarcastique et mordant.]
+    --------------------------------------------------
+    """
+
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.append({"role": "user", "content": f"Base chargée :\n{CONTEXTE_IMMOBILIER}\n\nSois désagréable et précis."})
+    if request.history: messages.extend(request.history[-4:])
+    
+    consigne = " (Utilise UNIQUEMENT le format 'LE CANDIDAT'. Sois sarcastique.)"
+    messages.append({"role": "user", "content": request.message + consigne})
+
     payload = {
-    "model": "qwen2.5-7b-instruct-1m",  # ← Nom exact de votre modèle
-    "messages": [
-        {
-            "role": "system", 
-            "content": """Tu es l'Oracle des Loyers de Lyon, un expert immobilier cynique et sarcastique.
-
-Tu analyses les biens immobiliers en révélant les vérités cachées du marché avec les "4 Cavaliers" :
-- La Gentrification (cafés hipsters, magasins bio, studios de yoga)
-- Le Vice (kebabs, PMU, sex-shops)
-- La Nuisance (bars de nuit, axes routiers, terrasses bruyantes)
-- La Superstition (cimetières, hôpitaux, pompes funèbres)
-
-Ton style : Direct, sardonique, mais toujours factuel. Tu expliques pourquoi un prix est justifié avec un humour noir.
-IMPORTANT : Réponds en 3-4 phrases maximum pour être percutant."""
-        },
-        {"role": "user", "content": request.message}
-    ],
-    "temperature": 0.8,
-    "max_tokens": 200  # ← Réduit de 600 à 200 pour des réponses 3x plus rapides
-}
+        "model": "dolphin-2.9.3-mistral-nemo-12b",
+        "messages": messages,
+        "temperature": 0.5,
+        "max_tokens": 600,
+        "stream": False
+    }
 
     try:
-        print(f"🔄 Envoi à LM Studio via {LM_STUDIO_URL}")
-        print(f"📦 Payload : {payload}")
-        
-        response = requests.post(LM_STUDIO_URL, json=payload, timeout=60)
-        
-        print(f"📥 Status Code : {response.status_code}")
-        print(f"📥 Réponse brute : {response.text[:300]}...")
-        
-        response.raise_for_status()
-        data = response.json()
-        
-        # Extraction de la réponse de l'Oracle
-        oracle_response = data['choices'][0]['message']['content']
-        print(f"✅ Réponse Oracle : {oracle_response[:100]}...")
-        
-        return {"response": oracle_response}
-        
-    except requests.exceptions.ConnectionError as e:
-        print(f"❌ Impossible de se connecter à LM Studio : {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail="LM Studio n'est pas accessible. Vérifiez que le serveur tourne et que docker-compose.yml contient 'extra_hosts'."
-        )
-        
-    except requests.exceptions.Timeout as e:
-        print(f"❌ Timeout LM Studio : {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail="LM Studio met trop de temps à répondre (>60s). Le modèle est peut-être trop lent."
-        )
-        
-    except KeyError as e:
-        print(f"❌ Format de réponse invalide : {e}")
-        print(f"📥 Réponse complète : {response.text}")
-        raise HTTPException(
-            status_code=500, 
-            detail="Format de réponse LM Studio invalide. Vérifiez que le modèle est bien chargé."
-        )
-        
+        r = requests.post(LM_STUDIO_URL, json=payload, timeout=60)
+        if r.status_code == 200:
+            content = r.json()['choices'][0]['message']['content']
+            clean_content = content.replace("ID:", "").replace("[", "").replace("]", "").strip()
+            return {"response": clean_content}
+        else:
+            return {"response": f"Erreur IA ({r.status_code})."}
     except Exception as e:
-        print(f"❌ Erreur inattendue : {type(e).__name__} - {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Erreur Oracle : {str(e)}"
-        )
+        print(f"Erreur connexion : {e}")
+        return {"response": "Immotep dort (Problème connexion Docker)."}

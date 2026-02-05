@@ -1,11 +1,11 @@
+// On remet le port 5000 ici
 const API_URL = "http://localhost:5000/api";
 
 export const api = {
-  // Récupérer les annonces pour la carte
   getListings: async () => {
     try {
-      const response = await fetch(`${API_URL}/listings`);
-      if (!response.ok) throw new Error("Erreur listings");
+      const response = await fetch(`${API_URL}/listings`); 
+      if (!response.ok) return [];
       return await response.json();
     } catch (error) {
       console.error("❌ Erreur Listings:", error);
@@ -13,59 +13,40 @@ export const api = {
     }
   },
 
-  // Prédiction ML (Feature existante)
-  getPrediction: async (searchData) => {
-    try {
-      const response = await fetch(`${API_URL}/predict`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(searchData),
-      });
-      if (!response.ok) throw new Error("Erreur serveur Oracle");
-      return await response.json();
-    } catch (error) {
-      console.error("❌ Erreur API Predict:", error);
-      throw error;
-    }
-  },
-
-  // NOUVELLE FONCTION : SCAN QUARTIER
   getQuartierStats: async (quartierName, typeLocal = 'Tout') => {
     try {
       const response = await fetch(`${API_URL}/quartier-stats`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          quartier: quartierName,
-          type_local: typeLocal
-        }),
+        body: JSON.stringify({ quartier: quartierName, type_local: typeLocal }),
       });
-      
-      if (!response.ok) throw new Error("Erreur scan quartier");
+      if (!response.ok) throw new Error("Erreur scan");
       return await response.json();
+    // eslint-disable-next-line no-unused-vars
     } catch (error) {
-      console.error("❌ Erreur Scan:", error);
-      throw error;
+      return { prix_m2: 0, ambiance: "Inconnue", verdict: "Erreur serveur" };
     }
   },
 
-  // Chatbot
-  sendChatMessage: async (message, context = null) => {
+  sendChatMessage: async (message, history = []) => {
     try {
-      const payload = { message };
-      if (context) payload.context = context;
-      
+      const formattedHistory = Array.isArray(history) 
+        ? history.filter(msg => msg.text && !msg.text.includes("L'Oracle t'écoute"))
+                .map(msg => ({ role: msg.sender === 'oracle' ? 'assistant' : 'user', content: msg.text }))
+        : [];
+
       const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ message: message, history: formattedHistory }),
       });
       
       if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
-      return await response.json();
+      const data = await response.json();
+      return data.response; 
     } catch (error) {
       console.error("❌ Erreur Chat:", error);
-      return { response: "L'Oracle est indisponible." };
+      return "💤 Immotep dort. (Vérifie que le backend tourne sur le port 5000).";
     }
   }
 };
