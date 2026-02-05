@@ -3,8 +3,7 @@ import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from services.data_loader import DataLoader
-from services.map_generator import MapGenerator
-from services.utils import format_prediction_response
+from services.chat_service import ChatService
 import joblib
 
 # Initialisation de l'application
@@ -19,8 +18,9 @@ MODEL_PATH = os.path.join(BASE_DIR, 'models', 'price_predictor.pkl')
 # Chargement des services
 print("Chargement des données...")
 data_loader = DataLoader(DATA_PATH)
-# On initialise le générateur de carte (optionnel ici si géré par endpoint statique)
-# map_generator = MapGenerator(data_loader.get_data())
+
+print("Initialisation d'Immotep (Service Chat)...")
+chat_service = ChatService()
 
 # Chargement du modèle IA (XGBoost)
 print("Chargement du modèle IA...")
@@ -141,8 +141,27 @@ def predict():
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    """Route pour le Chatbot"""
-    return jsonify({"response": "L'Oracle est silencieux pour le moment."})
+    """Route pour le Chatbot Immotep"""
+    try:
+        data = request.json
+        # On récupère le message utilisateur et le contexte envoyé par le front
+        user_msg = data.get('message', '')
+        context = data.get('context', '') 
+
+        if not user_msg:
+            return jsonify({"response": "Silence... Tu n'as rien à dire ?"}), 400
+
+        # On récupère le DataFrame complet
+        df = data_loader.get_data()
+
+        # On appelle le service dédié qui gère le prompt et Llama
+        reponse_immotep = chat_service.get_response(user_msg, context, df)
+
+        return jsonify({"response": reponse_immotep})
+
+    except Exception as e:
+        print(f"Erreur Chat: {e}")
+        return jsonify({"response": "J'ai eu un bug interne. C'est sûrement ta faute."}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

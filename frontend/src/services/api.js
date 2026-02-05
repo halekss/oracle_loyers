@@ -29,7 +29,7 @@ export const api = {
     }
   },
 
-  // NOUVELLE FONCTION : SCAN QUARTIER
+  // SCAN QUARTIER
   getQuartierStats: async (quartierName, typeLocal = 'Tout') => {
     try {
       const response = await fetch(`${API_URL}/quartier-stats`, {
@@ -49,7 +49,7 @@ export const api = {
     }
   },
 
-  // Chatbot
+  // Chatbot (MODIFIÉ POUR MARCHER AVEC CHATORACLE.JSX)
   sendChatMessage: async (message, context = null) => {
     try {
       const payload = { message };
@@ -62,10 +62,13 @@ export const api = {
       });
       
       if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
-      return await response.json();
+      
+      const data = await response.json();
+      return data.response; // <--- ICI : On renvoie seulement le texte, pas l'objet JSON
+      
     } catch (error) {
       console.error("❌ Erreur Chat:", error);
-      return { response: "L'Oracle est indisponible." };
+      throw error; // On renvoie l'erreur au composant pour qu'il affiche l'alerte rouge
     }
   }
 };
