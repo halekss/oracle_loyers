@@ -3,8 +3,6 @@ import re
 import os
 
 # --- 0. CONFIGURATION DES CHEMINS ---
-# Le script est dans backend/scripts/
-# On remonte d'un niveau (..) pour aller dans backend/data/
 script_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(script_dir, '..', 'data')
 
@@ -40,42 +38,33 @@ def extract_postal_code(text):
 
 def extract_type(text):
     """Détermine le type de bien (Maison, Appartement, Studio, Coloc)."""
-    if pd.isna(text): return "Appartement" # Valeur par défaut statistique
+    if pd.isna(text): return "Appartement"
     text = str(text).lower()
-    
-    # Ordre de priorité important (Coloc avant Appartement par ex)
     if 'colocation' in text: return 'Colocation'
     if 'maison' in text or 'villa' in text: return 'Maison'
     if 'studio' in text: return 'Studio'
     if 'parking' in text or 'garage' in text or 'box' in text: return 'Parking'
     if 'local' in text or 'bureau' in text or 'commercial' in text: return 'Local/Bureau'
-    
     return 'Appartement'
 
 def format_description(text):
     """Nettoie la description pour l'affichage final."""
     if pd.isna(text): return ""
     text = str(text).strip()
-    
-    # Extraction Pièces / Chambres
     prefix = []
     match_p = re.search(r'(T\d|\d+\s*pi[èe]ce)', text, re.IGNORECASE)
     if match_p: prefix.append(match_p.group(1).capitalize())
-    
     match_ch = re.search(r'(\d+\s*chambre)', text, re.IGNORECASE)
     if match_ch: prefix.append(match_ch.group(1).lower())
     
-    # Nettoyage geo
     clean = re.sub(r'(?i)lyon', '', text)
     clean = re.sub(r'69\d{3}', '', clean)
     clean = re.sub(r'\b\d{1,2}(?:er|e|eme|ème)\b', '', clean)
     if match_p: clean = clean.replace(match_p.group(0), '')
     if match_ch: clean = clean.replace(match_ch.group(0), '')
     
-    # Finition
     clean = clean.replace('Appartement', '').replace('Location', '').replace('à louer', '')
     clean = re.sub(r'\s+', ' ', clean).strip(' -.,')
-    
     result = " - ".join(prefix + [clean]) if clean else " - ".join(prefix)
     return re.sub(r'\s*-\s*', ' - ', result).strip(' -')
 
@@ -93,31 +82,25 @@ def run_fusion():
     dfs = []
     print("\n🏗️  DÉMARRAGE DE LA FUSION...\n")
 
+    # 1. FICHIERS CLASSIQUES
     for config in fichiers_config:
-        # Construction du chemin absolu pour chaque fichier
         fichier = os.path.join(data_dir, config['file'])
-        
         if os.path.exists(fichier):
             df = pd.read_csv(fichier)
             print(f"--- {config['site']} ---")
 
-            # A. Création des colonnes standardisées
             new_df = pd.DataFrame()
             new_df['site'] = [config['site']] * len(df)
             new_df['url'] = df[config['col_url']]
             new_df['prix'] = df[config['col_prix']].apply(clean_price_integer)
             
-            # Concaténation Description pour analyse
             full_desc = df[config['text_cols'][0]].fillna('')
             if len(config['text_cols']) > 1:
                 for col in config['text_cols'][1:]:
                     full_desc += " " + df[col].fillna('')
             new_df['description_raw'] = full_desc
-            
-            # Détection du TYPE
             new_df['type'] = full_desc.apply(extract_type)
             
-            # Surface & CP
             if config['site'] == 'Orpi':
                 new_df['surface'] = full_desc.apply(clean_surface)
                 new_df['code_postal'] = full_desc.apply(extract_postal_code)
@@ -128,72 +111,92 @@ def run_fusion():
             new_df['ville'] = 'Lyon'
             new_df['description'] = new_df['description_raw'].apply(format_description)
 
-            # B. Dédoublonnage Spécifique
-            nb_avant = len(new_df)
-            
+            # AJOUT: Colonnes vides pour s'aligner avec Vizzit
+            new_df['latitude'] = None
+            new_df['longitude'] = None
+
+            # Dédoublonnage
             if config['site'] == 'Century 21':
                 new_df = new_df.drop_duplicates(subset=['prix', 'surface', 'description_raw'])
-            elif config['site'] == 'Orpi':
-                new_df = new_df.drop_duplicates(subset=['url'])
             else:
                 new_df = new_df.drop_duplicates(subset=['url'])
                 
-            diff = nb_avant - len(new_df)
-            if diff > 0: print(f"   ✂️  {diff} doublons supprimés.")
-
-            # C. Nettoyage final
             new_df = new_df.dropna(subset=['prix'])
-            
             dfs.append(new_df)
             print(f"   ✅ Ajouté : {len(new_df)} annonces")
 
-        else:
-            print(f"❌ Fichier introuvable : {fichier}")
+    # 2. VIZZIT (NOUVEAU BLOC)
+    vizzit_file = os.path.join(data_dir, 'annonces_lyon_vizzit_geoloc_complete.csv')
+    if os.path.exists(vizzit_file):
+        print(f"--- Vizzit (GPS) ---")
+        df_v = pd.read_csv(vizzit_file)
+        
+        v_df = pd.DataFrame()
+        v_df['site'] = ['Vizzit'] * len(df_v)
+        v_df['url'] = df_v['Lien']
+        v_df['prix'] = df_v['Prix'].apply(clean_price_integer)
+        
+        # Mapping spécifique Vizzit
+        v_df['description_raw'] = df_v['Details']
+        v_df['type'] = df_v['Details'].apply(extract_type)
+        v_df['surface'] = df_v['Details'].apply(clean_surface)
+        v_df['code_postal'] = df_v['Lieu'].apply(extract_postal_code)
+        v_df['ville'] = 'Lyon'
+        v_df['description'] = df_v['Details'].apply(format_description)
+        
+        # GPS PRÉCIS
+        v_df['latitude'] = df_v['Lat']
+        v_df['longitude'] = df_v['Lon']
+        
+        v_df = v_df.drop_duplicates(subset=['url'])
+        v_df = v_df.dropna(subset=['prix'])
+        
+        dfs.append(v_df)
+        print(f"   ✅ Ajouté : {len(v_df)} annonces (avec GPS)")
 
-    # --- 3. FUSION ET EXPORT (C'est la partie qu'il te manquait) ---
+    # --- 3. FUSION ET EXPORT ---
     if dfs:
         master_df = pd.concat(dfs, ignore_index=True)
         
-        # 👇👇👇 AJOUTE CE BLOC ICI 👇👇👇
-        print(f"Total avant nettoyage outliers : {len(master_df)}")
-        # On supprime les annonces avec un loyer > 10 000 € (nettoie ton erreur à 99k€)
+        # Nettoyage global
         master_df = master_df[master_df['prix'] < 3500]
-
-        # 2. On vire les "fausses" annonces pas chères (Colocations mal référencées)
-        # Logique : Si le loyer est < 800€ MAIS que la surface est > 60m², c'est louche (c'est sûrement une coloc)
         condition_coloc = (master_df['prix'] < 800) & (master_df['surface'] > 60)
-        master_df = master_df[~condition_coloc] # Le tilde ~ signifie "inverse" (donc on garde ce qui N'EST PAS une coloc)
-
-        # 3. On vire les surfaces minuscules (erreurs de saisie, ex: 1m²)
+        master_df = master_df[~condition_coloc]
         master_df = master_df[master_df['surface'] > 9]
         
-        print(f"Total après nettoyage : {len(master_df)}")
-        # 👆👆👆 FIN DU BLOC À AJOUTER 👆👆👆
-
         # Calcul Prix m2
         master_df['prix_m2'] = master_df.apply(
             lambda row: round(row['prix'] / row['surface'], 2) if row['surface'] and row['surface'] > 9 else None, axis=1
         )
+
+        # --- Suppression des doublons inter-sites (Vizzit vs autres sites) ---
+        # On trie pour mettre les annonces avec coordonnées GPS en haut de la liste
+        master_df = master_df.sort_values(by=['latitude', 'longitude'], na_position='last')
+        
+        # On définit les colonnes pour identifier un doublon
+        colonnes_cles = ['prix', 'surface', 'prix_m2', 'type', 'code_postal']
+        
+        # On supprime les doublons en gardant la première occurrence (celle avec GPS grâce au tri)
+        master_df = master_df.drop_duplicates(subset=colonnes_cles, keep='first')
 
         # ID Unique
         master_df.index = master_df.index + 1
         master_df.reset_index(inplace=True)
         master_df = master_df.rename(columns={'index': 'id_annonce'})
 
-        # ORDRE DES COLONNES
-        cols = ['id_annonce', 'site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'url']
+        # ORDRE DES COLONNES (Avec Latitude/Longitude)
+        cols = ['id_annonce', 'site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'latitude', 'longitude', 'url']
         master_df = master_df[cols]
 
-        # SAUVEGARDE DU FICHIER FINAL
         output_file = os.path.join(data_dir, 'base_de_donnees_immo_lyon_complet.csv')
         master_df.to_csv(output_file, index=False, encoding='utf-8-sig')
         
         print("\n" + "="*50)
         print(f"🎉 FUSION TERMINÉE ! Fichier généré : {output_file}")
-        print(f"📊 Total : {len(master_df)} annonces.")
+        print(f"📊 Total après dédoublonnage : {len(master_df)} annonces.")
         print("="*50)
     else:
-        print("❌ Aucun fichier n'a été traité, aucune fusion effectuée.")
+        print("❌ Aucun fichier n'a été traité.")
 
 if __name__ == "__main__":
     run_fusion()

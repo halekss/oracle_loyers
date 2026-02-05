@@ -97,6 +97,17 @@ def step_geocoding(df):
     
     lats, lons = [], []
     for _, row in df.iterrows():
+        # --- MODIFICATION START : Si coordonnées présentes (Vizzit), on garde ---
+        if pd.notna(row.get('latitude')) and pd.notna(row.get('longitude')) and row.get('latitude') != "" and row.get('longitude') != "":
+             try:
+                lats.append(float(row['latitude']))
+                lons.append(float(row['longitude']))
+                continue # On passe à la ligne suivante
+             except:
+                pass # Si erreur conversion, on génère
+        # --- MODIFICATION END ---
+
+        # Sinon (pas de coords), on génère comme avant
         lat, lon = get_point_for_zipcode(row['code_postal'])
         lats.append(lat)
         lons.append(lon)
