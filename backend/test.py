@@ -1,87 +1,111 @@
 import pandas as pd
+import spacy
 import re
 
-# Chargement
-df = pd.read_csv('data/annonces_lyon_vizzit.csv')
+# ---------------------------------------------------------
+# 1. CHARGEMENT DU MODÈLE NLP
+# ---------------------------------------------------------
+print("Chargement du modèle SpaCy (fr_core_news_lg)...")
+try:
+    nlp = spacy.load("fr_core_news_lg")
+except OSError:
+    print("Modèle 'lg' non trouvé, essai avec 'sm'...")
+    nlp = spacy.load("fr_core_news_sm")
 
-# Configuration
-# Ajout du 'r' devant les abréviations qui contiennent un '\'
-way_types = [
-    "Rue", r"R\.", "Avenue", r"Av\.", "Boulevard", "Bd", "Place", r"Pl\.",
-    "Allée", "Cours", "Chemin", "Montée", "Route", "Quai", "Impasse"
+# ---------------------------------------------------------
+# 2. CONFIGURATION DES MOTS-CLÉS & REGEX
+# ---------------------------------------------------------
+# Vocabulaire élargi pour aider le filtre post-NER
+street_keywords = [
+    "rue", "avenue", "boulevard", "bd", "place", "allée", "cours", "chemin", 
+    "montée", "route", "quai", "impasse", "passage", "esplanade", "promenade", 
+    "grande rue", "faubourg", "villa", "cité", "ruelle", "corniche"
 ]
-way_types_pattern = "|".join(way_types)
 
-# Mots déclenchant l'exclusion (s'ils précèdent l'adresse)
-forbidden_prefixes = ["proche", "près", "angle", "vue sur", "donnant sur", "côté", "face à", "quartier", "secteur"]
+# Regex strict (le même qu'avant, mais avec le vocabulaire enrichi)
+way_pattern = "|".join([re.escape(k) for k in street_keywords] + [r"r\.", r"av\.", r"pl\.", r"bd\."])
+regex_full = rf"\b(?P<num>\d+(?:bis|ter|[a-z])?)[\s,]+(?P<type>{way_pattern})\s+(?P<name>[A-ZÀ-Ÿ0-9].*?)(?=[,.]|$|\s(?:au|à|en|dans|proche|situé))"
 
-# Mots marquant la fin de l'adresse (stop words)
-stop_words_list = [
-    r"\.", r",", r";", r":", r"!", r"\?", r"\(", r"\)", 
-    r"\slyon\b", r"\svilleurbanne\b", r"\s69\d{3}", 
-    r"\sau\s", r"\sà\s", r"\sen\s", r"\sdans\s", r"\savec\s", r"\spour\s", r"\set\s", 
-    r"\sproche\s", r"\ssitué\s", r"\sface\s", r"\sdonnant\s", r"\svue\s", r"\scôté\s", 
-    r"\smétro\s", r"\stram\s", r"\sbus\s", r"\scommerces\s", r"\srefait\s", 
-    r"\st[1-9]\b", r"\sf[1-9]\b", r"\sdispo", r"\sloyer", r"\s\-\s"
-]
-stop_words_pattern = re.compile("|".join(stop_words_list), re.IGNORECASE)
+# Mots d'exclusion contextuelle (pour éviter "Proche de la rue X")
+forbidden_context = ["proche", "près", "angle", "vue sur", "face à", "quartier", "secteur", "métro", "tram", "gare"]
 
-def extract_address_v3(text):
+# ---------------------------------------------------------
+# 3. FONCTIONS D'EXTRACTION
+# ---------------------------------------------------------
+
+def is_context_safe(text, start_index):
+    """Vérifie si le texte précédant l'adresse contient des mots interdits (proche, vue, etc.)"""
+    window = text[max(0, start_index-30):start_index].lower()
+    
+    # Vérification des distances (ex: "à 5 min")
+    if re.search(r"à\s+\d+\s*(?:min|m\b)", window):
+        return False
+        
+    for word in forbidden_context:
+        # Vérifie si le mot interdit est juste avant (ex: "proche du")
+        if re.search(rf"{word}\s*(?:du|de|des|le|la|l')?\s*$", window):
+            return False
+    return True
+
+def extract_address_hybrid(text):
     if pd.isna(text):
         return "NaN"
     
-    text_clean = re.sub(r'\s+', ' ', text)
+    clean_text = re.sub(r'\s+', ' ', text) # Nettoyage espaces
     
-    # 1. Trouver le DÉBUT d'une adresse potentielle : (Numéro optionnel) + Type de voie
-    # Ex: "12 Rue", "Boulevard", "10 bis Avenue"
-    start_pattern = rf"\b(?:(?P<num>\d+(?:bis|ter|quater|[a-z])?)[\s,]+)?(?P<type>{way_types_pattern})\b"
+    # --- PHASE 1 : REGEX STRICT (Haute Précision) ---
+    match = re.search(regex_full, clean_text, re.IGNORECASE)
+    if match:
+        if is_context_safe(clean_text, match.start()):
+            return match.group(0).strip()
     
-    for match in re.finditer(start_pattern, text_clean, re.IGNORECASE):
-        start_idx = match.start()
-        end_idx = match.end()
-        
-        # 2. Vérification du contexte (Exclusion)
-        # On regarde les 40 caractères précédents pour voir s'il y a une mention interdite
-        preceding = text_clean[max(0, start_idx-40):start_idx].lower()
-        is_forbidden = False
-        
-        # Cas : "à 5 min", "à 100 m"
-        if re.search(r"à\s+\d+\s*(?:min|m\b|km)", preceding):
-            is_forbidden = True
+    # --- PHASE 2 : NLP SPACY (Rattrapage Intelligent) ---
+    # Si le regex n'a rien trouvé, on lance l'IA
+    doc = nlp(clean_text)
+    
+    candidate_addresses = []
+    
+    for ent in doc.ents:
+        # On ne s'intéresse qu'aux Lieux (LOC)
+        if ent.label_ == "LOC":
+            ent_text = ent.text.strip()
+            ent_lower = ent_text.lower()
             
-        if not is_forbidden:
-            for prefix in forbidden_prefixes:
-                # Vérifie si le texte précédent FINIT par le préfixe interdit
-                # (ex: "proche du ", "angle de la ")
-                if re.search(rf"{re.escape(prefix)}\s*(?:du|de|des|le|la|l'|d')?\s*$", preceding):
-                    is_forbidden = True
-                    break
-        
-        if is_forbidden:
-            continue
+            # FILTRE 1 : Doit contenir un mot-clé de rue (pour éviter "Lyon", "Rhône", "Part-Dieu")
+            # Ou commencer par un chiffre (ex: "12 Gambetta")
+            has_street_keyword = any(k in ent_lower for k in street_keywords)
+            starts_with_digit = re.match(r"^\d+", ent_text)
             
-        # 3. Extraction du Nom de la voie
-        # On prend le texte après le type de voie et on coupe au premier "stop word"
-        rest_of_text = text_clean[end_idx:]
-        if not rest_of_text:
-            continue
-            
-        split_match = stop_words_pattern.search(rest_of_text)
-        if split_match:
-            name_part = rest_of_text[:split_match.start()]
-        else:
-            name_part = rest_of_text
-            
-        name_part = name_part.strip()
-        
-        # Validation finale (longueur min/max)
-        if len(name_part) < 2 or len(name_part) > 50:
-            continue
-            
-        return f"{match.group(0).strip()} {name_part}"
-        
+            if (has_street_keyword or starts_with_digit) and len(ent_text) > 4:
+                # FILTRE 2 : Vérification contextuelle (pas de "proche de", "vue sur")
+                # On cherche la position de l'entité dans le texte original
+                start_idx = clean_text.find(ent.text)
+                if start_idx != -1 and is_context_safe(clean_text, start_idx):
+                     # FILTRE 3 : Exclusion des noms trop génériques ou villes seules
+                    if ent_lower not in ["lyon", "villeurbanne", "le rhône", "france"]:
+                        candidate_addresses.append(ent_text)
+
+    # Si on a trouvé des candidats via NLP, on prend le premier (souvent le plus pertinent)
+    if candidate_addresses:
+        return candidate_addresses[0]
+
     return "NaN"
 
-# Application
-df['Adresse_Extraite'] = df['Description_A_Propos'].apply(extract_address_v3)
-df.to_csv('annonces_lyon_vizzit_cleaned.csv', index=False)
+# ---------------------------------------------------------
+# 4. EXÉCUTION
+# ---------------------------------------------------------
+print("Lecture du CSV...")
+df = pd.read_csv('data/annonces_lyon_vizzit.csv') # Utilise le fichier original
+
+print("Extraction des adresses en cours (ça peut prendre un peu de temps avec le NLP)...")
+df['Adresse_Extraite'] = df['Description_A_Propos'].apply(extract_address_hybrid)
+
+# Stats
+missing = df['Adresse_Extraite'].value_counts().get("NaN", 0)
+print(f"Lignes traitées : {len(df)}")
+print(f"Adresses manquantes (NaN) : {missing}")
+print(f"Taux de succès : {((len(df)-missing)/len(df))*100:.2f}%")
+
+# Sauvegarde
+df.to_csv('annonces_lyon_vizzit_cleaned_nlp.csv', index=False)
+print("Fichier sauvegardé : annonces_lyon_vizzit_cleaned_nlp.csv")
