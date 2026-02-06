@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 
 // --- CONFIGURATION DES CALQUES ---
+// ⚠️ IMPORTANT : Les noms à droite doivent correspondre EXACTEMENT 
+// aux noms des groupes créés dans generate_map.py
 const LAYER_MAPPING = {
-  'Immo': 'Offres Immobilières',
-  'Metro': 'Réseau Métro (API)',
-  'Vice': 'Vice (Sexe/Bar)',
-  'Nuisance': 'Nuisance (Bruit/Jeux)',
-  'Gentrification': 'Gentrification (Bio)',
-  'Superstition': 'Superstition (Mort/Culte)'
+  'Immo': 'Immo',
+  'MetroLines': 'Metro Lignes',       // 👈 Correspond au groupe Python
+  'MetroStations': 'Metro Stations',  // 👈 Correspond au groupe Python
+  'Vice': 'Vice',
+  'Nuisance': 'Nuisance',
+  'Gentrification': 'Gentrification',
+  'Superstition': 'Superstition'
 };
 
-// Composant Bouton Toggle
+// Composant Bouton Toggle (Inchangé)
 const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   <div 
     className={`flex items-center justify-between mb-2 group select-none transition-opacity duration-300 ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} 
@@ -33,14 +36,15 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   </div>
 );
 
-// J'ai ajouté le prop 'center' ici
 export default function MapComponent({ center }) {
   const [mapUrl, setMapUrl] = useState('');
   const iframeRef = useRef(null);
 
+  // --- ETAT INITIAL (2 boutons pour le métro maintenant) ---
   const [layers, setLayers] = useState({
     'Immo': true,
-    'Metro': true,
+    'MetroLines': true,     // ✅ Lignes activées
+    'MetroStations': true,  // ✅ Stations activées
     'Vice': true,
     'Nuisance': false,
     'Gentrification': false,
@@ -48,28 +52,24 @@ export default function MapComponent({ center }) {
   });
 
   useEffect(() => {
-    // ⚠️ Mettez votre URL backend ici
-    const backendUrl = "http://localhost:5000"; 
-    setMapUrl(`${backendUrl}/static/map_lyon.html?t=${Date.now()}`);
+    // On force le rafraîchissement avec le timestamp
+    setMapUrl(`/data/map_pings_lyon_calques.html?t=${Date.now()}`);
   }, []);
 
-  // --- 🎯 C'est ICI que la magie du zoom opère ---
+  // --- Gestion du Zoom (FlyTo) ---
   useEffect(() => {
-    // Si 'center' change dans App.jsx, on envoie un message à l'iframe
     if (center && iframeRef.current && iframeRef.current.contentWindow) {
       console.log("✈️ Envoi commande FLY_TO à l'iframe :", center);
-      
       iframeRef.current.contentWindow.postMessage({
         type: 'FLY_TO',
-        lat: center[0], // Latitude
-        lng: center[1], // Longitude
-        zoom: 16        // Niveau de zoom (proche)
+        lat: center[0],
+        lng: center[1],
+        zoom: 16
       }, '*');
     }
-  }, [center]); // Déclencheur : changement de coordonnées
+  }, [center]);
 
-
-  // Fonction pour parler à l'Iframe (Calques)
+  // --- Gestion des Calques ---
   const sendLayerCommand = (layerKey, show) => {
     if (iframeRef.current && iframeRef.current.contentWindow) {
       const realLayerName = LAYER_MAPPING[layerKey];
@@ -88,7 +88,7 @@ export default function MapComponent({ center }) {
   };
 
   const handleIframeLoad = () => {
-    console.log("🗺️ Carte chargée, synchronisation...");
+    console.log("🗺️ Carte chargée, synchronisation des calques...");
     Object.keys(layers).forEach(key => {
       sendLayerCommand(key, layers[key]);
     });
@@ -126,14 +126,16 @@ export default function MapComponent({ center }) {
           Contrôle des Calques
         </h3>
         
-        <ToggleItem label="Réseau Métro" color="#ef4444" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
+        {/* --- C'EST ICI QUE ÇA CHANGEAIT : DEUX BOUTONS --- */}
+        <ToggleItem label="Lignes Métro" color="#efe444" isActive={layers['MetroLines']} onToggle={() => toggleLayer('MetroLines')} />
+        <ToggleItem label="Stations Métro" color="#efe444" isActive={layers['MetroStations']} onToggle={() => toggleLayer('MetroStations')} />
         
         <div className="h-px bg-slate-800 my-2"></div>
 
         <ToggleItem label="Vice (Bars/Vie Nocture)" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
         <ToggleItem label="Gentrification (Bio)" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
         <ToggleItem label="Nuisance (Écoles/Boîtes)" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
-        <ToggleItem label="Superstition (Mort)" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
+        <ToggleItem label="Superstition (Mort/Culte)" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
 
         <div className="h-px bg-slate-800 my-2"></div>
 
