@@ -1,19 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 
 // --- CONFIGURATION DES CALQUES ---
-// ⚠️ IMPORTANT : Les noms à droite doivent correspondre EXACTEMENT 
-// aux noms des groupes créés dans generate_map.py
 const LAYER_MAPPING = {
   'Immo': 'Immo',
-  'MetroLines': 'Metro Lignes',       // 👈 Correspond au groupe Python
-  'MetroStations': 'Metro Stations',  // 👈 Correspond au groupe Python
+  'MetroLines': 'Metro Lignes',
+  'MetroStations': 'Metro Stations',
   'Vice': 'Vice',
   'Nuisance': 'Nuisance',
   'Gentrification': 'Gentrification',
   'Superstition': 'Superstition'
 };
 
-// Composant Bouton Toggle (Inchangé)
 const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   <div 
     className={`flex items-center justify-between mb-2 group select-none transition-opacity duration-300 ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} 
@@ -39,12 +36,13 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
 export default function MapComponent({ center }) {
   const [mapUrl, setMapUrl] = useState('');
   const iframeRef = useRef(null);
-
-  // --- ETAT INITIAL (2 boutons pour le métro maintenant) ---
+  
+  // --- ETATS ---
+  const [showTooltips, setShowTooltips] = useState(true); // BOUTON ACTIF PAR DEFAUT
   const [layers, setLayers] = useState({
     'Immo': true,
-    'MetroLines': true,     // ✅ Lignes activées
-    'MetroStations': true,  // ✅ Stations activées
+    'MetroLines': true,
+    'MetroStations': true,
     'Vice': true,
     'Nuisance': false,
     'Gentrification': false,
@@ -52,30 +50,23 @@ export default function MapComponent({ center }) {
   });
 
   useEffect(() => {
-    // On force le rafraîchissement avec le timestamp
     setMapUrl(`/data/map_pings_lyon_calques.html?t=${Date.now()}`);
   }, []);
 
-  // --- Gestion du Zoom (FlyTo) ---
   useEffect(() => {
     if (center && iframeRef.current && iframeRef.current.contentWindow) {
-      console.log("✈️ Envoi commande FLY_TO à l'iframe :", center);
       iframeRef.current.contentWindow.postMessage({
         type: 'FLY_TO',
-        lat: center[0],
-        lng: center[1],
-        zoom: 16
+        lat: center[0], lng: center[1], zoom: 16
       }, '*');
     }
   }, [center]);
 
-  // --- Gestion des Calques ---
   const sendLayerCommand = (layerKey, show) => {
     if (iframeRef.current && iframeRef.current.contentWindow) {
-      const realLayerName = LAYER_MAPPING[layerKey];
       iframeRef.current.contentWindow.postMessage({
         type: 'TOGGLE_LAYER',
-        name: realLayerName,
+        name: LAYER_MAPPING[layerKey],
         show: show
       }, '*');
     }
@@ -87,31 +78,39 @@ export default function MapComponent({ center }) {
     sendLayerCommand(layerKey, newState);
   };
 
+  // Gestion du bouton "Noms"
+  const toggleTooltips = () => {
+    const newState = !showTooltips;
+    setShowTooltips(newState);
+    if (iframeRef.current && iframeRef.current.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({
+        type: 'TOGGLE_TOOLTIPS',
+        show: newState
+      }, '*');
+    }
+  };
+
   const handleIframeLoad = () => {
-    console.log("🗺️ Carte chargée, synchronisation des calques...");
-    Object.keys(layers).forEach(key => {
-      sendLayerCommand(key, layers[key]);
-    });
+    console.log("🗺️ Carte chargée...");
+    Object.keys(layers).forEach(key => sendLayerCommand(key, layers[key]));
+    if (iframeRef.current && iframeRef.current.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({
+        type: 'TOGGLE_TOOLTIPS', show: showTooltips
+      }, '*');
+    }
   };
 
   return (
     <div className="w-full h-full relative z-0 bg-slate-900 overflow-hidden rounded-2xl border border-slate-800 shadow-2xl">
-      
       {mapUrl && (
         <iframe 
-          ref={iframeRef}
-          src={mapUrl}
-          title="Carte Oracle"
+          ref={iframeRef} src={mapUrl} title="Carte Oracle"
           className="w-full h-full border-none"
           onLoad={handleIframeLoad} 
           style={{ filter: "contrast(1.1) saturate(1.1)" }}
         />
       )}
-
-      {/* Overlay Vignettage */}
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_60px_rgba(2,6,23,0.9)] z-[400]"></div>
-      
-      {/* Badge Live */}
       <div className="absolute top-4 right-4 z-[500] flex items-center gap-2 bg-slate-950/90 backdrop-blur-sm px-3 py-1.5 rounded-full border border-purple-500/30 shadow-lg">
         <span className="relative flex h-2.5 w-2.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -120,26 +119,24 @@ export default function MapComponent({ center }) {
         <span className="text-[10px] font-mono text-purple-200 uppercase tracking-widest font-bold">Oracle Live</span>
       </div>
 
-      {/* Panneau Contrôle */}
       <div className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-4 rounded-xl border border-slate-700/50 shadow-2xl w-64">
         <h3 className="text-[10px] uppercase tracking-widest text-slate-400 mb-3 font-bold border-b border-slate-700 pb-2">
           Contrôle des Calques
         </h3>
         
-        {/* --- C'EST ICI QUE ÇA CHANGEAIT : DEUX BOUTONS --- */}
-        <ToggleItem label="Lignes Métro" color="#efe444" isActive={layers['MetroLines']} onToggle={() => toggleLayer('MetroLines')} />
-        <ToggleItem label="Stations Métro" color="#efe444" isActive={layers['MetroStations']} onToggle={() => toggleLayer('MetroStations')} />
-        
+        <ToggleItem label="Lignes Métro" color="#f7ed6b" isActive={layers['MetroLines']} onToggle={() => toggleLayer('MetroLines')} />
+        <ToggleItem label="Stations Métro" color="#f7ed6b" isActive={layers['MetroStations']} onToggle={() => toggleLayer('MetroStations')} />
         <div className="h-px bg-slate-800 my-2"></div>
-
         <ToggleItem label="Vice (Bars/Vie Nocture)" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
         <ToggleItem label="Gentrification (Bio)" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
         <ToggleItem label="Nuisance (Écoles/Boîtes)" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
         <ToggleItem label="Superstition (Mort/Culte)" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
-
         <div className="h-px bg-slate-800 my-2"></div>
-
         <ToggleItem label="Offres Immobilières" color="#22c55e" isActive={layers['Immo']} onToggle={() => toggleLayer('Immo')} />
+        
+        <div className="h-px bg-slate-800 my-2"></div>
+        {/* LE BOUTON QUI MANQUAIT */}
+        <ToggleItem label="Pings" color="#585d7c" isActive={showTooltips} onToggle={toggleTooltips} />
       </div>
     </div>
   );
