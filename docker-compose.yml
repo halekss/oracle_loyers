@@ -1,26 +1,21 @@
 services:
-  # --- SERVICE BACKEND (Python/Flask) ---
+  # --- TES SERVICES EXISTANTS ---
   backend:
     build: ./backend
     container_name: oracle_backend
     ports:
       - "5000:5000"
-    # 👇 CRUCIAL : Permet à Docker d'accéder à LM Studio sur votre Mac/Windows
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - ./backend/data:/app/data
-      - /app/__pycache__
     environment:
       - FLASK_ENV=development
-      - FLASK_DEBUG=1
-      # URL de LM Studio (le backend utilise cette variable)
       - LM_STUDIO_URL=http://host.docker.internal:1234/v1/chat/completions
     command: python app.py
     restart: unless-stopped
 
-  # --- SERVICE FRONTEND (React/Vite) ---
   frontend:
     build: ./frontend
     container_name: oracle_frontend
@@ -34,4 +29,40 @@ services:
     depends_on:
       - backend
     command: ["npm", "run", "dev", "--", "--host"]
+    restart: unless-stopped
+
+  # --- LA NOUVELLE SUITE AIRFLOW ---
+  
+  airflow-db:
+    image: postgres:13
+    container_name: oracle_airflow_db
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow:
+    build: ./airflow  # Utilise le Dockerfile avec Pandas/Folium
+    container_name: oracle_airflow
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    user: "50000:0"
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./backend:/opt/airflow/backend
+      - ./frontend/public/data:/opt/airflow/frontend/public/data
+    ports:
+      - "8081:8080"
+    command: standalone
     restart: unless-stopped

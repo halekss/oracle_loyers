@@ -4,12 +4,16 @@ import os
 import json
 import random
 
-# --- 1. CONFIGURATION DES CHEMINS ---
+# --- 1. CONFIGURATION DES CHEMINS (Adaptée pour Docker/Airflow) ---
+# On définit les bases par rapport à l'emplacement du script
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BACKEND_DIR = os.path.dirname(SCRIPT_DIR) 
-DATA_DIR = os.path.join(BACKEND_DIR, 'data') # Source (Backend)
+# Dans Docker Airflow, ce sera /opt/airflow/backend
+BACKEND_DIR = SCRIPT_DIR 
+DATA_DIR = os.path.join(BACKEND_DIR, 'data')
 
-# Cible : Frontend/public/data
+# On remonte d'un niveau pour trouver le frontend
+# En local : ORACLE_LOYERS/frontend
+# Dans Docker : /opt/airflow/frontend
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 FRONTEND_DATA_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'public', 'data')
 OUTPUT_HTML = os.path.join(FRONTEND_DATA_DIR, 'map_pings_lyon_calques.html')
@@ -19,235 +23,138 @@ IMMO_CSV = os.path.join(DATA_DIR, 'master_immo_final.csv')
 POI_CSV = os.path.join(DATA_DIR, 'cavaliers_lyon.csv')
 METRO_JSON = os.path.join(DATA_DIR, 'metro_lyon.json')
 
-print("🛑 DEBUT GENERATION CARTE (MODE FILTRES SÉPARÉS)...")
-print(f"📂 Source : {DATA_DIR}")
+def main():
+    print("🛑 DEBUT GENERATION CARTE...")
+    print(f"📂 Lecture des données dans : {DATA_DIR}")
+    print(f"🎯 Cible de sortie : {OUTPUT_HTML}")
 
-# --- 2. CONFIGURATION COULEURS & DATA ---
-COLORS = {
-    'Vice': '#e74c3c',           # Rouge
-    'Gentrification': '#3b82f6', # Bleu
-    'Nuisance': '#f59e0b',       # Orange
-    'Superstition': '#9333ea',   # Violet
-    'Immo': '#22c55e'            # Vert
-}
+    # --- 2. CONFIGURATION COULEURS & DATA ---
+    COLORS = {
+        'Vice': '#e74c3c',           
+        'Gentrification': '#3b82f6', 
+        'Nuisance': '#f39c12',       
+        'Superstition': '#9b59b6',   
+        'Autre': '#95a5a6'           
+    }
 
-# Données Stations Métro (En dur)
-LYON_STATIONS = [
-    {"nom": "Perrache", "lat": 45.74846, "lon": 4.82664, "c": "#e9003a", "ligne": "A"},
-    {"nom": "Ampère - Victor Hugo", "lat": 45.75333, "lon": 4.82962, "c": "#e9003a", "ligne": "A"},
-    {"nom": "Bellecour", "lat": 45.7577, "lon": 4.8322, "c": "#e9003a", "ligne": "A"},
-    {"nom": "Cordeliers", "lat": 45.7634, "lon": 4.8358, "c": "#e9003a", "ligne": "A"},
-    {"nom": "Hôtel de Ville", "lat": 45.7674, "lon": 4.8335, "c": "#e9003a", "ligne": "A"},
-    {"nom": "Foch", "lat": 45.7696, "lon": 4.8443, "c": "#e9003a", "ligne": "A"},
-    {"nom": "Masséna", "lat": 45.7708, "lon": 4.8509, "c": "#e9003a", "ligne": "A"},
-    {"nom": "Charpennes", "lat": 45.7712, "lon": 4.8633, "c": "#e9003a", "ligne": "A"},
-    {"nom": "Charpennes", "lat": 45.7712, "lon": 4.8633, "c": "#0073ba", "ligne": "B"},
-    {"nom": "Part-Dieu", "lat": 45.7611, "lon": 4.8573, "c": "#0073ba", "ligne": "B"},
-    {"nom": "Place Guichard", "lat": 45.7588, "lon": 4.8454, "c": "#0073ba", "ligne": "B"},
-    {"nom": "Saxe - Gambetta", "lat": 45.7516, "lon": 4.8488, "c": "#0073ba", "ligne": "B"},
-    {"nom": "Jean Macé", "lat": 45.7449, "lon": 4.8427, "c": "#0073ba", "ligne": "B"},
-    {"nom": "Hôtel de Ville", "lat": 45.7674, "lon": 4.8335, "c": "#f78e1e", "ligne": "C"},
-    {"nom": "Croix-Paquet", "lat": 45.7704, "lon": 4.8361, "c": "#f78e1e", "ligne": "C"},
-    {"nom": "Croix-Rousse", "lat": 45.7744, "lon": 4.8315, "c": "#f78e1e", "ligne": "C"},
-    {"nom": "Hénon", "lat": 45.7803, "lon": 4.8291, "c": "#f78e1e", "ligne": "C"},
-    {"nom": "Cuire", "lat": 45.7852, "lon": 4.8339, "c": "#f78e1e", "ligne": "C"},
-    {"nom": "Vieux Lyon", "lat": 45.7601, "lon": 4.8261, "c": "#009e49", "ligne": "D"},
-    {"nom": "Bellecour", "lat": 45.7577, "lon": 4.8322, "c": "#009e49", "ligne": "D"},
-    {"nom": "Guillotière", "lat": 45.7554, "lon": 4.8424, "c": "#009e49", "ligne": "D"},
-    {"nom": "Saxe - Gambetta", "lat": 45.7516, "lon": 4.8488, "c": "#009e49", "ligne": "D"},
-    {"nom": "Garibaldi", "lat": 45.7507, "lon": 4.8569, "c": "#009e49", "ligne": "D"},
-    {"nom": "Sans Souci", "lat": 45.7479, "lon": 4.8638, "c": "#009e49", "ligne": "D"},
-    {"nom": "Monplaisir - Lumière", "lat": 45.7456, "lon": 4.8723, "c": "#009e49", "ligne": "D"},
-    {"nom": "Grange Blanche", "lat": 45.7434, "lon": 4.8778, "c": "#009e49", "ligne": "D"},
-    {"nom": "Valmy", "lat": 45.7745, "lon": 4.8055, "c": "#009e49", "ligne": "D"},
-    {"nom": "Gare de Vaise", "lat": 45.7797, "lon": 4.8037, "c": "#009e49", "ligne": "D"}
-]
-
-# --- 3. CHARGEMENT IMMO ---
-try:
-    if os.path.exists(IMMO_CSV):
-        df_immo = pd.read_csv(IMMO_CSV, sep=None, engine='python')
-        df_immo.columns = df_immo.columns.str.strip().str.lower()
-        for col in ['latitude', 'longitude']:
-            if col in df_immo.columns:
-                df_immo[col] = pd.to_numeric(df_immo[col], errors='coerce')
-        print(f"✅ IMMO : {len(df_immo)} annonces.")
-    else:
-        print("❌ IMMO INTROUVABLE")
-        df_immo = pd.DataFrame()
-except Exception as e:
-    print(f"❌ ERREUR IMMO: {e}")
-    df_immo = pd.DataFrame()
-
-# --- 4. CHARGEMENT CAVALIERS (POI) ---
-df_poi = pd.DataFrame()
-try:
-    if os.path.exists(POI_CSV):
-        df_poi = pd.read_csv(POI_CSV, sep=None, engine='python')
-        df_poi.columns = df_poi.columns.str.strip().str.lower()
-
-        # Mapping Colonnes
-        if 'categorie_cavalier' in df_poi.columns: df_poi['type'] = df_poi['categorie_cavalier']
-        elif 'type_osm' in df_poi.columns: df_poi['type'] = df_poi['type_osm']
-        elif 'type_local' in df_poi.columns: df_poi['type'] = df_poi['type_local']
-        
-        if 'nom_lieu' in df_poi.columns: df_poi['nom'] = df_poi['nom_lieu']
-        
-        # Nettoyage coordonnées
-        for col in ['latitude', 'longitude']:
-            if col in df_poi.columns:
-                df_poi[col] = df_poi[col].astype(str).str.replace(',', '.', regex=False)
-                df_poi[col] = pd.to_numeric(df_poi[col], errors='coerce')
-
-        print(f"✅ CAVALIERS : {len(df_poi)} lieux.")
-    else:
-        print("❌ CAVALIERS INTROUVABLE")
-except Exception as e:
-    print(f"❌ ERREUR CAVALIERS: {e}")
-
-# --- 5. INITIALISATION CARTE ---
-m = folium.Map(location=[45.7640, 4.8357], zoom_start=13, tiles='CartoDB dark_matter', zoom_control=False)
-
-# --- CREATION DES CALQUES (SEPARES) ---
-fg_immo = folium.FeatureGroup(name='Immo', show=True)
-
-# ICI : Séparation demandée
-fg_metro_lignes = folium.FeatureGroup(name='Metro Lignes', show=True)
-fg_metro_stations = folium.FeatureGroup(name='Metro Stations', show=True)
-
-fg_vice = folium.FeatureGroup(name='Vice', show=True)
-fg_gentri = folium.FeatureGroup(name='Gentrification', show=False)
-fg_nuisance = folium.FeatureGroup(name='Nuisance', show=False)
-fg_superstition = folium.FeatureGroup(name='Superstition', show=False)
-
-# --- 6. PLACEMENT IMMO ---
-count_immo = 0
-for _, row in df_immo.iterrows():
-    if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')):
-        lat = row['latitude'] + random.uniform(-0.0001, 0.0001)
-        lon = row['longitude'] + random.uniform(-0.0001, 0.0001)
-        popup = f"{row.get('type_local','Bien')} - {row.get('prix','?')}€"
-        
-        folium.CircleMarker(
-            [lat, lon], radius=3, color=COLORS['Immo'], fill=True, fill_color=COLORS['Immo'], fill_opacity=0.8, popup=popup
-        ).add_to(fg_immo)
-        count_immo += 1
-print(f"👉 {count_immo} points IMMO placés.")
-
-# --- 7. PLACEMENT MÉTRO ---
-
-# A. Les Lignes (Dans fg_metro_lignes)
-if os.path.exists(METRO_JSON):
+    # --- 3. CHARGEMENT DES DONNÉES ---
     try:
-        def style_metro(feature):
-            line = str(feature['properties'].get('ligne', '')).upper()
-            c = '#888'
-            if 'A' in line: c='#e9003a'
-            elif 'B' in line: c='#0073ba'
-            elif 'C' in line: c='#f78e1e'
-            elif 'D' in line: c='#009e49'
-            return {'color': c, 'weight': 4, 'opacity': 0.7}
-        folium.GeoJson(METRO_JSON, name="Metro Lignes", style_function=style_metro).add_to(fg_metro_lignes)
-        print("👉 Lignes Métro tracées.")
+        df_immo = pd.read_csv(IMMO_CSV)
+        df_poi = pd.read_csv(POI_CSV)
+        with open(METRO_JSON, 'r', encoding='utf-8') as f:
+            metro_data = json.load(f)
     except Exception as e:
-        print(f"⚠️ Erreur Lignes Métro: {e}")
+        print(f"❌ Erreur lors de la lecture des fichiers : {e}")
+        return
 
-# B. Les Stations (Dans fg_metro_stations)
-count_stations = 0
-for station in LYON_STATIONS:
-    folium.CircleMarker(
-        location=[station['lat'], station['lon']],
-        radius=5,           
-        color='white',      
-        weight=2,
-        fill=True,
-        fill_color=station['c'],
-        fill_opacity=1,
-        popup=f"Métro {station['ligne']} - {station['nom']}"
-    ).add_to(fg_metro_stations)
-    count_stations += 1
-print(f"👉 {count_stations} Stations Métro placées.")
+    # --- 4. INITIALISATION CARTE ---
+    m = folium.Map(
+        location=[45.75, 4.85],
+        zoom_start=13,
+        tiles="cartodbpositron",
+        control_scale=True
+    )
 
-# --- 8. PLACEMENT CAVALIERS ---
-mapping_simple = {
-    'vice': (fg_vice, COLORS['Vice']),
-    'gentrification': (fg_gentri, COLORS['Gentrification']),
-    'nuisance': (fg_nuisance, COLORS['Nuisance']),
-    'superstition': (fg_superstition, COLORS['Superstition'])
-}
+    # --- 5. CRÉATION DES GROUPES (LOGIQUE FILTRES) ---
+    fg_immo = folium.FeatureGroup(name="Immo")
+    fg_metro_lignes = folium.FeatureGroup(name="Metro Lignes")
+    fg_metro_stations = folium.FeatureGroup(name="Metro Stations")
+    fg_vice = folium.FeatureGroup(name="Vice")
+    fg_gentri = folium.FeatureGroup(name="Gentrification")
+    fg_nuisance = folium.FeatureGroup(name="Nuisance")
+    fg_superstition = folium.FeatureGroup(name="Superstition")
 
-count_poi = 0
-if 'type' in df_poi.columns:
+    # --- 6. AJOUT DES POI (CAVALIERS) ---
     for _, row in df_poi.iterrows():
-        raw_type = str(row.get('type', '')).lower().strip()
+        cat_full = str(row['categorie_cavalier'])
+        cat_short = cat_full.split(' - ')[0]
+        color = COLORS.get(cat_short, COLORS['Autre'])
         
-        target_config = None
-        for key, config in mapping_simple.items():
-            if key in raw_type:
-                target_config = config
-                break
+        target_group = fg_vice
+        if cat_short == 'Gentrification': target_group = fg_gentri
+        elif cat_short == 'Nuisance': target_group = fg_nuisance
+        elif cat_short == 'Superstition': target_group = fg_superstition
+
+        folium.CircleMarker(
+            location=[row['latitude'], row['longitude']],
+            radius=5,
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.7,
+            popup=folium.Popup(f"<b>{cat_full}</b><br>{row['nom_lieu']}", max_width=200)
+        ).add_to(target_group)
+
+    # --- 7. AJOUT DES METROS (LIGNES & STATIONS) ---
+    for feature in metro_data['features']:
+        geom = feature['geometry']
+        props = feature['properties']
+        color_raw = props.get('couleur', '128 128 128')
+        hex_color = '#%02x%02x%02x' % tuple(map(int, color_raw.split()))
+
+        if geom['type'] == 'MultiLineString':
+            for line in geom['coordinates']:
+                folium.PolyLine(
+                    [[p[1], p[0]] for p in line],
+                    color=hex_color, weight=4, opacity=0.8,
+                    popup=f"Ligne {props.get('ligne', '?')}"
+                ).add_to(fg_metro_lignes)
         
-        if target_config and pd.notnull(row.get('latitude')):
-            group, color_hex = target_config
-            folium.CircleMarker(
-                location=[row['latitude'], row['longitude']],
-                radius=3,               
-                color=color_hex,        
-                fill=True,
-                fill_color=color_hex,
-                fill_opacity=0.8,
-                weight=1,               
-                popup=row.get('nom', raw_type)
-            ).add_to(group)
-            count_poi += 1
+        # On simule des stations aux extrémités/points clés pour l'exemple
+        folium.CircleMarker(
+            location=[geom['coordinates'][0][0][1], geom['coordinates'][0][0][0]],
+            radius=3, color='white', fill=True, fill_color=hex_color, weight=1, fill_opacity=1
+        ).add_to(fg_metro_stations)
 
-print(f"👉 {count_poi} Cavaliers (Points) placés.")
+    # --- 8. AJOUT DES ANNONCES ---
+    for _, row in df_immo.iterrows():
+        folium.CircleMarker(
+            location=[row['latitude'], row['longitude']],
+            radius=7,
+            color='#2c3e50',
+            fill=True,
+            fill_color='#2c3e50',
+            fill_opacity=0.9,
+            weight=2,
+            popup=folium.Popup(f"<b>{row['prix']}€</b><br>{row['type']}<br>{row['surface']}m²", max_width=200)
+        ).add_to(fg_immo)
 
-# --- 9. FINALISATION ---
-fg_immo.add_to(m)
+    # --- 9. ASSEMBLAGE ET SAUVEGARDE ---
+    fg_immo.add_to(m)
+    fg_metro_lignes.add_to(m)
+    fg_metro_stations.add_to(m)
+    fg_vice.add_to(m)
+    fg_gentri.add_to(m)
+    fg_nuisance.add_to(m)
+    fg_superstition.add_to(m)
 
-# Ajout des DEUX groupes Métro séparément
-fg_metro_lignes.add_to(m)
-fg_metro_stations.add_to(m)
+    folium.LayerControl(collapsed=False).add_to(m)
 
-fg_vice.add_to(m)
-fg_gentri.add_to(m)
-fg_nuisance.add_to(m)
-fg_superstition.add_to(m)
-
-folium.LayerControl(collapsed=False).add_to(m)
-
-html = m.get_root().render()
-
-# Hack JS pour React
-# Note: React enverra probablement "Metro" si tu ne changes pas ton frontend.
-# Le script JS ci-dessous cherche un label qui *contient* le nom.
-# Donc si React envoie "Metro", il trouvera "Metro Lignes" ET "Metro Stations".
-# C'est parfait : le bouton unique contrôlera les deux en même temps pour l'instant,
-# mais ils sont bien séparés dans la structure de la carte si tu veux affiner plus tard.
-hack = """
-<style>.leaflet-control-layers {display:none!important;}</style>
-<script>
-window.addEventListener("message", function(e) {
-    if(e.data.type==='TOGGLE_LAYER'){
-        var labels=document.getElementsByTagName('label');
-        for(var i=0;i<labels.length;i++){
-            if(labels[i].textContent.trim().includes(e.data.name)){
-                var box=labels[i].querySelector('input');
-                if(box && box.checked!==e.data.show) box.click();
+    # Hack JS pour le contrôle depuis React
+    hack = """
+    <style>.leaflet-control-layers {display:none!important;}</style>
+    <script>
+    window.addEventListener("message", function(e) {
+        if(e.data.type==='TOGGLE_LAYER'){
+            var labels=document.getElementsByTagName('label');
+            for(var i=0;i<labels.length;i++){
+                if(labels[i].textContent.trim().includes(e.data.name)){
+                    labels[i].click();
+                }
             }
         }
-    }
-});
-</script>
-</body>
-"""
-html = html.replace('</body>', hack)
+    });
+    </script>
+    """
+    m.get_root().html.add_child(folium.Element(hack))
 
-if not os.path.exists(FRONTEND_DATA_DIR):
-    os.makedirs(FRONTEND_DATA_DIR)
+    # Création du dossier cible s'il n'existe pas
+    os.makedirs(FRONTEND_DATA_DIR, exist_ok=True)
+    
+    # Sauvegarde physique du fichier
+    m.save(OUTPUT_HTML)
+    print(f"✅ CARTE GÉNÉRÉE AVEC SUCCÈS : {OUTPUT_HTML}")
 
-with open(OUTPUT_HTML, 'w', encoding='utf-8') as f:
-    f.write(html)
-
-print(f"🎉 TERMINÉ : {OUTPUT_HTML}")
+# Bloc d'exécution
+if __name__ == "__main__":
+    main()
