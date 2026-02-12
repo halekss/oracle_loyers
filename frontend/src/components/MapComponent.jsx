@@ -2,9 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 
 // --- CONFIGURATION DES CALQUES ---
 const LAYER_MAPPING = {
-  'Immo': 'Immo',
-  'MetroLines': 'Metro Lignes',
-  'MetroStations': 'Metro Stations',
+  'Studio': 'Immo Studio/T1',
+  'T2': 'Immo T2',
+  'T3': 'Immo T3',
+  'T4': 'Immo Grand (T4+)',
+  
+  'Metro': 'Metro', // Groupe unifié
   'Vice': 'Vice',
   'Nuisance': 'Nuisance',
   'Gentrification': 'Gentrification',
@@ -36,13 +39,16 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
 export default function MapComponent({ center }) {
   const [mapUrl, setMapUrl] = useState('');
   const iframeRef = useRef(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
   
   // --- ETATS ---
-  const [showTooltips, setShowTooltips] = useState(true); // BOUTON ACTIF PAR DEFAUT
   const [layers, setLayers] = useState({
-    'Immo': true,
-    'MetroLines': true,
-    'MetroStations': true,
+    'Studio': true,
+    'T2': true,
+    'T3': true,
+    'T4': true,
+    
+    'Metro': true, // Etat unique pour tout le métro
     'Vice': true,
     'Nuisance': false,
     'Gentrification': false,
@@ -64,9 +70,10 @@ export default function MapComponent({ center }) {
 
   const sendLayerCommand = (layerKey, show) => {
     if (iframeRef.current && iframeRef.current.contentWindow) {
+      const realName = LAYER_MAPPING[layerKey];
       iframeRef.current.contentWindow.postMessage({
         type: 'TOGGLE_LAYER',
-        name: LAYER_MAPPING[layerKey],
+        name: realName,
         show: show
       }, '*');
     }
@@ -78,26 +85,9 @@ export default function MapComponent({ center }) {
     sendLayerCommand(layerKey, newState);
   };
 
-  // Gestion du bouton "Noms"
-  const toggleTooltips = () => {
-    const newState = !showTooltips;
-    setShowTooltips(newState);
-    if (iframeRef.current && iframeRef.current.contentWindow) {
-      iframeRef.current.contentWindow.postMessage({
-        type: 'TOGGLE_TOOLTIPS',
-        show: newState
-      }, '*');
-    }
-  };
-
   const handleIframeLoad = () => {
     console.log("🗺️ Carte chargée...");
     Object.keys(layers).forEach(key => sendLayerCommand(key, layers[key]));
-    if (iframeRef.current && iframeRef.current.contentWindow) {
-      iframeRef.current.contentWindow.postMessage({
-        type: 'TOGGLE_TOOLTIPS', show: showTooltips
-      }, '*');
-    }
   };
 
   return (
@@ -110,7 +100,11 @@ export default function MapComponent({ center }) {
           style={{ filter: "contrast(1.1) saturate(1.1)" }}
         />
       )}
+      
+      {/* Overlay Vignettage */}
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_60px_rgba(2,6,23,0.9)] z-[400]"></div>
+      
+      {/* Badge Live */}
       <div className="absolute top-4 right-4 z-[500] flex items-center gap-2 bg-slate-950/90 backdrop-blur-sm px-3 py-1.5 rounded-full border border-purple-500/30 shadow-lg">
         <span className="relative flex h-2.5 w-2.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -119,25 +113,52 @@ export default function MapComponent({ center }) {
         <span className="text-[10px] font-mono text-purple-200 uppercase tracking-widest font-bold">Oracle Live</span>
       </div>
 
-      <div className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-4 rounded-xl border border-slate-700/50 shadow-2xl w-64">
-        <h3 className="text-[10px] uppercase tracking-widest text-slate-400 mb-3 font-bold border-b border-slate-700 pb-2">
-          Contrôle des Calques
-        </h3>
-        
-        <ToggleItem label="Lignes Métro" color="#f7ed6b" isActive={layers['MetroLines']} onToggle={() => toggleLayer('MetroLines')} />
-        <ToggleItem label="Stations Métro" color="#f7ed6b" isActive={layers['MetroStations']} onToggle={() => toggleLayer('MetroStations')} />
-        <div className="h-px bg-slate-800 my-2"></div>
-        <ToggleItem label="Vice (Bars/Vie Nocture)" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
-        <ToggleItem label="Gentrification (Bio)" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
-        <ToggleItem label="Nuisance (Écoles/Boîtes)" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
-        <ToggleItem label="Superstition (Mort/Culte)" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
-        <div className="h-px bg-slate-800 my-2"></div>
-        <ToggleItem label="Offres Immobilières" color="#22c55e" isActive={layers['Immo']} onToggle={() => toggleLayer('Immo')} />
-        
-        <div className="h-px bg-slate-800 my-2"></div>
-        {/* LE BOUTON QUI MANQUAIT */}
-        <ToggleItem label="Pings" color="#585d7c" isActive={showTooltips} onToggle={toggleTooltips} />
-      </div>
+      {/* --- BOUTON POUR OUVRIR LES FILTRES (Visible quand fermé) --- */}
+      {!isPanelOpen && (
+        <button 
+          onClick={() => setIsPanelOpen(true)}
+          className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-3 rounded-full border border-slate-700/50 shadow-2xl hover:scale-110 transition-transform duration-200 group"
+          title="Ouvrir les filtres"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400 group-hover:text-white transition-colors">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+          </svg>
+        </button>
+      )}
+
+      {/* --- PANNEAU DE CONTRÔLE (Visible quand ouvert) --- */}
+      {isPanelOpen && (
+        <div className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-4 rounded-xl border border-slate-700/50 shadow-2xl w-64 overflow-y-auto max-h-[80vh] transition-all duration-300 ease-in-out">
+          
+          <div className="flex items-center justify-between mb-3 border-b border-slate-700 pb-2">
+            <h3 className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+              Contrôle des Calques
+            </h3>
+            <button onClick={() => setIsPanelOpen(false)} className="text-slate-500 hover:text-white transition-colors p-1">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 font-bold">Transports</h3>
+          {/* BOUTON UNIQUE METRO */}
+          <ToggleItem label="Métro (Lignes & Stations)" color="#818181" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
+          
+          <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Contexte</h3>
+          <ToggleItem label="Vice" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
+          <ToggleItem label="Gentrification" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
+          <ToggleItem label="Nuisance" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
+          <ToggleItem label="Superstition" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
+          
+          <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Offres Immobilières</h3>
+          <ToggleItem label="Studio / T1" color="#22c55e" isActive={layers['Studio']} onToggle={() => toggleLayer('Studio')} />
+          <ToggleItem label="Apparts T2" color="#22c55e" isActive={layers['T2']} onToggle={() => toggleLayer('T2')} />
+          <ToggleItem label="Apparts T3" color="#22c55e" isActive={layers['T3']} onToggle={() => toggleLayer('T3')} />
+          <ToggleItem label="Grands (T4+)" color="#22c55e" isActive={layers['T4']} onToggle={() => toggleLayer('T4')} />
+        </div>
+      )}
     </div>
   );
 }
