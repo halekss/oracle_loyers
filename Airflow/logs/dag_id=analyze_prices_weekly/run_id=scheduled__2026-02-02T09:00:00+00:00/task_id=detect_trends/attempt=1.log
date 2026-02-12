@@ -1,0 +1,21 @@
+[2026-02-12T16:52:54.752+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: analyze_prices_weekly.detect_trends scheduled__2026-02-02T09:00:00+00:00 [queued]>
+[2026-02-12T16:52:54.761+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: analyze_prices_weekly.detect_trends scheduled__2026-02-02T09:00:00+00:00 [queued]>
+[2026-02-12T16:52:54.762+0000] {taskinstance.py:2170} INFO - Starting attempt 1 of 2
+[2026-02-12T16:52:54.776+0000] {taskinstance.py:2191} INFO - Executing <Task(PythonOperator): detect_trends> on 2026-02-02 09:00:00+00:00
+[2026-02-12T16:52:54.793+0000] {standard_task_runner.py:60} INFO - Started process 199 to run task
+[2026-02-12T16:52:54.799+0000] {standard_task_runner.py:87} INFO - Running: ['***', 'tasks', 'run', 'analyze_prices_weekly', 'detect_trends', 'scheduled__2026-02-02T09:00:00+00:00', '--job-id', '6', '--raw', '--subdir', 'DAGS_FOLDER/analyze_prices_weekly.py', '--cfg-path', '/tmp/tmp85paco3i']
+[2026-02-12T16:52:54.803+0000] {standard_task_runner.py:88} INFO - Job 6: Subtask detect_trends
+[2026-02-12T16:52:54.876+0000] {task_command.py:423} INFO - Running <TaskInstance: analyze_prices_weekly.detect_trends scheduled__2026-02-02T09:00:00+00:00 [running]> on host d50450c1ce91
+[2026-02-12T16:52:55.029+0000] {taskinstance.py:2480} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='oracle' AIRFLOW_CTX_DAG_ID='analyze_prices_weekly' AIRFLOW_CTX_TASK_ID='detect_trends' AIRFLOW_CTX_EXECUTION_DATE='2026-02-02T09:00:00+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='scheduled__2026-02-02T09:00:00+00:00'
+[2026-02-12T16:52:55.140+0000] {logging_mixin.py:188} WARNING - /opt/***/dags/analyze_prices_weekly.py:67 FutureWarning: Passing literal json to 'read_json' is deprecated and will be removed in a future version. To read from a literal string, wrap it in a 'StringIO' object.
+[2026-02-12T16:52:55.227+0000] {logging_mixin.py:188} INFO - 
+🔍 TENDANCES DÉTECTÉES
+[2026-02-12T16:52:55.228+0000] {logging_mixin.py:188} INFO -   total_offres: 1022
+[2026-02-12T16:52:55.228+0000] {logging_mixin.py:188} INFO -   prix_moyen_global: 1070.79
+[2026-02-12T16:52:55.229+0000] {logging_mixin.py:188} INFO -   prix_m2_moyen_global: 21.77
+[2026-02-12T16:52:55.229+0000] {logging_mixin.py:188} INFO -   arrondissement_plus_cher: 69000
+[2026-02-12T16:52:55.230+0000] {logging_mixin.py:188} INFO -   arrondissement_moins_cher: 69009
+[2026-02-12T16:52:55.230+0000] {python.py:201} INFO - Done. Returned value was: {'total_offres': 1022, 'prix_moyen_global': 1070.79, 'prix_m2_moyen_global': 21.77, 'arrondissement_plus_cher': 69000, 'arrondissement_moins_cher': 69009}
+[2026-02-12T16:52:55.290+0000] {taskinstance.py:1138} INFO - Marking task as SUCCESS. dag_id=analyze_prices_weekly, task_id=detect_trends, execution_date=20260202T090000, start_date=20260212T165254, end_date=20260212T165255
+[2026-02-12T16:52:55.353+0000] {local_task_job_runner.py:234} INFO - Task exited with return code 0
+[2026-02-12T16:52:55.413+0000] {taskinstance.py:3280} INFO - 0 downstream tasks scheduled from follow-on schedule check

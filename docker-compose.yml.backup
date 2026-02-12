@@ -109,7 +109,7 @@ services:
       - ./backend:/opt/airflow/backend
       - ./frontend/public/data:/opt/airflow/frontend/public/data
     ports:
-      - "8082:8080"
+      - "8080:8080"
     command: webserver
     restart: unless-stopped
     healthcheck:

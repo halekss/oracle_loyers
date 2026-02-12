@@ -1,0 +1,177 @@
+[2026-02-12T16:52:50.584+0000] {manager.py:469} INFO - Processing files using up to 2 processes at a time 
+[2026-02-12T16:52:50.585+0000] {manager.py:470} INFO - Process each file at most once every 30 seconds
+[2026-02-12T16:52:50.586+0000] {manager.py:471} INFO - Checking for new files in /opt/airflow/dags every 300 seconds
+[2026-02-12T16:52:50.586+0000] {manager.py:738} INFO - Searching for files in /opt/airflow/dags
+[2026-02-12T16:52:50.593+0000] {manager.py:741} INFO - There are 2 files in /opt/airflow/dags
+[2026-02-12T16:52:50.864+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                     PID  Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  ----------
+/opt/airflow/dags/generate_map_daily.py       169  0.13s             0           0
+/opt/airflow/dags/analyze_prices_weekly.py    166  0.16s             0           0
+================================================================================
+[2026-02-12T16:53:20.877+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.81s           2026-02-12T16:52:51
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  2.00s           2026-02-12T16:52:52
+================================================================================
+[2026-02-12T16:53:51.127+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.43s           2026-02-12T16:53:22
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.96s           2026-02-12T16:53:23
+================================================================================
+[2026-02-12T16:54:21.506+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.20s           2026-02-12T16:53:52
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.62s           2026-02-12T16:53:55
+================================================================================
+[2026-02-12T16:54:51.548+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.22s           2026-02-12T16:54:23
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.46s           2026-02-12T16:54:25
+================================================================================
+[2026-02-12T16:55:21.934+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.15s           2026-02-12T16:54:53
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.53s           2026-02-12T16:54:57
+================================================================================
+[2026-02-12T16:55:52.517+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.26s           2026-02-12T16:55:24
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.79s           2026-02-12T16:55:28
+================================================================================
+[2026-02-12T16:56:23.261+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.16s           2026-02-12T16:55:54
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.54s           2026-02-12T16:55:59
+================================================================================
+[2026-02-12T16:58:32.398+0000] {manager.py:469} INFO - Processing files using up to 2 processes at a time 
+[2026-02-12T16:58:32.402+0000] {manager.py:470} INFO - Process each file at most once every 30 seconds
+[2026-02-12T16:58:32.405+0000] {manager.py:471} INFO - Checking for new files in /opt/airflow/dags every 300 seconds
+[2026-02-12T16:58:32.409+0000] {manager.py:738} INFO - Searching for files in /opt/airflow/dags
+[2026-02-12T16:58:32.439+0000] {manager.py:741} INFO - There are 2 files in /opt/airflow/dags
+[2026-02-12T16:58:33.046+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                     PID  Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  ----------
+/opt/airflow/dags/generate_map_daily.py       168  0.22s             0           0
+/opt/airflow/dags/analyze_prices_weekly.py    165  0.27s             0           0
+================================================================================
+[2026-02-12T16:59:09.988+0000] {manager.py:469} INFO - Processing files using up to 2 processes at a time 
+[2026-02-12T16:59:09.988+0000] {manager.py:470} INFO - Process each file at most once every 30 seconds
+[2026-02-12T16:59:09.989+0000] {manager.py:471} INFO - Checking for new files in /opt/airflow/dags every 300 seconds
+[2026-02-12T16:59:09.990+0000] {manager.py:738} INFO - Searching for files in /opt/airflow/dags
+[2026-02-12T16:59:09.996+0000] {manager.py:741} INFO - There are 2 files in /opt/airflow/dags
+[2026-02-12T16:59:10.380+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                     PID  Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  ----------
+/opt/airflow/dags/generate_map_daily.py       168  0.13s             0           0
+/opt/airflow/dags/analyze_prices_weekly.py    165  0.18s             0           0
+================================================================================
+[2026-02-12T16:59:40.915+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                     PID  Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py       186  0.01s             1           0  0.43s           2026-02-12T16:59:10
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  4.40s           2026-02-12T16:59:14
+================================================================================
+[2026-02-12T17:00:11.704+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                     PID  Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py       203  0.03s             1           0  0.45s           2026-02-12T16:59:41
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.68s           2026-02-12T16:59:45
+================================================================================
+[2026-02-12T17:00:42.267+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                     PID  Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py       226  0.00s             1           0  0.32s           2026-02-12T17:00:11
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.49s           2026-02-12T17:00:16
+================================================================================
+[2026-02-12T17:01:12.305+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.36s           2026-02-12T17:00:42
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.42s           2026-02-12T17:00:47
+================================================================================
+[2026-02-12T17:01:42.759+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.22s           2026-02-12T17:01:13
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.50s           2026-02-12T17:01:17
+================================================================================
+[2026-02-12T17:02:13.154+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.16s           2026-02-12T17:01:43
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.45s           2026-02-12T17:01:48
+================================================================================
+[2026-02-12T17:02:43.191+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.14s           2026-02-12T17:02:14
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.75s           2026-02-12T17:02:19
+================================================================================
+[2026-02-12T17:03:13.500+0000] {manager.py:879} INFO - 
+================================================================================
+DAG File Processing Stats
+
+File Path                                   PID    Runtime      # DAGs    # Errors  Last Runtime    Last Run
+------------------------------------------  -----  ---------  --------  ----------  --------------  -------------------
+/opt/airflow/dags/generate_map_daily.py                              1           0  0.15s           2026-02-12T17:02:44
+/opt/airflow/dags/analyze_prices_weekly.py                           1           0  0.70s           2026-02-12T17:02:51
+================================================================================
