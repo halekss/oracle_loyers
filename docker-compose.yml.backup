@@ -1,4 +1,5 @@
 services:
+  # --- SERVICES EXISTANTS ---
   backend:
     build: ./backend
     container_name: oracle_backend
@@ -34,6 +35,8 @@ services:
     networks:
       - oracle-network
 
+  # --- AIRFLOW SERVICES ---
+  
   airflow-db:
     image: postgres:14
     container_name: oracle_airflow_db
@@ -62,6 +65,10 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - _AIRFLOW_DB_MIGRATE=true
+      - _AIRFLOW_WWW_USER_CREATE=true
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
