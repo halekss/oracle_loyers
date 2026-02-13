@@ -21,3 +21,5 @@ frontend/.env
 # Airflow logs
 Airflow/logs/
 airflow/logs/
+
+Airflow/logs/
