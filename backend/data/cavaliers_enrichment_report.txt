@@ -1,0 +1,18 @@
+
+    ═══════════════════════════════════════════
+    📍 RAPPORT ENRICHISSEMENT CAVALIERS
+    ═══════════════════════════════════════════
+    
+    Date : 13/02/2026 14:07
+    
+    📊 RÉSULTATS
+    ───────────────────────────────────────────
+    • Total cavaliers : 1668
+    • Enrichis avec succès : 1666
+    • Taux de succès : 99.88%
+    • Non localisés : 2
+    
+    ✅ Le fichier cavaliers_lyon.csv a été mis à jour
+    
+    ═══════════════════════════════════════════
+    

@@ -1,0 +1,17 @@
+[2026-02-13T14:07:10.900+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: generate_map_daily.notify_success scheduled__2026-02-12T04:00:00+00:00 [queued]>
+[2026-02-13T14:07:10.909+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: generate_map_daily.notify_success scheduled__2026-02-12T04:00:00+00:00 [queued]>
+[2026-02-13T14:07:10.910+0000] {taskinstance.py:2170} INFO - Starting attempt 1 of 3
+[2026-02-13T14:07:10.919+0000] {taskinstance.py:2191} INFO - Executing <Task(BashOperator): notify_success> on 2026-02-12 04:00:00+00:00
+[2026-02-13T14:07:10.923+0000] {standard_task_runner.py:60} INFO - Started process 201 to run task
+[2026-02-13T14:07:10.928+0000] {standard_task_runner.py:87} INFO - Running: ['***', 'tasks', 'run', 'generate_map_daily', 'notify_success', 'scheduled__2026-02-12T04:00:00+00:00', '--job-id', '30', '--raw', '--subdir', 'DAGS_FOLDER/generate_map_daily.py', '--cfg-path', '/tmp/tmpvkiyu2xf']
+[2026-02-13T14:07:10.932+0000] {standard_task_runner.py:88} INFO - Job 30: Subtask notify_success
+[2026-02-13T14:07:10.983+0000] {task_command.py:423} INFO - Running <TaskInstance: generate_map_daily.notify_success scheduled__2026-02-12T04:00:00+00:00 [running]> on host fcd90f0efed2
+[2026-02-13T14:07:11.049+0000] {taskinstance.py:2480} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='oracle' AIRFLOW_CTX_DAG_ID='generate_map_daily' AIRFLOW_CTX_TASK_ID='notify_success' AIRFLOW_CTX_EXECUTION_DATE='2026-02-12T04:00:00+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='scheduled__2026-02-12T04:00:00+00:00'
+[2026-02-13T14:07:11.051+0000] {subprocess.py:63} INFO - Tmp dir root location: /tmp
+[2026-02-13T14:07:11.052+0000] {subprocess.py:75} INFO - Running command: ['/usr/bin/bash', '-c', 'echo "🎉 Carte à jour"']
+[2026-02-13T14:07:11.060+0000] {subprocess.py:86} INFO - Output:
+[2026-02-13T14:07:11.062+0000] {subprocess.py:93} INFO - 🎉 Carte à jour
+[2026-02-13T14:07:11.063+0000] {subprocess.py:97} INFO - Command exited with return code 0
+[2026-02-13T14:07:11.096+0000] {taskinstance.py:1138} INFO - Marking task as SUCCESS. dag_id=generate_map_daily, task_id=notify_success, execution_date=20260212T040000, start_date=20260213T140710, end_date=20260213T140711
+[2026-02-13T14:07:11.150+0000] {local_task_job_runner.py:234} INFO - Task exited with return code 0
+[2026-02-13T14:07:11.171+0000] {taskinstance.py:3280} INFO - 0 downstream tasks scheduled from follow-on schedule check

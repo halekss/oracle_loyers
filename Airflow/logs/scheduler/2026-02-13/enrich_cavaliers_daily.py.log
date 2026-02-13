@@ -1,0 +1,112 @@
+[2026-02-13T14:07:02.130+0000] {processor.py:161} INFO - Started process (PID=168) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:07:02.134+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:07:02.139+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:07:02.137+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:07:04.042+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:07:04.149+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:07:04.147+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:07:04.255+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:07:04.254+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:07:04.379+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 2.261 seconds
+[2026-02-13T14:07:36.057+0000] {processor.py:161} INFO - Started process (PID=218) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:07:36.063+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:07:36.070+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:07:36.066+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:07:37.194+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:07:37.468+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:07:37.465+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:07:37.658+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:07:37.652+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:07:38.414+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 2.385 seconds
+[2026-02-13T14:08:08.786+0000] {processor.py:161} INFO - Started process (PID=237) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:08:08.788+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:08:08.790+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:08:08.789+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:08:09.274+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:08:09.314+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:08:09.314+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:08:09.346+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:08:09.346+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:08:09.372+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.597 seconds
+[2026-02-13T14:08:39.989+0000] {processor.py:161} INFO - Started process (PID=254) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:08:39.991+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:08:39.992+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:08:39.991+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:08:40.355+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:08:40.385+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:08:40.384+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:08:40.405+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:08:40.405+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:08:40.451+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.466 seconds
+[2026-02-13T14:09:10.947+0000] {processor.py:161} INFO - Started process (PID=271) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:09:10.957+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:09:10.971+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:09:10.965+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:09:11.612+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:09:11.647+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:09:11.646+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:09:11.672+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:09:11.672+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:09:11.686+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.780 seconds
+[2026-02-13T14:09:42.214+0000] {processor.py:161} INFO - Started process (PID=288) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:09:42.216+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:09:42.218+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:09:42.217+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:09:42.695+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:09:42.731+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:09:42.731+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:09:42.755+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:09:42.754+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:09:42.767+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.559 seconds
+[2026-02-13T14:10:13.587+0000] {processor.py:161} INFO - Started process (PID=305) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:10:13.588+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:10:13.589+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:10:13.589+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:10:13.906+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:10:13.929+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:10:13.929+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:10:13.946+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:10:13.945+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:10:13.957+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.374 seconds
+[2026-02-13T14:10:44.222+0000] {processor.py:161} INFO - Started process (PID=322) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:10:44.227+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:10:44.230+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:10:44.229+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:10:44.953+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:10:44.988+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:10:44.988+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:10:45.009+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:10:45.009+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:10:45.038+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.834 seconds
+[2026-02-13T14:11:15.604+0000] {processor.py:161} INFO - Started process (PID=339) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:11:15.611+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:11:15.612+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:11:15.611+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:11:16.473+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:11:16.552+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:11:16.552+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:11:16.587+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:11:16.587+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:11:16.618+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 1.054 seconds
+[2026-02-13T14:11:47.049+0000] {processor.py:161} INFO - Started process (PID=356) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:11:47.051+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:11:47.052+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:11:47.052+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:11:47.429+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:11:47.463+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:11:47.463+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:11:47.486+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:11:47.485+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:11:47.500+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.458 seconds
+[2026-02-13T14:12:17.952+0000] {processor.py:161} INFO - Started process (PID=373) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:12:17.953+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:12:17.955+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:12:17.954+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:12:18.679+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:12:18.825+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:12:18.825+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:12:18.877+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:12:18.877+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:12:18.896+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.950 seconds
+[2026-02-13T14:12:49.289+0000] {processor.py:161} INFO - Started process (PID=390) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:12:49.292+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:12:49.294+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:12:49.293+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:12:50.053+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:12:50.105+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:12:50.104+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:12:50.140+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:12:50.139+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:12:50.160+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.879 seconds
+[2026-02-13T14:13:20.822+0000] {processor.py:161} INFO - Started process (PID=407) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:13:20.825+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:13:20.827+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:13:20.826+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:13:21.247+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:13:21.295+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:13:21.294+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:13:21.330+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:13:21.330+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:13:21.350+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.535 seconds
+[2026-02-13T14:13:51.436+0000] {processor.py:161} INFO - Started process (PID=418) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:13:51.438+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:13:51.439+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:13:51.438+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:13:52.105+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:13:52.179+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:13:52.179+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:13:52.219+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:13:52.218+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:13:52.246+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.816 seconds
+[2026-02-13T14:14:22.784+0000] {processor.py:161} INFO - Started process (PID=435) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:14:22.786+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:14:22.788+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:14:22.787+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:14:23.343+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:14:23.426+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:14:23.425+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:14:23.485+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:14:23.484+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:14:23.531+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.756 seconds
+[2026-02-13T14:14:54.336+0000] {processor.py:161} INFO - Started process (PID=452) to work on /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:14:54.338+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/enrich_cavaliers_daily.py for tasks to queue
+[2026-02-13T14:14:54.339+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:14:54.338+0000] {dagbag.py:538} INFO - Filling up the DagBag from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:14:54.823+0000] {processor.py:840} INFO - DAG(s) 'enrich_cavaliers_daily' retrieved from /opt/airflow/dags/enrich_cavaliers_daily.py
+[2026-02-13T14:14:54.880+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:14:54.879+0000] {dag.py:3036} INFO - Sync 1 DAGs
+[2026-02-13T14:14:54.919+0000] {logging_mixin.py:188} INFO - [2026-02-13T14:14:54.919+0000] {dag.py:3823} INFO - Setting next_dagrun for enrich_cavaliers_daily to 2026-02-13 03:00:00+00:00, run_after=2026-02-14 03:00:00+00:00
+[2026-02-13T14:14:54.940+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/enrich_cavaliers_daily.py took 0.608 seconds
