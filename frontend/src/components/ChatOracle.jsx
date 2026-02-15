@@ -8,7 +8,7 @@ export default function ChatOracle({ analysis, context, quartier }) {
   const [messages, setMessages] = useState([
     { 
       sender: 'oracle', 
-      text: "🔮 **L'Oracle t'écoute.** Tape une adresse pour lancer un scan, ou pose-moi une question sur le quartier." 
+      text: "🔮 **Immotep t'écoute à contre coeur.** Tape une adresse pour lancer un scan, ou pose-moi une question sur le quartier." 
     }
   ]);
   

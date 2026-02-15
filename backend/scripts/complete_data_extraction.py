@@ -11,7 +11,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(script_dir, '..', 'data')
 
 # Fichier d'entrée (celui qui a déjà les infos Prix/Lieu/Lien)
-input_file = os.path.join(data_dir, "annonces_lyon_vizzit_clean_final.csv")
+input_file = os.path.join(data_dir, "annonces_lyon_vizzit.csv")
 # Fichier de sortie
 output_file = os.path.join(data_dir, "annonces_lyon_vizzit_geoloc_complete.csv")
 
