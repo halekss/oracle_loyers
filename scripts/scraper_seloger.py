@@ -1,117 +1,123 @@
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
 import csv
-import re
+import os
 
-# URL de base (Page 1)
+# Configuration des chemins et URL
+OUTPUT_PATH = "backend/data/annonces_lyon_seloger.csv"
 base_url = "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=AD08FR28808"
 
 if __name__ == '__main__':
     
-    print("🥷 Lancement du mode Furtif pour SeLoger...")
+    print("🥷 Lancement du mode Furtif Automatique pour SeLoger...")
+    
+    # Création du dossier de destination s'il n'existe pas
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     
     options = uc.ChromeOptions()
-    driver = uc.Chrome(options=options)
+    options.add_argument('--ignore-certificate-errors')
+    # Utilisation de ta version spécifique de Chrome
+    driver = uc.Chrome(options=options, version_main=144)
 
-    print("🌍 Ouverture de SeLoger...")
-    
-    with open('annonces_lyon_seloger.csv', 'w', newline='', encoding='utf-8-sig') as f:
+    liens_vus = set()
+
+    with open(OUTPUT_PATH, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerow(['Titre', 'Prix', 'Lieu', 'Infos', 'Lien'])
 
-        # On tente de scraper les 3 premières pages
-        for page_num in range(1, 10):
+        page_num = 1
+        continuer = True
+
+        while continuer:
+            # Gestion de l'URL pour la pagination
+            url = base_url if page_num == 1 else f"{base_url}&page={page_num}"
             
-            # Gestion de l'URL
-            if page_num == 1:
-                url = base_url
-            else:
-                url = f"{base_url}&page={page_num}"
-            
-            print(f"\n--- 📄 Chargement Page {page_num} ---")
+            print(f"\n--- 📄 Analyse de la Page {page_num} ---")
             driver.get(url)
 
-            # --- PAUSE HUMAINE (Page 1) ---
+            # --- DÉTECTION DU CAPTCHA / COOKIES ---
             if page_num == 1:
-                print("\n" + "="*50)
-                print("✋ ACTION REQUISE :")
-                print("1. Résous le Captcha (Datadome) si présent.")
-                print("2. Accepte les cookies.")
-                print("3. Reviens ici.")
-                input("👉 Appuie sur [ENTRÉE] une fois la liste affichée...")
-                print("="*50 + "\n")
+                print("⏳ En attente de la validation du Captcha ou des Cookies...")
+                try:
+                    # On attend que le lien d'une annonce apparaisse (preuve que le Captcha est passé)
+                    WebDriverWait(driver, 120).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "a[data-testid='card-mfe-covering-link-testid']"))
+                    )
+                    print("✅ Page accessible détectée.")
+                except Exception:
+                    print("❌ Temps d'attente dépassé (Captcha non résolu ?).")
+                    break
             else:
-                time.sleep(random.uniform(4, 7))
+                # Pause plus longue pour SeLoger (très sensible)
+                time.sleep(random.uniform(5, 8))
 
+            # --- RÉCUPÉRATION DES ANNONCES ---
             try:
-                # --- CIBLAGE VIA DATA-TESTID ---
-                # On utilise l'attribut solide vu sur ta capture
+                # On utilise l'attribut data-testid qui est le plus stable sur SeLoger
                 annonces = driver.find_elements(By.CSS_SELECTOR, "a[data-testid='card-mfe-covering-link-testid']")
                 
                 if not annonces:
-                    print("❌ Pas d'annonces trouvées (Captcha probable ?).")
+                    print("🛑 Aucune annonce trouvée sur cette page.")
                     break
-                
-                print(f"📊 {len(annonces)} annonces détectées.")
 
-                compteur = 0
+                compteur_page = 0
                 for annonce in annonces:
                     try:
                         # 1. LIEN
                         lien = annonce.get_attribute("href")
                         
-                        # 2. TOUT EST DANS LE TITRE !
-                        # Format attendu : "Type - Lieu - Prix - Infos"
+                        if not lien or lien in liens_vus:
+                            continue
+
+                        # 2. EXTRACTION VIA L'ATTRIBUT TITLE
+                        # Le format de SeLoger dans "title" est souvent : "Type - Lieu - Prix - Infos"
                         full_title = annonce.get_attribute("title")
                         
                         if not full_title:
                             continue
 
-                        # On découpe le titre en morceaux en utilisant le séparateur " - "
                         parts = full_title.split(' - ')
                         
-                        # Initialisation par défaut
-                        titre = parts[0].strip() # "Appartement à louer"
-                        lieu = "Inconnu"
-                        prix = "N/C"
-                        infos = ""
-
-                        # On essaie de remplir intelligemment selon le nombre de morceaux
-                        if len(parts) >= 3:
-                            lieu = parts[1].strip() # "Lyon 7ème"
-                            
-                            # Le prix est souvent en 3ème position, on vérifie s'il y a un "€"
-                            partie_3 = parts[2].strip()
-                            if "€" in partie_3:
-                                prix = partie_3
-                                # Le reste, c'est les détails (Surface, Pièces...)
-                                if len(parts) > 3:
-                                    infos = " - ".join(parts[3:])
-                            else:
-                                # Parfois l'ordre change, on cherche le morceau avec "€"
-                                for p in parts:
-                                    if "€" in p:
-                                        prix = p.strip()
-                                    elif p != titre and p != lieu:
-                                        infos += p + " "
+                        # Découpage intelligent
+                        titre = parts[0].strip() if len(parts) > 0 else "Inconnu"
+                        lieu = parts[1].strip() if len(parts) > 1 else "Lyon"
                         
-                        else:
-                            # Si le format est bizarre, on met tout dans infos
-                            infos = full_title
+                        # Recherche du prix (cherche le symbole €)
+                        prix = "N/C"
+                        infos_liste = []
+                        for p in parts[2:]:
+                            if "€" in p:
+                                prix = p.strip()
+                            else:
+                                infos_liste.append(p.strip())
+                        
+                        infos = " - ".join(infos_liste)
 
-                        print(f"🏠 {titre} ({lieu}) -- 💰 {prix}")
+                        # Sauvegarde
                         writer.writerow([titre, prix, lieu, infos, lien])
-                        compteur += 1
+                        liens_vus.add(lien)
+                        compteur_page += 1
+                        print(f"🏠 {titre} ({lieu}) -- 💰 {prix}")
 
-                    except Exception as e:
-                        # print(f"Bug sur une annonce : {e}")
+                    except Exception:
                         continue
                 
-                print(f"✅ {compteur} annonces sauvegardées sur cette page.")
+                print(f"📊 Page {page_num} terminée : {compteur_page} nouvelles annonces.")
 
+                # Condition d'arrêt
+                if compteur_page == 0:
+                    print("🏁 Plus de nouvelles annonces uniques.")
+                    continuer = False
+                else:
+                    page_num += 1
+                    
             except Exception as e:
-                print(f"❌ Erreur globale sur la page : {e}")
+                print(f"❌ Erreur critique sur la page : {e}")
+                break
 
-    print("👋 Scraping SeLoger terminé !")
+    print(f"\n✨ Scraping SeLoger terminé ! Fichier : {OUTPUT_PATH}")
+    driver.quit()

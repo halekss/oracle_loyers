@@ -1,119 +1,116 @@
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
 import csv
 import re
+import os
 
-# URL de base
-base_url = "https://www.orpi.com/recherche/rent?transaction=rent&resultUrl=&realEstateTypes%5B0%5D=maison&realEstateTypes%5B1%5D=appartement&locations%5B0%5D%5Bvalue%5D=lyon&locations%5B0%5D%5Blabel%5D=Lyon&locations%5B0%5D%5Blatitude%5D=45.758&locations%5B0%5D%5Blongitude%5D=4.83494&agency=&minSurface=&maxSurface=&minLotSurface=&maxLotSurface=&minStoryLocation=&maxStoryLocation=&newBuild=&oldBuild=&lifeAnnuity=&minPrice=&maxPrice=&sort=date-down&layoutType=list&recentlySold=false&searchRange="
+# Configuration des chemins et URL
+OUTPUT_PATH = "backend/data/annonces_lyon_orpi.csv"
+# On prépare l'URL pour la pagination (Orpi utilise souvent un paramètre de tri ou de recherche)
+base_url = "https://www.orpi.com/recherche/rent?transaction=rent&locations%5B0%5D%5Bvalue%5D=lyon&sort=date-down&layoutType=list&page={}"
 
 if __name__ == '__main__':
     
-    print("🥷 Lancement du mode 'Ascenseur' pour ORPI...")
+    print("🥷 Lancement du mode 'Ascenseur' Automatique pour ORPI...")
+    
+    # Création du dossier de destination s'il n'existe pas
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     
     options = uc.ChromeOptions()
-    driver = uc.Chrome(options=options)
+    options.add_argument('--ignore-certificate-errors')
+    # Utilisation de ta version spécifique de Chrome
+    driver = uc.Chrome(options=options, version_main=144)
 
-    print("🌍 Ouverture d'Orpi...")
-    
-    with open('annonces_lyon_orpi.csv', 'w', newline='', encoding='utf-8-sig') as f:
+    liens_vus = set()
+
+    with open(OUTPUT_PATH, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerow(['Titre_Lieu', 'Prix', 'Infos', 'Lien'])
 
-        # Boucle sur les pages
-        for page_num in range(1, 6):
-            
-            if page_num == 1:
-                url = base_url
-            else:
-                url = f"{base_url}&page={page_num}"
-            
-            print(f"\n--- 📄 Chargement Page {page_num} ---")
+        page_num = 1
+        continuer = True
+
+        while continuer:
+            url = base_url.format(page_num)
+            print(f"\n--- 📄 Analyse de la Page {page_num} ---")
             driver.get(url)
 
-            # Pause cookies page 1
+            # --- DÉTECTION AUTOMATIQUE (Cookies) ---
             if page_num == 1:
-                print("\n" + "="*50)
-                print("✋ ACTION REQUISE :")
-                print("1. Accepte les cookies.")
-                print("2. Reviens ici.")
-                input("👉 Appuie sur [ENTRÉE] pour démarrer...")
-                print("="*50 + "\n")
-            else:
-                time.sleep(random.uniform(3, 5))
-
-            try:
-                # On cible les liens overlays
-                overlay_links = driver.find_elements(By.CSS_SELECTOR, "a[class*='c-overlay__link']")
-                
-                if not overlay_links:
-                    print("❌ Pas d'annonces trouvées.")
+                print("⏳ En attente de la validation des cookies sur Orpi...")
+                try:
+                    # On attend que les cartes d'annonces soient présentes
+                    WebDriverWait(driver, 60).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "article.c-overlay"))
+                    )
+                    print("✅ Accès détecté.")
+                except Exception:
+                    print("❌ Temps d'attente dépassé ou structure de page différente.")
                     break
-                
-                print(f"📊 {len(overlay_links)} annonces détectées.")
+            else:
+                time.sleep(random.uniform(3, 6))
 
-                compteur = 0
-                for link in overlay_links:
+            # --- DÉFILEMENT ---
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+
+            # --- RÉCUPÉRATION DES ANNONCES ---
+            # Le sélecteur 'article' avec la classe c-overlay est courant chez Orpi
+            annonces = driver.find_elements(By.CSS_SELECTOR, "article.c-overlay")
+            
+            if not annonces:
+                print("🛑 Aucune annonce trouvée sur cette page.")
+                break
+
+            compteur_nouveaux = 0
+            for annonce in annonces:
+                try:
+                    # Extraction du lien pour l'unicité
                     try:
-                        href = link.get_attribute("href")
-                        
-                        # --- L'ASCENSEUR ---
-                        # On commence par l'élément lui-même
-                        current_element = link
-                        found_text = ""
-                        
-                        # On monte jusqu'à 5 niveaux maximum pour trouver le conteneur principal
-                        for level in range(5):
-                            # On récupère le parent
-                            current_element = current_element.find_element(By.XPATH, "./..")
-                            # On utilise textContent (plus puissant que innerText pour le texte caché)
-                            text = current_element.get_attribute("textContent")
-                            
-                            # Si on trouve un symbole Euro, c'est qu'on est au bon étage !
-                            if "€" in text:
-                                found_text = text
-                                # print(f"   -> Trouvé au niveau {level+1} !") # Debug
-                                break
-                        
-                        # Si après 5 étages on a rien, on passe
-                        if not found_text:
-                            continue
-
-                        # --- EXTRACTION ---
-                        # Nettoyage des sauts de ligne multiples
-                        clean_text = re.sub(r'\s+', ' ', found_text).strip()
-                        
-                        # 1. PRIX (Regex : cherche chiffres + €)
-                        prix = "N/C"
-                        match = re.search(r'(\d[\d\s]*€)', clean_text)
-                        if match:
-                            prix = match.group(1).strip()
-                        
-                        # 2. TITRE & INFOS
-                        # On essaie d'être malin : le titre est souvent au début
-                        # On enlève le prix du texte pour voir ce qu'il reste
-                        reste = clean_text.replace(prix, "")
-                        
-                        # On coupe pour avoir Titre / Infos
-                        # Orpi met souvent : "Appartement Lyon 3e ... détails"
-                        # On va tout mettre dans Titre_Lieu pour l'instant, on triera avec Pandas
-                        titre = reste.strip()[:100] # On garde les 100 premiers caractères comme titre/lieu
-                        infos = reste.strip()[100:] # Le reste en infos
-
-                        if prix == "N/C":
-                            continue
-
-                        print(f"🏠 {titre}... -- 💰 {prix}")
-                        writer.writerow([titre, prix, infos, href])
-                        compteur += 1
-
-                    except Exception as e:
+                        lien_elem = annonce.find_element(By.TAG_NAME, "a")
+                        href = lien_elem.get_attribute("href")
+                    except:
                         continue
-                
-                print(f"✅ {compteur} annonces sauvegardées.")
 
-            except Exception as e:
-                print(f"❌ Erreur page : {e}")
+                    if href in liens_vus:
+                        continue
 
-    print("👋 Terminé !")
+                    # Texte brut de l'annonce pour le traitement
+                    clean_text = annonce.text.replace('\n', ' ').strip()
+                    
+                    # 1. PRIX (Regex pour chercher les chiffres + €)
+                    prix = "N/C"
+                    match = re.search(r'(\d[\d\s]*€)', clean_text)
+                    if match:
+                        prix = match.group(1).strip()
+                    
+                    # 2. TITRE & INFOS
+                    # On simplifie pour rester sur un code lisible
+                    reste = clean_text.replace(prix, "").strip()
+                    titre = reste[:100] # Les 100 premiers caractères
+                    infos = reste[100:] # Le reste
+                    
+                    if prix != "N/C":
+                        writer.writerow([titre, prix, infos, href])
+                        liens_vus.add(href)
+                        compteur_nouveaux += 1
+                        print(f"🏠 {titre[:50]}... -- 💰 {prix}")
+
+                except Exception:
+                    continue
+
+            print(f"📊 Page {page_num} terminée : {compteur_nouveaux} annonces ajoutées.")
+
+            # Condition d'arrêt
+            if compteur_nouveaux == 0:
+                print("🏁 Fin des nouvelles annonces.")
+                continuer = False
+            else:
+                page_num += 1
+
+    print(f"\n✨ Terminé ! Fichier sauvegardé dans : {OUTPUT_PATH}")
+    driver.quit()

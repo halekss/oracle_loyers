@@ -1,113 +1,101 @@
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
 import csv
+import os
 
-# URL de ta recherche Century 21 (Lyon)
-url = "https://www.century21.fr/annonces/f/location-maison-appartement/v-lyon/"
+# Configuration des chemins et URL
+OUTPUT_PATH = "backend/data/annonces_lyon_century21.csv"
+base_url = "https://www.century21.fr/annonces/f/location-maison-appartement/v-lyon/page-{}/"
 
 if __name__ == '__main__':
     
-    print("🥷 Lancement du mode Furtif pour Century 21...")
+    print("🥷 Lancement du mode Furtif Automatique pour Century 21...")
+    
+    # Création du dossier de destination s'il n'existe pas
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     
     options = uc.ChromeOptions()
-    # On ajoute une option pour ignorer les erreurs de certificats qui arrivent parfois
     options.add_argument('--ignore-certificate-errors')
-    driver = uc.Chrome(options=options)
+    # Utilisation de ta version spécifique de Chrome
+    driver = uc.Chrome(options=options, version_main=144)
 
-    print("🌍 Ouverture du site...")
-    driver.get(url)
+    liens_vus = set()
 
-    # --- PAUSE HUMAINE (Cookies) ---
-    print("\n" + "="*50)
-    print("✋ ACTION REQUISE :")
-    print("1. Valide les cookies sur la fenêtre Chrome.")
-    print("2. Reviens ici.")
-    input("👉 Appuie sur la touche [ENTRÉE] pour lancer le défilement et le scraping...")
-    print("="*50 + "\n")
-
-    with open('annonces_lyon_century21.csv', 'w', newline='', encoding='utf-8-sig') as f:
+    with open(OUTPUT_PATH, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerow(['Titre', 'Prix', 'Lieu_Surface', 'Lien'])
 
-        # --- AUTO-SCROLL ---
-        print("🔄 Début du défilement automatique...")
-        
-        last_height = driver.execute_script("return document.body.scrollHeight")
-        
-        while True:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(random.uniform(2, 4))
-            new_height = driver.execute_script("return document.body.scrollHeight")
-            
-            if new_height == last_height:
-                print("🛑 Bas de page atteint.")
-                break
-            last_height = new_height
-            print("   ⬇️ Chargement de la suite...")
-        
-        print("✅ Page chargée. Analyse des données...")
-        time.sleep(2)
+        page_num = 1
+        continuer = True
 
-        # --- SCRAPING ---
-        try:
-            # On cible le conteneur global de chaque annonce
-            # Basé sur ton image image_1a960c.png, le bloc contient "c-the-property-thumbnail-with-content"
+        while continuer:
+            url = base_url.format(page_num)
+            print(f"\n--- 📄 Analyse de la Page {page_num} ---")
+            driver.get(url)
+
+            # --- DÉTECTION AUTOMATIQUE (Cookies) ---
+            if page_num == 1:
+                print("⏳ En attente de la validation des cookies sur le navigateur...")
+                try:
+                    # Attend que les annonces soient présentes (signe que les cookies sont validés)
+                    WebDriverWait(driver, 60).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='c-the-property-thumbnail-with-content']"))
+                    )
+                    print("✅ Validation détectée, démarrage du scraping.")
+                except Exception:
+                    print("❌ Temps d'attente dépassé. Assure-toi de valider les cookies.")
+                    break
+            else:
+                time.sleep(random.uniform(2, 4))
+
+            # --- DÉFILEMENT ---
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1.5)
+
+            # --- RÉCUPÉRATION DES ANNONCES ---
             annonces = driver.find_elements(By.CSS_SELECTOR, "div[class*='c-the-property-thumbnail-with-content']")
             
-            print(f"📊 {len(annonces)} annonces détectées.")
+            if not annonces:
+                print("🛑 Aucun bloc trouvé. Fin de la recherche.")
+                break
 
-            compteur = 0
+            compteur_nouveaux = 0
             for annonce in annonces:
                 try:
-                    # 1. TITRE (ex: "Appartement F1 à louer")
-                    # Basé sur image_1a9951.png -> c-text-theme-heading-3
+                    # On vérifie le lien pour éviter les doublons
+                    lien_elem = annonce.find_element(By.TAG_NAME, "a")
+                    lien = lien_elem.get_attribute("href")
+
+                    if lien in liens_vus:
+                        continue
+                    
                     try:
                         titre = annonce.find_element(By.CSS_SELECTOR, "[class*='c-text-theme-heading-3']").text.strip()
-                    except:
-                        titre = "Titre Inconnu"
-
-                    # 2. PRIX
-                    # Basé sur image_1a998e.png -> c-text-theme-heading-1
-                    try:
-                        # On nettoie le texte pour virer les "par mois..." si besoin
                         prix_brut = annonce.find_element(By.CSS_SELECTOR, "[class*='c-text-theme-heading-1']").text
                         prix = prix_brut.replace('\n', ' ').strip()
-                    except:
-                        prix = "N/C"
-
-                    # 3. LIEU & SURFACE
-                    # Basé sur image_1a990a.png -> c-text-theme-heading-4
-                    try:
                         infos = annonce.find_element(By.CSS_SELECTOR, "[class*='c-text-theme-heading-4']").text.replace('\n', ' ').strip()
+                        
+                        writer.writerow([titre, prix, infos, lien])
+                        liens_vus.add(lien)
+                        compteur_nouveaux += 1
+                        print(f"🏠 {titre} - {prix}")
                     except:
-                        infos = ""
-
-                    # 4. LIEN
-                    # Le lien est généralement sur le titre ou un bouton "Voir le détail"
-                    try:
-                        lien_elem = annonce.find_element(By.TAG_NAME, "a")
-                        lien = lien_elem.get_attribute("href")
-                    except:
-                        lien = "Pas de lien"
-
-                    # --- FILTRE & DEBUG ---
-                    # Parfois Century 21 met des blocs "Vendu" ou des pubs qui n'ont pas de prix
-                    if prix == "N/C" and titre == "Titre Inconnu":
                         continue
-
-                    print(f"🏠 {titre} | {infos} -- 💰 {prix}")
-                    writer.writerow([titre, prix, infos, lien])
-                    compteur += 1
-
-                except Exception as e:
-                    # Si une annonce spécifique pose problème, on l'ignore
+                except:
                     continue
 
-            print(f"✅ Terminé ! {compteur} annonces sauvegardées.")
+            print(f"📊 Page {page_num} terminée : {compteur_nouveaux} annonces ajoutées.")
 
-        except Exception as e:
-            print(f"❌ Erreur lors du scraping : {e}")
+            # Si on ne trouve plus rien de nouveau sur une page, on s'arrête
+            if compteur_nouveaux == 0:
+                print("🏁 Fin des nouvelles annonces.")
+                continuer = False
+            else:
+                page_num += 1
 
-    # driver.quit() # Décommente si tu veux fermer automatiquement
+    print(f"\n✨ Travail terminé ! Fichier créé dans : {OUTPUT_PATH}")
+    driver.quit()

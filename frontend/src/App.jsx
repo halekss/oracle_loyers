@@ -31,7 +31,6 @@ function App() {
           count: data.count,
           type: data.type_filtre,
           // Message d'analyse simple
-          analysis: `Analyse basée sur ${data.count} annonces réelles à ${data.quartier_detecte}.`
         });
 
         // Mise à jour du contexte pour le Chatbot
