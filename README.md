@@ -5,10 +5,10 @@
 **L'Oracle des Loyers** est une application immobilière intelligente (et un peu cynique) capable d'estimer la "Vraie Valeur" d'un bien à Lyon.
 Au-delà des données classiques (surface, prix), l'Oracle croise les données avec **"Les 4 Cavaliers"** de l'environnement urbain pour affiner ses prédictions et ses conseils :
 
-1.  🐴 **Gentrification** (Cafés de spécialité, Yoga, Épiceries fines) -> *Fait monter les prix.*
-2.  🐴 **Vice** (Kebabs, Tabacs, Sex-shops, Casinos) -> *Impact variable (bruit vs commodité).*
-3.  🐴 **Nuisance** (Bars de nuit, Voies ferrées, Urgences) -> *Fait baisser les prix.*
-4.  🐴 **Superstition** (Cimetières, Pompes funèbres) -> *Impact psychologique à la baisse.*
+1.   **Gentrification** (Cafés de spécialité, Yoga, Épiceries fines) -> *Fait monter les prix.*
+2.   **Vice** (Kebabs, Tabacs, Sex-shops, Casinos) -> *Impact variable (bruit vs commodité).*
+3.   **Nuisance** (Bars de nuit, Voies ferrées, Urgences) -> *Fait baisser les prix.*
+4.   **Superstition** (Cimetières, Pompes funèbres) -> *Impact psychologique à la baisse.*
 
 ---
 
@@ -16,8 +16,8 @@ Au-delà des données classiques (surface, prix), l'Oracle croise les données a
 
 Le projet repose sur une architecture moderne conteneurisée :
 
-* **Frontend (Le Visage) 🎨** : React, TailwindCSS, Leaflet (Cartographie).
-* **Backend (Le Cerveau) 🧠** : Flask (Python).
+* **Frontend** : React, TailwindCSS, Leaflet (Cartographie).
+* **Backend** : Flask (Python).
 * **Intelligence Artificielle** :
     * **Prediction** : XGBoost (Machine Learning sur données structurées).
     * **Chatbot** : LLM local via **LM Studio** (Mistral/Llama) enrichi par RAG (Retrieval Augmented Generation).
@@ -51,8 +51,8 @@ docker-compose up --build
 ```
 
 Une fois lancé, accédez à :
-* 📱 **Frontend (Site Web)** : [http://localhost:5173](http://localhost:5173) (ou 3000 selon config)
-* ⚙️ **Backend (API)** : [http://localhost:5000](http://localhost:5000)
+*  **Frontend** : [http://localhost:5173](http://localhost:5173) (ou 3000 selon config)
+*  **Backend** : [http://localhost:5000](http://localhost:5000)
 
 ---
 
@@ -127,7 +127,7 @@ oracle-des-loyers/
 │   ├── requirements.txt
 │   ├── app.py                 # Point d'entrée serveur (Routes API)
 │   │
-│   ├── data/                  # LE COFFRE-FORT 💎
+│   ├── data/                  # LE COFFRE-FORT
 │   │   ├── base_de_donnees_immo_lyon_complet.csv
 │   │   ├── cavaliers_lyon.csv
 │   │   └── master_immo_final.csv
@@ -135,7 +135,7 @@ oracle-des-loyers/
 │   ├── models/                # Cerveaux entraînés
 │   │   └── price_predictor.pkl
 │   │
-│   ├── scripts/               # L'USINE À DONNÉES ⚙️
+│   ├── scripts/               # L'USINE À DONNÉES
 │   │   ├── enrich_cavaliers_cp.py
 │   │   ├── geocoding_jitter.py
 │   │   ├── compute_features.py
