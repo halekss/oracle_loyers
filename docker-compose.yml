@@ -1,4 +1,5 @@
 services:
+
   backend:
     build: ./backend
     container_name: oracle_backend
@@ -65,9 +66,7 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
       - ./backend:/opt/airflow/backend
-      - ./frontend/public/data:/opt/airflow/frontend/public/data
     entrypoint: /bin/bash
     command:
       - -c
@@ -80,6 +79,7 @@ services:
           --lastname User \
           --role Admin \
           --email admin@example.com || true
+        echo "✅ Airflow prêt → http://localhost:8082 (admin/admin)"
     networks:
       - oracle-network
 
@@ -94,13 +94,11 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
-      - AIRFLOW__WEBSERVER__SECRET_KEY=oracle_secret_key_change_in_prod
+      - AIRFLOW__WEBSERVER__SECRET_KEY=oracle_secret_key
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
       - ./backend:/opt/airflow/backend
-      - ./frontend/public/data:/opt/airflow/frontend/public/data
     ports:
       - "8082:8080"
     command: webserver
@@ -127,9 +125,7 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
       - ./backend:/opt/airflow/backend
-      - ./frontend/public/data:/opt/airflow/frontend/public/data
     command: scheduler
     restart: unless-stopped
     healthcheck:
