@@ -4,6 +4,18 @@ Vice - Sex-shop,manual_add,espaceplaisir,45.766989,4.832144,69001
 Vice - Sex-shop,manual_add,Love Shop (Dé)boutonné(e)s,45.769746,4.832958,69001
 Vice - Sex-shop,manual_add,espaceplaisir,45.762948,4.83379,69002
 Vice - Sex-shop,manual_add,La Lanterne Loveshop,45.765703,4.832034,69001
+Vice - Bar,bar,La Mistura,45.7561391,4.8503915,69003
+Vice - Bar,bar,MOS Bellecour,45.7576619,4.8347376,69002
+Vice - Tabac,tobacco,SNC Tabac Sathonay,45.7688244,4.830026,69001
+Vice - Tabac,tobacco,Inconnu,45.7774831,4.8323268,69004
+Vice - CBD Shop,cannabis,High Society,45.753454,4.8292928,69002
+Gentrification - Épicerie Fine,deli,Maison Cellerier,45.7408499,4.8186952,69002
+Gentrification - Atelier Vélo,bicycle,Cycles Vega,45.7573154,4.8475982,69003
+Nuisance - Aire de jeux,playground,Inconnu,45.7632606,4.8138187,69005
+Nuisance - Discothèque,nightclub,La Plantation,45.7607288,4.8324066,69002
+Superstition - Pompes Funèbres,funeral_directors,PFG,45.7815784,4.8326014,69004
+Superstition - Pompes Funèbres,funeral_directors,Pompes funèbre L'autre rive,45.7812398,4.8325506,69004
+Superstition - Pompes Funèbres,funeral_directors,Pôle funéraire public Métropole de Lyon,45.7814164,4.832557,69004
 Vice - Kebab,kebab,Antalya,45.7427751,4.8698435,69008
 Vice - Kebab,kebab,Lumière Kebab,45.7450863,4.8721525,69008
 Vice - Kebab,kebab,Eclair Kebab,45.7320869,4.8592433,69008
@@ -65,6 +77,109 @@ Vice - Kebab,kebab,Tacostore Lyon,45.7420271,4.8509688,69007
 Vice - Kebab,kebab,Kebouse Grill House,45.7391,4.8291762,69007
 Vice - Kebab,kebab,Inconnu,45.7675946,4.8318894,69001
 Vice - Kebab,kebab,Kiosque Istanbul,45.7297583,4.8298239,69007
+Vice - Tabac,tobacco,Tabac La Civette,45.7754574,4.8321522,69004
+Vice - Tabac,tobacco,Tabac du Mail,45.7766425,4.8330252,69004
+Vice - Tabac,tobacco,Inconnu,45.7313454,4.8593663,69008
+Vice - Tabac,tobacco,Le Scott,45.7801866,4.8070707,69009
+Vice - Tabac,tobacco,Tabac,45.7548372,4.8426183,69007
+Vice - Tabac,tobacco,Tabac de l'Île,45.7981486,4.8304374,69009
+Vice - Tabac,tobacco,Le Chiquito tabac presse loto,45.7530868,4.8303132,69002
+Vice - Tabac,tobacco,Tabac-presse-loto de St Just,45.7562911,4.8176539,69005
+Vice - Tabac,tobacco,La pipe,45.7469219,4.8370247,69007
+Vice - Tabac,tobacco,Le diplomate,45.758868,4.834044,69002
+Vice - Tabac,tobacco,Tabac des 24 colonies,45.7623186,4.8287108,69005
+Vice - Tabac,tobacco,Tabac-Presse,45.7569552,4.865091,69003
+Vice - Tabac,tobacco,Le Juliette,45.7656278,4.8554987,69006
+Vice - Tabac,tobacco,Tabac des Facultés,45.7437012,4.87858,69003
+Vice - Tabac,tobacco,Le Clike,45.7788034,4.8407882,69004
+Vice - Tabac,tobacco,Inconnu,45.7418855,4.8189816,69002
+Vice - Tabac,tobacco,Tabac Sigarellum,45.7540892,4.8848402,69003
+Vice - Tabac,tobacco,Tabac Vaise,45.7744701,4.8069456,69009
+Vice - Tabac,tobacco,Tabac presse,45.7434844,4.874143,69008
+Vice - Tabac,tobacco,Tabac de l'Europe,45.7574532,4.8355519,69002
+Vice - Tabac,tobacco,Le Gitana,45.7633953,4.8419972,69003
+Vice - Tabac,tobacco,Le quatre-vingt-dix,45.751896,4.8468231,69007
+Vice - Tabac,tobacco,Tabac Cigarestore,45.7634283,4.8327255,69002
+Vice - Tabac,tobacco,Inconnu,45.7890455,4.7899043,69009
+Vice - Tabac,tobacco,Tabac Duchère,45.785749,4.7948161,69009
+Vice - Tabac,tobacco,Le République,45.759902,4.8359048,69002
+Vice - Tabac,tobacco,Tabac Presse Loto Nars,45.750304,4.8287029,69002
+Vice - Tabac,tobacco,Le Marigny,45.7506477,4.8264433,69002
+Vice - Tabac,tobacco,Tabac Presse Loto,45.7381769,4.8812213,69008
+Vice - Tabac,tobacco,Tabac des pierres plantées,45.7730796,4.8319092,69001
+Vice - Tabac,tobacco,Le Garibaldi,45.7677484,4.8505587,69006
+Vice - Tabac,tobacco,La Madeleine,45.7484307,4.8479873,69007
+Vice - Tabac,tobacco,Tabac-Presse-Loto Chauville,45.7535939,4.8385041,69007
+Vice - Tabac,tobacco,Tabac de la Pêcherie,45.765629,4.8312988,69001
+Vice - Tabac,tobacco,Le Radjah,45.7484335,4.8435626,69007
+Vice - Tabac,tobacco,Tabac Primerose,45.7671144,4.8341919,69001
+Vice - Tabac,tobacco,Tabac des Frères Lumière,45.7447562,4.8680834,69008
+Vice - Tabac,tobacco,Vap'Station,45.7450226,4.8669763,69008
+Vice - Tabac,tobacco,Tabac Hôtel de Ville,45.7669629,4.8358441,69001
+Vice - Tabac,tobacco,Tabac,45.7662092,4.8330942,69001
+Vice - Tabac,tobacco,Tabac Moumou,45.7553095,4.8434521,69003
+Vice - Tabac,tobacco,Inconnu,45.7556635,4.8425198,69003
+Vice - Tabac,tobacco,Le vendôme,45.7666223,4.8453139,69006
+Vice - Tabac,tobacco,Inconnu,45.7647038,4.8286278,69005
+Vice - Tabac,tobacco,Zahir Slimani,45.7486192,4.8395205,69007
+Vice - Tabac,tobacco,Ziklop Stor,45.7733609,4.8093597,69009
+Vice - Tabac,tobacco,Le Narval,45.7750017,4.8429733,69006
+Vice - Tabac,tobacco,Tabac Grande Côte,45.7695012,4.8317441,69001
+Vice - Tabac,tobacco,Inconnu,45.7481756,4.8553141,69007
+Vice - Tabac,tobacco,Le Presse Book,45.7356951,4.835996,69007
+Vice - Tabac,tobacco,Le P'tit Gerland,45.7289214,4.8376027,69007
+Vice - Tabac,tobacco,Loto tabac presse,45.7698142,4.8567892,69006
+Vice - Tabac,tobacco,Tabac de la Mairie,45.734928,4.874528,69008
+Vice - Tabac,tobacco,Tabac des États,45.7318959,4.8660177,69008
+Vice - Tabac,tobacco,Tabac de la Guillotière,45.7494435,4.8526767,69007
+Vice - Tabac,tobacco,Bar tabac Cristal,45.779283,4.8323591,69004
+Vice - Tabac,tobacco,Espace 117,45.7373405,4.8526546,69008
+Vice - Tabac,tobacco,Tabac AG5,45.759054,4.8297217,69002
+Vice - Tabac,tobacco,Tabac du Moulin à vent,45.7298015,4.8534952,69200
+Vice - Tabac,tobacco,Le Lutetia,45.7482722,4.8803608,69003
+Vice - Tabac,tobacco,Inconnu,45.7302264,4.885285,69008
+Vice - Tabac,tobacco,Campus Chicha,45.7490962,4.8424853,69007
+Vice - Tabac,tobacco,Inconnu,45.7554583,4.8082112,69005
+Vice - Tabac,tobacco,La civette du pharaon,45.7846554,4.8526836,69006
+Vice - Tabac,tobacco,Joko,45.7704859,4.8614987,69006
+Vice - Tabac,tobacco,Magpresse,45.7627223,4.7976308,69005
+Vice - Tabac,tobacco,Tabac Lafayette,45.7636113,4.8639656,69003
+Vice - Tabac,tobacco,Inconnu,45.7756124,4.7951253,69009
+Vice - Tabac,tobacco,Smoke Shop,45.7611909,4.8556693,69003
+Gentrification - Épicerie Fine,deli,La maison du Bon vivant,45.7402766,4.8206888,69002
+Superstition - Pompes Funèbres,funeral_directors,PFG,45.7413622,4.8532015,69007
+Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Intercommunales,45.7419598,4.8535156,69007
+Superstition - Pompes Funèbres,funeral_directors,Centre funéraire Rivière,45.7419547,4.8526203,69007
+Superstition - Pompes Funèbres,funeral_directors,PFG,45.7488875,4.793176,69005
+Superstition - Pompes Funèbres,funeral_directors,PFG,45.7815477,4.8326079,69004
+Superstition - Pompes Funèbres,funeral_directors,Eco funéraire,45.743621,4.8785389,69003
+Superstition - Pompes Funèbres,funeral_directors,Centre Funéraire Rivière,45.7436765,4.8771262,69003
+Superstition - Pompes Funèbres,funeral_directors,Pompes funèbre L'autre rive,45.7812056,4.8325461,69004
+Superstition - Pompes Funèbres,funeral_directors,Pôle funéraire public Métropole de Lyon,45.7814017,4.8325706,69004
+Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Service Catholique des Funérailles,45.7583626,4.8296218,69002
+Superstition - Pompes Funèbres,funeral_directors,Services funéraires PFG,45.73391,4.8764715,69008
+Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Générales Lyon Kruger,45.7363827,4.8802482,69008
+Superstition - Pompes Funèbres,funeral_directors,PFG,45.7699966,4.8564613,69006
+Superstition - Pompes Funèbres,funeral_directors,Pompes funèbres Chaboud,45.7433,4.8773096,69008
+Superstition - Pompes Funèbres,funeral_directors,PFG,45.7571382,4.8408884,69003
+Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Musulmanes Essalam,45.7571757,4.8436337,69003
+Superstition - Pompes Funèbres,funeral_directors,L'Éternité,45.7532604,4.8452163,69007
+Superstition - Pompes Funèbres,funeral_directors,Chambre Funéraire de la Croix-Rousse,45.7843796,4.8209347,69004
+Superstition - Pompes Funèbres,funeral_directors,Lyon Berthelot,45.7409213,4.8558269,69007
+Superstition - Pompes Funèbres,funeral_directors,Funeris,45.7406853,4.8556055,69007
+Superstition - Pompes Funèbres,funeral_directors,Inconnu,45.740664,4.8556934,69007
+Superstition - Pompes Funèbres,funeral_directors,Pompes funèbres Rozier,45.7414039,4.8533792,69007
+Superstition - Pompes Funèbres,funeral_directors,Service Chrétien de Funérailles,45.7568445,4.8249469,69005
+Superstition - Pompes Funèbres,funeral_directors,La Maison des Obsèques,45.7423859,4.8512363,69007
+Superstition - Pompes Funèbres,funeral_directors,Roc Eclerc,45.7426034,4.8938424,69003
+Superstition - Pompes Funèbres,funeral_directors,Noir Clair,45.7492338,4.835097,69007
+Superstition - Pompes Funèbres,funeral_directors,Pôle Funéraire Public,45.7435402,4.8784997,69003
+Superstition - Pompes Funèbres,funeral_directors,Pompes funèbres de France,45.7807424,4.8324598,69004
+Superstition - Pompes Funèbres,funeral_directors,Centre funéraire Rivière,45.7809125,4.8324869,69004
+Superstition - Pompes Funèbres,funeral_directors,Roc Eclerc,45.7816152,4.8326308,69004
+Superstition - Pompes Funèbres,funeral_directors,Marbrerie Paul Favre,45.7818085,4.820814,69004
+Superstition - Pompes Funèbres,funeral_directors,Inconnu,45.7629535,4.7974825,69005
+Superstition - Pompes Funèbres,funeral_directors,Marbrerie - Zone technique,45.761335,4.8120077,69005
 Vice - Bar,bar,Le Flan' Ruin Pub,45.7686724,4.8361996,69001
 Vice - Bar,bar,Ninkasi Guillotière,45.7561747,4.84108,69003
 Vice - Bar,bar,Bar de L'Eldorado,45.7544636,4.8458006,69003
@@ -130,7 +245,7 @@ Vice - Bar,bar,Le Gambetta,45.7560185,4.8415262,69003
 Vice - Bar,bar,Plouf Bateau Mouse,45.7595534,4.8400976,69003
 Vice - Bar,bar,L'Angle d'Or,45.7546058,4.8420521,69007
 Vice - Bar,bar,Le Bec de Jazz,45.7704846,4.8332759,69001
-Vice - Bar,bar,L'Aromo,45.7537657,4.840532,69007
+Vice - Bar,bar,Olmé,45.7537657,4.840532,69007
 Vice - Bar,bar,Blue Monday,45.7537039,4.8402826,69007
 Vice - Bar,bar,Le Chatelet,45.7518642,4.8401552,69007
 Vice - Bar,bar,Le Commerce,45.749447,4.8387511,69007
@@ -218,7 +333,6 @@ Vice - Bar,bar,L'Absinthe,45.7702436,4.8264574,69001
 Vice - Bar,bar,La Serre,45.7695385,4.829646,69001
 Vice - Bar,bar,La Patrie,45.7633845,4.8447873,69003
 Vice - Bar,bar,Jazz Hot Club de Lyon,45.7656594,4.8319642,69001
-Vice - Bar,bar,La Mistura,45.7561391,4.8503915,69003
 Vice - Bar,bar,Le Azevedo,45.7240506,4.8837084,69008
 Vice - Bar,bar,Turbine,45.750053,4.8442192,69007
 Vice - Bar,bar,Look Bar,45.7622831,4.8285561,69005
@@ -253,6 +367,7 @@ Vice - Bar,bar,Groom,45.7706062,4.8370066,69001
 Vice - Bar,bar,L'Amicale,45.7521649,4.8441559,69007
 Vice - Bar,bar,Cabana Café,45.7697199,4.8289488,69001
 Vice - Bar,bar,PEPS public House,45.7544347,4.8395915,69007
+Vice - Bar,bar,Kino,45.7450431,4.8719371,69008
 Vice - Bar,bar,Justin,45.7581758,4.8360855,69002
 Vice - Bar,bar,Darts club des gones,45.7645674,4.8273931,69005
 Vice - Bar,bar,Le Bachut,45.7369791,4.868997,69008
@@ -274,7 +389,7 @@ Vice - Bar,bar,L'Atelier,45.7760005,4.8013875,69009
 Vice - Bar,bar,Café Montchat,45.7497517,4.884904,69003
 Vice - Bar,bar,Kodama Bar Lyon,45.7671971,4.8269127,69005
 Vice - Bar,bar,Le Quai 19,45.763077,4.8321849,69002
-Vice - Bar,bar,BBC Café,45.762129,4.8320294,69002
+Vice - Bar,bar,Le Roi Lyon,45.762129,4.8320294,69002
 Vice - Bar,bar,Wallace,45.7615606,4.8324186,69002
 Vice - Bar,bar,Café Court,45.7614165,4.8320304,69002
 Vice - Bar,bar,Barum,45.7848366,4.8528161,69006
@@ -407,89 +522,17 @@ Vice - Bar,bar,New Allstar,45.7670546,4.8220034,69005
 Vice - Bar,bar,Bambane,45.7498253,4.8460842,69007
 Vice - Bar,bar,Mac Bar,45.7841771,4.8527224,69006
 Vice - Bar,bar,Lo'Ben Bar,45.742905,4.8165537,69002
-Vice - Bar,bar,MOS Bellecour,45.7576619,4.8347376,69002
 Vice - Bar,bar,Espit Chupitos,45.7676293,4.837294,69001
 Vice - Bar,bar,bohème,45.7675751,4.8577755,69006
+Vice - Bar,bar,Poissonchat,45.7683185,4.8072807,69009
 Vice - Bar,bar,Tic & Tac,45.769989,4.8504268,69006
 Vice - Bar,bar,Inconnu,45.7628404,4.7980072,69005
 Vice - Bar,bar,Oz Boat,45.7617773,4.8403885,69003
 Vice - Bar,bar,Loupika,45.7367152,4.8145631,69002
-Vice - Bar,bar,Sonic Lyon,45.7507333,4.8203487,69005
+Vice - Bar,bar,Le Sonic,45.7507333,4.8203487,69005
 Vice - Bar,bar,Bentomania,45.7617257,4.855956,69003
 Vice - Bar,bar,Daniel & Denise en voyage,45.7602822,4.859108,69003
-Vice - Tabac,tobacco,Tabac La Civette,45.7754574,4.8321522,69004
-Vice - Tabac,tobacco,Tabac du Mail,45.7766425,4.8330252,69004
-Vice - Tabac,tobacco,Inconnu,45.7313454,4.8593663,69008
-Vice - Tabac,tobacco,Le Scott,45.7801866,4.8070707,69009
-Vice - Tabac,tobacco,Tabac,45.7548372,4.8426183,69007
-Vice - Tabac,tobacco,Tabac de l'Île,45.7981486,4.8304374,69009
-Vice - Tabac,tobacco,Le Chiquito tabac presse loto,45.7530868,4.8303132,69002
-Vice - Tabac,tobacco,Tabac-presse-loto de St Just,45.7562911,4.8176539,69005
-Vice - Tabac,tobacco,La pipe,45.7469219,4.8370247,69007
-Vice - Tabac,tobacco,Le diplomate,45.758868,4.834044,69002
-Vice - Tabac,tobacco,Tabac des 24 colonies,45.7623186,4.8287108,69005
-Vice - Tabac,tobacco,Tabac-Presse,45.7569552,4.865091,69003
-Vice - Tabac,tobacco,Le Juliette,45.7656278,4.8554987,69006
-Vice - Tabac,tobacco,Tabac des Facultés,45.7437012,4.87858,69003
-Vice - Tabac,tobacco,Le Clike,45.7788034,4.8407882,69004
-Vice - Tabac,tobacco,Inconnu,45.7418855,4.8189816,69002
-Vice - Tabac,tobacco,Tabac Sigarellum,45.7540892,4.8848402,69003
-Vice - Tabac,tobacco,Tabac Vaise,45.7744701,4.8069456,69009
-Vice - Tabac,tobacco,Tabac presse,45.7434844,4.874143,69008
-Vice - Tabac,tobacco,Tabac de l'Europe,45.7574532,4.8355519,69002
-Vice - Tabac,tobacco,Le Gitana,45.7633953,4.8419972,69003
-Vice - Tabac,tobacco,Le quatre-vingt-dix,45.751896,4.8468231,69007
-Vice - Tabac,tobacco,Tabac Cigarestore,45.7634283,4.8327255,69002
-Vice - Tabac,tobacco,Inconnu,45.7890455,4.7899043,69009
-Vice - Tabac,tobacco,Tabac Duchère,45.785749,4.7948161,69009
-Vice - Tabac,tobacco,Le République,45.759902,4.8359048,69002
-Vice - Tabac,tobacco,Tabac Presse Loto Nars,45.750304,4.8287029,69002
-Vice - Tabac,tobacco,Le Marigny,45.7506477,4.8264433,69002
-Vice - Tabac,tobacco,Tabac Presse Loto,45.7381769,4.8812213,69008
-Vice - Tabac,tobacco,Tabac des pierres plantées,45.7730796,4.8319092,69001
-Vice - Tabac,tobacco,Le Garibaldi,45.7677484,4.8505587,69006
-Vice - Tabac,tobacco,La Madeleine,45.7484307,4.8479873,69007
-Vice - Tabac,tobacco,Tabac-Presse-Loto Chauville,45.7535939,4.8385041,69007
-Vice - Tabac,tobacco,Tabac de la Pêcherie,45.765629,4.8312988,69001
-Vice - Tabac,tobacco,Le Radjah,45.7484335,4.8435626,69007
-Vice - Tabac,tobacco,Tabac Primerose,45.7671144,4.8341919,69001
-Vice - Tabac,tobacco,Tabac des Frères Lumière,45.7447562,4.8680834,69008
-Vice - Tabac,tobacco,Vap'Station,45.7450226,4.8669763,69008
-Vice - Tabac,tobacco,Tabac Hôtel de Ville,45.7669629,4.8358441,69001
-Vice - Tabac,tobacco,Tabac,45.7662092,4.8330942,69001
-Vice - Tabac,tobacco,Tabac Moumou,45.7553095,4.8434521,69003
-Vice - Tabac,tobacco,Inconnu,45.7556635,4.8425198,69003
-Vice - Tabac,tobacco,Le vendôme,45.7666223,4.8453139,69006
-Vice - Tabac,tobacco,Inconnu,45.7647038,4.8286278,69005
-Vice - Tabac,tobacco,SNC Tabac Sathonay,45.7688244,4.830026,69001
-Vice - Tabac,tobacco,Zahir Slimani,45.7486192,4.8395205,69007
-Vice - Tabac,tobacco,Ziklop Stor,45.7733609,4.8093597,69009
-Vice - Tabac,tobacco,Le Narval,45.7750017,4.8429733,69006
-Vice - Tabac,tobacco,Tabac Grande Côte,45.7695012,4.8317441,69001
-Vice - Tabac,tobacco,Inconnu,45.7774831,4.8323268,69004
-Vice - Tabac,tobacco,Inconnu,45.7481756,4.8553141,69007
-Vice - Tabac,tobacco,Le Presse Book,45.7356951,4.835996,69007
-Vice - Tabac,tobacco,Le P'tit Gerland,45.7289214,4.8376027,69007
-Vice - Tabac,tobacco,Loto tabac presse,45.7698142,4.8567892,69006
-Vice - Tabac,tobacco,Tabac de la Mairie,45.734928,4.874528,69008
-Vice - Tabac,tobacco,Tabac des États,45.7318959,4.8660177,69008
-Vice - Tabac,tobacco,Tabac de la Guillotière,45.7494435,4.8526767,69007
-Vice - Tabac,tobacco,Bar tabac Cristal,45.779283,4.8323591,69004
-Vice - Tabac,tobacco,Espace 117,45.7373405,4.8526546,69008
-Vice - Tabac,tobacco,Tabac AG5,45.759054,4.8297217,69002
-Vice - Tabac,tobacco,Tabac du Moulin à vent,45.7298015,4.8534952,69200
-Vice - Tabac,tobacco,Le Lutetia,45.7482722,4.8803608,69003
-Vice - Tabac,tobacco,Inconnu,45.7302264,4.885285,69008
-Vice - Tabac,tobacco,Campus Chicha,45.7490962,4.8424853,69007
-Vice - Tabac,tobacco,Inconnu,45.7554583,4.8082112,69005
-Vice - Tabac,tobacco,La civette du pharaon,45.7846554,4.8526836,69006
-Vice - Tabac,tobacco,Joko,45.7704859,4.8614987,69006
-Vice - Tabac,tobacco,Magpresse,45.7627223,4.7976308,69005
-Vice - Tabac,tobacco,Tabac Lafayette,45.7636113,4.8639656,69003
-Vice - Tabac,tobacco,Inconnu,45.7756124,4.7951253,69009
-Vice - Tabac,tobacco,Smoke Shop,45.7611909,4.8556693,69003
 Vice - Casino,casino,Le Pharaon,45.7847561,4.8527698,69006
-Vice - CBD Shop,cannabis,High Society,45.753454,4.8292928,69002
 Vice - CBD Shop,cannabis,CBD Shop,45.7528917,4.8306852,69002
 Vice - CBD Shop,cannabis,High Society,45.7539177,4.8465622,69007
 Vice - CBD Shop,cannabis,Dr. Greentown,45.7634937,4.842753,69003
@@ -639,7 +682,6 @@ Gentrification - Épicerie Fine,deli,La Belle-Iloise,45.7621162,4.8273935,69005
 Gentrification - Épicerie Fine,deli,Abel,45.7702135,4.8589738,69006
 Gentrification - Épicerie Fine,deli,L'Atelier Espagnol,45.7540837,4.8849459,69003
 Gentrification - Épicerie Fine,deli,C-Gastronomie,45.7676941,4.8423613,69006
-Gentrification - Épicerie Fine,deli,Maison Cellerier,45.7408499,4.8186952,69002
 Gentrification - Épicerie Fine,deli,Pignol,45.758388,4.8328001,69002
 Gentrification - Épicerie Fine,deli,Inconnu,45.7631471,4.8280137,69005
 Gentrification - Épicerie Fine,deli,Naturalmente Italiano,45.7688622,4.8487498,69006
@@ -691,7 +733,6 @@ Gentrification - Épicerie Fine,deli,Le Comptoir Irlandais,45.761412,4.83164,690
 Gentrification - Épicerie Fine,deli,La Maison du Miel,45.775271,4.8312494,69004
 Gentrification - Épicerie Fine,deli,Pistache d'Alep,45.7747423,4.8067204,69009
 Gentrification - Épicerie Fine,deli,Patate,45.7663391,4.8199792,69005
-Gentrification - Épicerie Fine,deli,La maison du Bon vivant,45.7402766,4.8206888,69002
 Gentrification - Épicerie Fine,deli,Vatel Gourmet,45.7697398,4.8536037,69006
 Gentrification - Épicerie Fine,deli,Les Yeux dans la Quille,45.7301091,4.8296482,69007
 Gentrification - Épicerie Fine,deli,Priscilla's Lifestyle,45.7746835,4.8271986,69004
@@ -708,6 +749,7 @@ Gentrification - Épicerie Fine,deli,Petit Paÿs,45.7520019,4.8553472,69003
 Gentrification - Épicerie Fine,deli,Les Hâpy'Curiens,45.7475653,4.880747,69003
 Gentrification - Épicerie Fine,deli,Inconnu,45.7531178,4.8538909,69003
 Gentrification - Épicerie Fine,deli,Veronatuti,45.7493859,4.8475312,69007
+Gentrification - Épicerie Fine,deli,Iberico & Co,45.77552,4.8326721,69004
 Gentrification - Épicerie Fine,deli,Café Terroir,45.7606291,4.8339161,69002
 Gentrification - Torréfacteur,coffee,Nespresso,45.7606879,4.8330975,69002
 Gentrification - Torréfacteur,coffee,Bongoo café,45.7685197,4.8474846,69006
@@ -769,7 +811,6 @@ Gentrification - Atelier Vélo,bicycle,Uniques,45.7606659,4.8453647,69003
 Gentrification - Atelier Vélo,bicycle,Repair and Run,45.764124,4.8450661,69006
 Gentrification - Atelier Vélo,bicycle,En Selle Marcel,45.761103,4.8377031,69002
 Gentrification - Atelier Vélo,bicycle,Virvolt,45.7690942,4.8351089,69001
-Gentrification - Atelier Vélo,bicycle,Cycles Vega,45.7573154,4.8475982,69003
 Gentrification - Atelier Vélo,bicycle,En Selle Marcel,45.7666635,4.8441096,69006
 Gentrification - Atelier Vélo,bicycle,Dring,45.7578205,4.8523545,69003
 Gentrification - Atelier Vélo,bicycle,Prestacycles,45.7352257,4.8397282,69007
@@ -850,7 +891,7 @@ Gentrification - Fleuriste,florist,Prequ'île Fleurs,45.7646974,4.8341362,69002
 Gentrification - Fleuriste,florist,Maison Célestin,45.7456414,4.8640429,69008
 Gentrification - Fleuriste,florist,Atelier Black Baccara,45.7537777,4.8879526,69003
 Gentrification - Fleuriste,florist,Les Imparfaits,45.7529345,4.8319542,69002
-Gentrification - Fleuriste,florist,Studio Des Saisons,45.7680566,4.8446648,69006
+Gentrification - Fleuriste,florist,Studio des Saisons,45.7680566,4.8446648,69006
 Gentrification - Fleuriste,florist,Rhizomes,45.7794251,4.8327271,69004
 Gentrification - Fleuriste,florist,Flora Moda,45.7568475,4.816043,69005
 Gentrification - Fleuriste,florist,Un jardin à Lyon,45.7358459,4.8360793,69007
@@ -1279,7 +1320,6 @@ Nuisance - Aire de jeux,playground,Inconnu,45.7433779,4.8171943,69002
 Nuisance - Aire de jeux,playground,Inconnu,45.7728928,4.8293442,69001
 Nuisance - Aire de jeux,playground,Inconnu,45.7728886,4.8265532,69001
 Nuisance - Aire de jeux,playground,Inconnu,45.7594042,4.8633276,69003
-Nuisance - Aire de jeux,playground,Inconnu,45.7632606,4.8138187,69005
 Nuisance - Aire de jeux,playground,Inconnu,45.7686733,4.8155113,69001
 Nuisance - Aire de jeux,playground,ressort,45.7572482,4.8306731,69002
 Nuisance - Aire de jeux,playground,Inconnu,45.7450789,4.8470798,69007
@@ -1346,6 +1386,7 @@ Nuisance - Aire de jeux,playground,Inconnu,45.76401,4.831597,69002
 Nuisance - Aire de jeux,playground,Parc de Gerland Nord,45.7244159,4.8215589,0
 Nuisance - Aire de jeux,playground,Inconnu,45.7456911,4.8682676,69008
 Nuisance - Aire de jeux,playground,Inconnu,45.7380141,4.8591682,69008
+Nuisance - Aire de jeux,playground,Inconnu,45.7521299,4.8976886,69003
 Nuisance - Aire de jeux,playground,Inconnu,45.7519883,4.8823327,69003
 Nuisance - Aire de jeux,playground,Square Ninon Vallin,45.7840159,4.8235565,69004
 Nuisance - Aire de jeux,playground,Square Docteur Jean Reverzy,45.7517114,4.8715544,69003
@@ -1582,6 +1623,7 @@ Nuisance - Aire de jeux,playground,Inconnu,45.7606261,4.7999132,69005
 Nuisance - Aire de jeux,playground,Inconnu,45.7294112,4.8316592,69007
 Nuisance - Aire de jeux,playground,Inconnu,45.7324722,4.8659446,69008
 Nuisance - Aire de jeux,playground,Cours intérieur de l'école maternelle Les Petits Canuts,45.7797531,4.8315274,69004
+Nuisance - Aire de jeux,playground,Square de la Diversité,45.7881755,4.7888171,69009
 Nuisance - Salle de Concert,music_venue,Kraspek MyziK,45.7712711,4.8357517,69001
 Nuisance - Salle de Concert,music_venue,Collision,45.7708595,4.8330651,69001
 Nuisance - Discothèque,nightclub,Fiesta Loca,45.7672861,4.826534,69005
@@ -1598,7 +1640,6 @@ Nuisance - Discothèque,nightclub,Raspoutine,45.7716236,4.8350589,69001
 Nuisance - Discothèque,nightclub,Rock'n Eat Live,45.7709758,4.8114869,69009
 Nuisance - Discothèque,nightclub,Dock Circus,45.7383581,4.8147971,69002
 Nuisance - Discothèque,nightclub,Le Petit Salon,45.7408169,4.848825,69007
-Nuisance - Discothèque,nightclub,La Plantation,45.7607288,4.8324066,69002
 Nuisance - Discothèque,nightclub,Le Saône Night,45.7608438,4.8320784,69002
 Nuisance - Discothèque,nightclub,La Salsa,45.7668293,4.8351224,69001
 Nuisance - Discothèque,nightclub,Ambassade,45.7605798,4.8363705,69002
@@ -1627,36 +1668,6 @@ Nuisance - Station Service,fuel,Esso,45.7805705,4.8004162,69009
 Nuisance - Station Service,fuel,Avia,45.7544646,4.8528314,69003
 Nuisance - Station Service,fuel,Esso,45.7346426,4.8181559,69002
 Nuisance - Station Service,fuel,Avia,45.7539526,4.7774658,69005
-Superstition - Pompes Funèbres,funeral_directors,PFG,45.7413622,4.8532015,69007
-Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Intercommunales,45.7419598,4.8535156,69007
-Superstition - Pompes Funèbres,funeral_directors,Centre funéraire Rivière,45.7419547,4.8526203,69007
-Superstition - Pompes Funèbres,funeral_directors,PFG,45.7488875,4.793176,69005
-Superstition - Pompes Funèbres,funeral_directors,PFG,45.7815784,4.8326014,69004
-Superstition - Pompes Funèbres,funeral_directors,Eco funéraire,45.743621,4.8785389,69003
-Superstition - Pompes Funèbres,funeral_directors,Centre Funéraire Rivière,45.7436765,4.8771262,69003
-Superstition - Pompes Funèbres,funeral_directors,Pompes funèbre L'autre rive,45.7812398,4.8325506,69004
-Superstition - Pompes Funèbres,funeral_directors,Pôle funéraire public Métropole de Lyon,45.7814164,4.832557,69004
-Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Service Catholique des Funérailles,45.7583626,4.8296218,69002
-Superstition - Pompes Funèbres,funeral_directors,Services funéraires PFG,45.73391,4.8764715,69008
-Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Générales Lyon Kruger,45.7363827,4.8802482,69008
-Superstition - Pompes Funèbres,funeral_directors,PFG,45.7699966,4.8564613,69006
-Superstition - Pompes Funèbres,funeral_directors,Pompes funèbres Chaboud,45.7433,4.8773096,69008
-Superstition - Pompes Funèbres,funeral_directors,PFG,45.7571382,4.8408884,69003
-Superstition - Pompes Funèbres,funeral_directors,Pompes Funèbres Musulmanes Essalam,45.7571757,4.8436337,69003
-Superstition - Pompes Funèbres,funeral_directors,L'Éternité,45.7532604,4.8452163,69007
-Superstition - Pompes Funèbres,funeral_directors,Chambre Funéraire de la Croix-Rousse,45.7843796,4.8209347,69004
-Superstition - Pompes Funèbres,funeral_directors,Lyon Berthelot,45.7409213,4.8558269,69007
-Superstition - Pompes Funèbres,funeral_directors,Funeris,45.7406853,4.8556055,69007
-Superstition - Pompes Funèbres,funeral_directors,Inconnu,45.740664,4.8556934,69007
-Superstition - Pompes Funèbres,funeral_directors,Pompes funèbres Rozier,45.7414039,4.8533792,69007
-Superstition - Pompes Funèbres,funeral_directors,Service Chrétien de Funérailles,45.7568445,4.8249469,69005
-Superstition - Pompes Funèbres,funeral_directors,La Maison des Obsèques,45.7423859,4.8512363,69007
-Superstition - Pompes Funèbres,funeral_directors,Roc Eclerc,45.7426034,4.8938424,69003
-Superstition - Pompes Funèbres,funeral_directors,Noir Clair,45.7492338,4.835097,69007
-Superstition - Pompes Funèbres,funeral_directors,Pôle Funéraire Public,45.7435402,4.8784997,69003
-Superstition - Pompes Funèbres,funeral_directors,Marbrerie Paul Favre,45.7818085,4.820814,69004
-Superstition - Pompes Funèbres,funeral_directors,Inconnu,45.7629535,4.7974825,69005
-Superstition - Pompes Funèbres,funeral_directors,Marbrerie - Zone technique,45.761335,4.8120077,69005
 Superstition - Cimetière,cemetery,Nouveau Cimetière de la Guillotière,45.7380918,4.8557353,69008
 Superstition - Cimetière,cemetery,Ancien Cimetière de la Guillotière,45.7424192,4.8549203,69007
 Superstition - Cimetière,cemetery,Cimetière de Loyasse nouveau,45.7615986,4.8136997,69005
