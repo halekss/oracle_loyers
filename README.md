@@ -20,7 +20,7 @@ Le projet repose sur une architecture moderne conteneurisée :
 * **Backend** : Flask (Python).
 * **Intelligence Artificielle** :
     * **Prediction** : XGBoost (Machine Learning sur données structurées).
-    * **Chatbot** : LLM local via **LM Studio** (Mistral/Llama) enrichi par RAG (Retrieval Augmented Generation).
+    * **Chatbot** : LLM local via **LM Studio** : dolphin-2.9.3-mistral-nemo-12b , enrichi par RAG (Retrieval Augmented Generation).
 * **Infrastructure** : Docker & Docker Compose.
 
 ---
@@ -37,7 +37,7 @@ C'est la méthode la plus simple pour lancer tout le projet (Front + Back + Base
 Pour que l'Oracle puisse parler, il a besoin d'un cerveau local.
 
 1.  Ouvrez **LM Studio**.
-2.  Chargez un modèle (ex: `Mistral-7B-Instruct` ou `Hermes`).
+2.  Modèle à charger : dolphin-2.9.3-mistral-nemo-12b.
 3.  Allez dans l'onglet **Local Server** (<->).
 4.  Cochez **"Enable CORS"** (Options à droite) pour autoriser les requêtes.
 5.  Cliquez sur **Start Server**.
