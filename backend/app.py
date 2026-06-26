@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -8,13 +9,29 @@ import joblib
 
 # Initialisation de l'application
 app = Flask(__name__)
+DEFAULT_CORS_ORIGINS = ['https://oracle-loyers.onrender.com']
+
+
+def normalize_origin(origin):
+    return origin.strip().rstrip('/')
 
 
 def get_cors_origins():
     origins = os.environ.get('CORS_ORIGINS', '').strip()
     if not origins:
         return '*'
-    return [origin.strip() for origin in origins.split(',') if origin.strip()]
+
+    allowed_origins = []
+    for origin in origins.split(','):
+        normalized_origin = normalize_origin(origin)
+        if normalized_origin and normalized_origin not in allowed_origins:
+            allowed_origins.append(normalized_origin)
+
+    for origin in DEFAULT_CORS_ORIGINS:
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
+
+    return allowed_origins
 
 
 def get_server_port():
@@ -22,6 +39,18 @@ def get_server_port():
 
 
 CORS(app, origins=get_cors_origins())  # Autorise les requêtes du Frontend React
+
+
+def get_request_json():
+    data = request.get_json(silent=True)
+    if data is not None:
+        return data
+
+    raw_body = request.get_data(as_text=True).strip()
+    if not raw_body:
+        return {}
+
+    return json.loads(raw_body)
 
 # Configuration des chemins
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -64,7 +93,7 @@ def get_quartier_stats():
     Filtre le dataframe par nom de quartier et par type de bien.
     """
     try:
-        data = request.json
+        data = get_request_json()
         quartier_input = data.get('quartier', '').strip()
         type_filter = data.get('type_local', 'Tout')
 
@@ -165,7 +194,7 @@ def predict():
 def chat():
     """Route pour le Chatbot Immotep"""
     try:
-        data = request.json
+        data = get_request_json()
         # On récupère le message utilisateur et le contexte envoyé par le front
         user_msg = data.get('message', '')
         context = data.get('context', '') 

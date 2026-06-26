@@ -154,7 +154,7 @@ Le frontend lit l'URL de l'API via Vite :
 VITE_API_URL="https://votre-backend.onrender.com/api"
 ```
 
-En local, si `VITE_API_URL` n'est pas défini, le frontend utilise `http://localhost:5000/api`.
+Sur Render, cette variable est obligatoire. En local seulement, si `VITE_API_URL` n'est pas défini, le frontend utilise `http://localhost:5000/api`.
 
 ---
 

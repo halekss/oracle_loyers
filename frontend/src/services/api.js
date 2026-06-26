@@ -1,11 +1,22 @@
 const DEFAULT_API_URL = "http://localhost:5000/api";
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", ""]);
 
-export const getApiBaseUrl = (env = import.meta.env || {}) => {
+export const getApiBaseUrl = (env = import.meta.env || {}, locationInfo = globalThis.location) => {
+  if (!env.VITE_API_URL && !LOCAL_HOSTS.has(locationInfo?.hostname || "")) {
+    throw new Error("VITE_API_URL must be configured when the frontend is deployed.");
+  }
+
   const apiUrl = env.VITE_API_URL || DEFAULT_API_URL;
   return apiUrl.replace(/\/+$/, "");
 };
 
 const API_URL = getApiBaseUrl();
+
+export const apiFetchOptions = (payload) => ({
+  method: "POST",
+  headers: { "Content-Type": "text/plain" },
+  body: JSON.stringify(payload),
+});
 
 export const api = {
   // Récupérer les annonces pour la carte
@@ -24,9 +35,7 @@ export const api = {
   getPrediction: async (searchData) => {
     try {
       const response = await fetch(`${API_URL}/predict`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(searchData),
+        ...apiFetchOptions(searchData),
       });
       if (!response.ok) throw new Error("Erreur serveur Oracle");
       return await response.json();
@@ -40,9 +49,7 @@ export const api = {
   getQuartierStats: async (quartierName, typeLocal = 'Tout') => {
     try {
       const response = await fetch(`${API_URL}/quartier-stats`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        ...apiFetchOptions({
           quartier: quartierName,
           type_local: typeLocal
         }),
@@ -63,9 +70,7 @@ export const api = {
       if (context) payload.context = context;
       
       const response = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        ...apiFetchOptions(payload),
       });
       
       if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);

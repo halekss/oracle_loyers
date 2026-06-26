@@ -20,12 +20,19 @@ class RuntimeConfigTest(unittest.TestCase):
     def test_get_cors_origins_parses_comma_separated_env(self):
         with patch.dict(
             os.environ,
-            {"CORS_ORIGINS": "https://oracle-loyers.onrender.com, https://admin.example.com "},
+            {"CORS_ORIGINS": "https://oracle-loyers.onrender.com/, https://admin.example.com "},
             clear=False,
         ):
             self.assertEqual(
                 app.get_cors_origins(),
                 ["https://oracle-loyers.onrender.com", "https://admin.example.com"],
+            )
+
+    def test_get_cors_origins_keeps_frontend_origin_allowed_when_env_is_set(self):
+        with patch.dict(os.environ, {"CORS_ORIGINS": "https://admin.example.com"}, clear=False):
+            self.assertEqual(
+                app.get_cors_origins(),
+                ["https://admin.example.com", "https://oracle-loyers.onrender.com"],
             )
 
     def test_get_cors_origins_defaults_to_open_cors(self):
