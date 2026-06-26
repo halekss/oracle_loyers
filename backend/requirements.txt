@@ -18,3 +18,4 @@ tqdm
 folium
 Flask
 flask-cors
+google-genai

@@ -49,7 +49,7 @@ export const api = {
     }
   },
 
-  // Chatbot (MODIFIÉ POUR MARCHER AVEC CHATORACLE.JSX)
+  // Chatbot Immotep
   sendChatMessage: async (message, context = null) => {
     try {
       const payload = { message };
@@ -64,11 +64,11 @@ export const api = {
       if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
       
       const data = await response.json();
-      return data.response; // <--- ICI : On renvoie seulement le texte, pas l'objet JSON
+      return data;
       
     } catch (error) {
       console.error("❌ Erreur Chat:", error);
-      throw error; // On renvoie l'erreur au composant pour qu'il affiche l'alerte rouge
+      throw error;
     }
   }
 };

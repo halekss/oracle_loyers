@@ -37,7 +37,7 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
 );
 
 export default function MapComponent({ center }) {
-  const [mapUrl, setMapUrl] = useState('');
+  const [mapUrl] = useState(() => `/data/map_pings_lyon_calques.html?t=${Date.now()}`);
   const iframeRef = useRef(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   
@@ -56,14 +56,10 @@ export default function MapComponent({ center }) {
   });
 
   useEffect(() => {
-    setMapUrl(`/data/map_pings_lyon_calques.html?t=${Date.now()}`);
-  }, []);
-
-  useEffect(() => {
     if (center && iframeRef.current && iframeRef.current.contentWindow) {
       iframeRef.current.contentWindow.postMessage({
         type: 'FLY_TO',
-        lat: center[0], lng: center[1], zoom: 16
+        lat: center[0], lng: center[1], zoom: center[2] || 16
       }, '*');
     }
   }, [center]);

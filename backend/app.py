@@ -112,6 +112,14 @@ def get_quartier_stats():
         
         # Nom officiel le plus fréquent pour l'affichage (ex: "Gerland" au lieu de "gerland")
         nom_officiel = filtered_df['quartier'].mode()[0] if not filtered_df['quartier'].empty else quartier_input
+        center = None
+        if {'latitude', 'longitude'}.issubset(filtered_df.columns):
+            coords = filtered_df.dropna(subset=['latitude', 'longitude'])
+            if not coords.empty:
+                center = {
+                    "lat": round(float(coords['latitude'].mean()), 6),
+                    "lng": round(float(coords['longitude'].mean()), 6)
+                }
 
         return jsonify({
             "found": True,
@@ -119,7 +127,8 @@ def get_quartier_stats():
             "type_filtre": type_filter,
             "count": int(count),
             "prix_moyen": round(float(mean_price), 0),
-            "prix_m2_moyen": round(float(mean_price_m2), 0)
+            "prix_m2_moyen": round(float(mean_price_m2), 0),
+            "center": center
         })
 
     except Exception as e:
@@ -148,20 +157,20 @@ def chat():
         user_msg = data.get('message', '')
         context = data.get('context', '') 
 
-        if not user_msg:
+        if not user_msg or not user_msg.strip():
             return jsonify({"response": "Silence... Tu n'as rien à dire ?"}), 400
 
         # On récupère le DataFrame complet
         df = data_loader.get_data()
 
-        # On appelle le service dédié qui gère le prompt et Llama
-        reponse_immotep = chat_service.get_response(user_msg, context, df)
+        # On appelle le service dédié qui gère le prompt, le parsing et Gemini
+        result_immotep = chat_service.get_chat_result(user_msg, context, df)
 
-        return jsonify({"response": reponse_immotep})
+        return jsonify(result_immotep)
 
     except Exception as e:
         print(f"Erreur Chat: {e}")
-        return jsonify({"response": "J'ai eu un bug interne. C'est sûrement ta faute."}), 500
+        return jsonify({"response": "Erreur interne côté serveur. Immotep revient dès que l'API répond correctement."}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

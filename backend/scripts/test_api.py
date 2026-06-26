@@ -21,7 +21,7 @@ try:
     # 3. On regarde la réponse
     if response.status_code == 200:
         data = response.json()
-        print("\n✅ SUCCÈS ! L'Oracle a répondu :")
+        print("\n✅ SUCCÈS ! Immotep a répondu :")
         print("="*40)
         print(f"💰 Loyer Estimé : {data['estimated_price']} {data['currency']}")
         print(f"📐 Prix au m²   : {data['stats']['prix_m2']} €/m²")

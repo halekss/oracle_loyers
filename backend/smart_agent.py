@@ -291,7 +291,7 @@ INSTRUCTION: Commente brièvement ces résultats.
 ℹ️ INFORMATIONS MANQUANTES:
 Il me manque: {', '.join(missing)}
 
-INSTRUCTION: Demande gentiment ces infos à l'utilisateur (style Oracle).
+INSTRUCTION: Demande gentiment ces infos à l'utilisateur (style Immotep).
 """
         
         return {'context': context, 'data': {}}

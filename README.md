@@ -20,8 +20,45 @@ Le projet repose sur une architecture moderne conteneurisée :
 * **Backend** : Flask (Python).
 * **Intelligence Artificielle** :
     * **Prediction** : XGBoost (Machine Learning sur données structurées).
-    * **Chatbot** : LLM local via **LM Studio** : dolphin-2.9.3-mistral-nemo-12b , enrichi par RAG (Retrieval Augmented Generation).
+    * **Chatbot** : **Google AI / Gemini Developer API** enrichi par RAG compact (Retrieval Augmented Generation).
 * **Infrastructure** : Docker & Docker Compose.
+
+---
+
+## IA: local vs cloud
+
+Le projet sait documenter deux modes d'exécution LLM:
+
+* **LM Studio en local** : utile pour montrer la maîtrise d'un LLM self-hosted/local, sans dépendre d'un provider externe. Ce mode demande une machine locale allumée et assez puissante, ce qui le rend moins adapté à une démo portfolio publique.
+* **Google AI / Gemini** : mode retenu pour le déploiement portfolio. Il évite le serveur GPU/local, s'intègre simplement côté backend et le free tier suffit généralement pour une démonstration à trafic modéré.
+
+Le backend actif garde la clé API uniquement côté serveur via `GEMINI_API_KEY`. Le modèle par défaut est `gemini-2.5-flash`, avec des réponses courtes et un contexte RAG borné pour limiter les coûts et les délais.
+
+Variables disponibles:
+
+```bash
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MAX_OUTPUT_TOKENS=800
+GEMINI_TEMPERATURE=0.7
+```
+
+Limites à garder en tête: les quotas Google AI peuvent évoluer, le débit n'est pas garanti, et une clé API ne doit jamais être exposée dans le frontend. Une interaction courte avec contexte compact vaut souvent environ `1 000 à 3 000 tokens`, ce qui est largement suffisant pour une démo portfolio avec trafic modéré. Le risque principal est surtout un pic de visiteurs simultanés, pas une simple démonstration occasionnelle.
+
+Pour créer la clé:
+
+1. Ouvrez Google AI Studio.
+2. Créez une API key Gemini.
+3. Renseignez `GEMINI_API_KEY` dans votre environnement local ou dans la configuration de déploiement.
+4. Lancez le backend puis testez `/api/chat`.
+
+Test rapide:
+
+```bash
+curl -X POST http://localhost:5000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Que vaut un T2 à Gerland ?","context":"Quartier: Gerland, Type: T2"}'
+```
 
 ---
 
@@ -31,16 +68,15 @@ C'est la méthode la plus simple pour lancer tout le projet (Front + Back + Base
 
 ### Prérequis
 * **Docker Desktop** installé et lancé.
-* **LM Studio** (pour le Chatbot).
+* Une clé **Google AI Studio** pour le chatbot (`GEMINI_API_KEY`).
 
-### 1. Configuration de l'IA (LM Studio)
-Pour que l'Oracle puisse parler, il a besoin d'un cerveau local.
+### 1. Configuration de l'IA (Gemini)
+Pour qu'Immotep, le chatbot de l'Oracle, puisse parler en déploiement portfolio, configurez Gemini côté backend.
 
-1.  Ouvrez **LM Studio**.
-2.  Modèle à charger : dolphin-2.9.3-mistral-nemo-12b.
-3.  Allez dans l'onglet **Local Server** (<->).
-4.  Cochez **"Enable CORS"** (Options à droite) pour autoriser les requêtes.
-5.  Cliquez sur **Start Server**.
+```bash
+export GEMINI_API_KEY="votre-cle-google-ai"
+export GEMINI_MODEL="gemini-2.5-flash"
+```
 
 ### 2. Lancement de l'application
 Ouvrez un terminal à la racine du projet :
@@ -72,6 +108,9 @@ python -m venv .venv
 
 # Installer les dépendances
 pip install -r requirements.txt
+
+# Configurer Gemini
+export GEMINI_API_KEY="votre-cle-google-ai"
 
 # Lancer le serveur
 python app.py

@@ -10,6 +10,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [chatContext, setChatContext] = useState(null);
+  const [mapCenter, setMapCenter] = useState(null);
 
   // Fonction déclenchée par le bouton SCAN ou les filtres T1/T2
   const handleScan = async (quartier, typeLocal) => {
@@ -35,6 +36,9 @@ function App() {
 
         // Mise à jour du contexte pour le Chatbot
         setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
+        if (data.center?.lat && data.center?.lng) {
+          setMapCenter([data.center.lat, data.center.lng, 15]);
+        }
 
       } else {
         setError(data.message || "Aucun résultat trouvé.");
@@ -52,7 +56,7 @@ function App() {
       
       {/* COLONNE GAUCHE (Carte - 60%) */}
       <div className="w-[60%] h-full relative border-r border-slate-800">
-        <MapComponent />
+        <MapComponent center={mapCenter} />
       </div>
 
       {/* COLONNE DROITE (Interface - 40%) */}
@@ -92,6 +96,11 @@ function App() {
           <ChatOracle 
             analysis={result?.analysis}
             context={chatContext}
+            onInsight={(insight) => {
+              if (insight?.map_focus?.lat && insight?.map_focus?.lng) {
+                setMapCenter([insight.map_focus.lat, insight.map_focus.lng, insight.map_focus.zoom || 15]);
+              }
+            }}
           />
         </div>
       </div>

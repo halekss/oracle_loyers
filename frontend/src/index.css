@@ -124,7 +124,7 @@
   animation: typing 2s steps(40, end);
 }
 
-/* Glow effect pour les messages de l'Oracle */
+/* Glow effect pour les messages d'Immotep */
 .oracle-glow {
   box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
   transition: box-shadow 0.3s ease;

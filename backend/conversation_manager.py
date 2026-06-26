@@ -95,7 +95,7 @@ class ConversationManager:
         formatted = "HISTORIQUE DE LA CONVERSATION:\n"
         for msg in history:
             formatted += f"User: {msg['user']}\n"
-            formatted += f"Oracle: {msg['oracle']}\n\n"
+            formatted += f"Immotep: {msg['oracle']}\n\n"
         
         return formatted
     

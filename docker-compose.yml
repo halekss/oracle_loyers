@@ -5,14 +5,15 @@ services:
     container_name: oracle_backend
     ports:
       - "5000:5000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - ./backend/data:/app/data
     environment:
       - FLASK_ENV=development
-      - LM_STUDIO_URL=http://host.docker.internal:1234/v1/chat/completions
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_MAX_OUTPUT_TOKENS=${GEMINI_MAX_OUTPUT_TOKENS:-800}
+      - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE:-0.7}
     command: python app.py
     restart: unless-stopped
     networks:
@@ -53,7 +54,7 @@ services:
       - oracle-network
 
   airflow-init:
-    build: ./airflow
+    build: ./Airflow
     container_name: oracle_airflow_init
     depends_on:
       airflow-db:
@@ -64,8 +65,8 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
+      - ./Airflow/dags:/opt/airflow/dags
+      - airflow-logs-volume:/opt/airflow/logs
       - ./backend:/opt/airflow/backend
     entrypoint: /bin/bash
     command:
@@ -84,7 +85,7 @@ services:
       - oracle-network
 
   airflow-webserver:
-    build: ./airflow
+    build: ./Airflow
     container_name: oracle_airflow_webserver
     depends_on:
       airflow-init:
@@ -96,8 +97,8 @@ services:
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
       - AIRFLOW__WEBSERVER__SECRET_KEY=oracle_secret_key
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
+      - ./Airflow/dags:/opt/airflow/dags
+      - airflow-logs-volume:/opt/airflow/logs
       - ./backend:/opt/airflow/backend
     ports:
       - "8082:8080"
@@ -112,7 +113,7 @@ services:
       - oracle-network
 
   airflow-scheduler:
-    build: ./airflow
+    build: ./Airflow
     container_name: oracle_airflow_scheduler
     depends_on:
       airflow-init:
@@ -123,8 +124,8 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
+      - ./Airflow/dags:/opt/airflow/dags
+      - airflow-logs-volume:/opt/airflow/logs
       - ./backend:/opt/airflow/backend
     command: scheduler
     restart: unless-stopped
@@ -138,6 +139,7 @@ services:
 
 volumes:
   airflow-db-volume:
+  airflow-logs-volume:
 
 networks:
   oracle-network:
