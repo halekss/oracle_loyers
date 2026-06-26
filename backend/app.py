@@ -8,7 +8,20 @@ import joblib
 
 # Initialisation de l'application
 app = Flask(__name__)
-CORS(app)  # Autorise les requêtes du Frontend React
+
+
+def get_cors_origins():
+    origins = os.environ.get('CORS_ORIGINS', '').strip()
+    if not origins:
+        return '*'
+    return [origin.strip() for origin in origins.split(',') if origin.strip()]
+
+
+def get_server_port():
+    return int(os.environ.get('PORT', '5000'))
+
+
+CORS(app, origins=get_cors_origins())  # Autorise les requêtes du Frontend React
 
 # Configuration des chemins
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -173,4 +186,4 @@ def chat():
         return jsonify({"response": "Erreur interne côté serveur. Immotep revient dès que l'API répond correctement."}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1', host='0.0.0.0', port=get_server_port())

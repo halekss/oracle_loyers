@@ -130,6 +130,34 @@ npm run dev
 
 ---
 
+## 🚀 Déploiement sans Docker Compose
+
+### Backend
+
+Le backend Flask lit le port depuis l'environnement, ce qui permet à Render de fournir `PORT` automatiquement.
+
+Variables utiles :
+
+```bash
+GEMINI_API_KEY="votre-cle-google-ai"
+GEMINI_MODEL="gemini-2.5-flash"
+CORS_ORIGINS="https://oracle-loyers.onrender.com"
+```
+
+`CORS_ORIGINS` est optionnel. S'il n'est pas défini, le backend garde un CORS ouvert pour éviter de bloquer une démo.
+
+### Frontend
+
+Le frontend lit l'URL de l'API via Vite :
+
+```bash
+VITE_API_URL="https://votre-backend.onrender.com/api"
+```
+
+En local, si `VITE_API_URL` n'est pas défini, le frontend utilise `http://localhost:5000/api`.
+
+---
+
 ## ⚙️ Les Scripts de Données (ETL)
 
 Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/`.

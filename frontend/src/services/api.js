@@ -1,4 +1,11 @@
-const API_URL = "http://localhost:5000/api";
+const DEFAULT_API_URL = "http://localhost:5000/api";
+
+export const getApiBaseUrl = (env = import.meta.env || {}) => {
+  const apiUrl = env.VITE_API_URL || DEFAULT_API_URL;
+  return apiUrl.replace(/\/+$/, "");
+};
+
+const API_URL = getApiBaseUrl();
 
 export const api = {
   // Récupérer les annonces pour la carte
