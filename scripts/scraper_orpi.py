@@ -8,22 +8,48 @@ import csv
 import re
 import os
 
-# Configuration des chemins et URL
-OUTPUT_PATH = "backend/data/annonces_lyon_orpi.csv"
-# On prépare l'URL pour la pagination (Orpi utilise souvent un paramètre de tri ou de recherche)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_orpi.csv')
 base_url = "https://www.orpi.com/recherche/rent?transaction=rent&locations%5B0%5D%5Bvalue%5D=lyon&sort=date-down&layoutType=list&page={}"
 
+# Sélecteurs avec fallbacks ordonnés par stabilité
+CARD_SELECTORS = ["article.c-overlay", "article[class*='overlay']", "article[class*='card']", "article"]
+TITRE_SELECTORS = [
+    "[class*='c-the-ad-of-program__title']",
+    "[class*='title']",
+    "h2", "h3",
+]
+PRIX_SELECTORS = [
+    "[class*='price']",
+    "[class*='prix']",
+    "[class*='amount']",
+]
+INFOS_SELECTORS = [
+    "[class*='detail']",
+    "[class*='surface']",
+    "[class*='info']",
+    "[class*='caracteristique']",
+]
+
+def find_text(element, selectors):
+    for sel in selectors:
+        try:
+            return element.find_element(By.CSS_SELECTOR, sel).text.strip()
+        except Exception:
+            continue
+    return ""
+
+def extract_price_from_text(text):
+    match = re.search(r'(\d[\d\s]*€|\d[\d\s]*eur)', text, re.IGNORECASE)
+    return match.group(1).strip() if match else ""
+
 if __name__ == '__main__':
-    
     print("🥷 Lancement du mode 'Ascenseur' Automatique pour ORPI...")
-    
-    # Création du dossier de destination s'il n'existe pas
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    
+
     options = uc.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
-    # Utilisation de ta version spécifique de Chrome
-    driver = uc.Chrome(options=options, version_main=144)
+    driver = uc.Chrome(options=options)
 
     liens_vus = set()
 
@@ -39,29 +65,35 @@ if __name__ == '__main__':
             print(f"\n--- 📄 Analyse de la Page {page_num} ---")
             driver.get(url)
 
-            # --- DÉTECTION AUTOMATIQUE (Cookies) ---
             if page_num == 1:
                 print("⏳ En attente de la validation des cookies sur Orpi...")
-                try:
-                    # On attend que les cartes d'annonces soient présentes
-                    WebDriverWait(driver, 60).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "article.c-overlay"))
-                    )
-                    print("✅ Accès détecté.")
-                except Exception:
-                    print("❌ Temps d'attente dépassé ou structure de page différente.")
+                card_found = False
+                for sel in CARD_SELECTORS:
+                    try:
+                        WebDriverWait(driver, 60).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+                        )
+                        print(f"✅ Accès détecté avec sélecteur : {sel}")
+                        card_found = True
+                        break
+                    except Exception:
+                        continue
+                if not card_found:
+                    print("❌ Aucun sélecteur de carte ne correspond. Structure inconnue.")
                     break
             else:
                 time.sleep(random.uniform(3, 6))
 
-            # --- DÉFILEMENT ---
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(2)
 
-            # --- RÉCUPÉRATION DES ANNONCES ---
-            # Le sélecteur 'article' avec la classe c-overlay est courant chez Orpi
-            annonces = driver.find_elements(By.CSS_SELECTOR, "article.c-overlay")
-            
+            # Essai des sélecteurs de carte dans l'ordre
+            annonces = []
+            for sel in CARD_SELECTORS:
+                annonces = driver.find_elements(By.CSS_SELECTOR, sel)
+                if annonces:
+                    break
+
             if not annonces:
                 print("🛑 Aucune annonce trouvée sur cette page.")
                 break
@@ -69,43 +101,37 @@ if __name__ == '__main__':
             compteur_nouveaux = 0
             for annonce in annonces:
                 try:
-                    # Extraction du lien pour l'unicité
                     try:
                         lien_elem = annonce.find_element(By.TAG_NAME, "a")
                         href = lien_elem.get_attribute("href")
-                    except:
+                    except Exception:
                         continue
 
-                    if href in liens_vus:
+                    if not href or href in liens_vus:
                         continue
 
-                    # Texte brut de l'annonce pour le traitement
-                    clean_text = annonce.text.replace('\n', ' ').strip()
-                    
-                    # 1. PRIX (Regex pour chercher les chiffres + €)
-                    prix = "N/C"
-                    match = re.search(r'(\d[\d\s]*€)', clean_text)
-                    if match:
-                        prix = match.group(1).strip()
-                    
-                    # 2. TITRE & INFOS
-                    # On simplifie pour rester sur un code lisible
-                    reste = clean_text.replace(prix, "").strip()
-                    titre = reste[:100] # Les 100 premiers caractères
-                    infos = reste[100:] # Le reste
-                    
-                    if prix != "N/C":
-                        writer.writerow([titre, prix, infos, href])
-                        liens_vus.add(href)
-                        compteur_nouveaux += 1
-                        print(f"🏠 {titre[:50]}... -- 💰 {prix}")
+                    # Extraction structurée avec fallback sur le texte brut
+                    titre = find_text(annonce, TITRE_SELECTORS)
+                    prix = find_text(annonce, PRIX_SELECTORS)
+                    infos = find_text(annonce, INFOS_SELECTORS)
+
+                    # Si pas de prix via sélecteur, chercher dans le texte complet
+                    if not prix:
+                        prix = extract_price_from_text(annonce.text)
+
+                    if not prix:
+                        continue
+
+                    writer.writerow([titre, prix, infos, href])
+                    liens_vus.add(href)
+                    compteur_nouveaux += 1
+                    print(f"🏠 {titre[:60]}... -- 💰 {prix}")
 
                 except Exception:
                     continue
 
             print(f"📊 Page {page_num} terminée : {compteur_nouveaux} annonces ajoutées.")
 
-            # Condition d'arrêt
             if compteur_nouveaux == 0:
                 print("🏁 Fin des nouvelles annonces.")
                 continuer = False

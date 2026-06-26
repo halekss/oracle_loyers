@@ -7,21 +7,45 @@ import random
 import csv
 import os
 
-# Configuration des chemins et URL
-OUTPUT_PATH = "backend/data/annonces_lyon_century21.csv"
+script_dir = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_century21.csv')
 base_url = "https://www.century21.fr/annonces/f/location-maison-appartement/v-lyon/page-{}/"
 
+CARD_SELECTOR = "div[class*='c-the-property-thumbnail-with-content']"
+TITRE_SELECTORS = [
+    "[class*='c-text-theme-heading-3']",
+    "[class*='heading-3']",
+    "h3",
+    "h2",
+]
+PRIX_SELECTORS = [
+    "[class*='c-text-theme-heading-1']",
+    "[class*='heading-1']",
+    "[class*='price']",
+    "[class*='prix']",
+]
+INFOS_SELECTORS = [
+    "[class*='c-text-theme-heading-4']",
+    "[class*='heading-4']",
+    "[class*='surface']",
+    "[class*='detail']",
+]
+
+def find_first(element, selectors):
+    for sel in selectors:
+        try:
+            return element.find_element(By.CSS_SELECTOR, sel).text.strip()
+        except Exception:
+            continue
+    return ""
+
 if __name__ == '__main__':
-    
     print("🥷 Lancement du mode Furtif Automatique pour Century 21...")
-    
-    # Création du dossier de destination s'il n'existe pas
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    
+
     options = uc.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
-    # Utilisation de ta version spécifique de Chrome
-    driver = uc.Chrome(options=options, version_main=144)
+    driver = uc.Chrome(options=options)
 
     liens_vus = set()
 
@@ -37,28 +61,23 @@ if __name__ == '__main__':
             print(f"\n--- 📄 Analyse de la Page {page_num} ---")
             driver.get(url)
 
-            # --- DÉTECTION AUTOMATIQUE (Cookies) ---
             if page_num == 1:
-                print("⏳ En attente de la validation des cookies sur le navigateur...")
+                print("⏳ En attente de la validation des cookies...")
                 try:
-                    # Attend que les annonces soient présentes (signe que les cookies sont validés)
                     WebDriverWait(driver, 60).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='c-the-property-thumbnail-with-content']"))
+                        EC.presence_of_element_located((By.CSS_SELECTOR, CARD_SELECTOR))
                     )
                     print("✅ Validation détectée, démarrage du scraping.")
                 except Exception:
-                    print("❌ Temps d'attente dépassé. Assure-toi de valider les cookies.")
+                    print("❌ Temps d'attente dépassé.")
                     break
             else:
                 time.sleep(random.uniform(2, 4))
 
-            # --- DÉFILEMENT ---
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(1.5)
 
-            # --- RÉCUPÉRATION DES ANNONCES ---
-            annonces = driver.find_elements(By.CSS_SELECTOR, "div[class*='c-the-property-thumbnail-with-content']")
-            
+            annonces = driver.find_elements(By.CSS_SELECTOR, CARD_SELECTOR)
             if not annonces:
                 print("🛑 Aucun bloc trouvé. Fin de la recherche.")
                 break
@@ -66,31 +85,27 @@ if __name__ == '__main__':
             compteur_nouveaux = 0
             for annonce in annonces:
                 try:
-                    # On vérifie le lien pour éviter les doublons
                     lien_elem = annonce.find_element(By.TAG_NAME, "a")
                     lien = lien_elem.get_attribute("href")
+                    if not lien or lien in liens_vus:
+                        continue
 
-                    if lien in liens_vus:
+                    titre = find_first(annonce, TITRE_SELECTORS)
+                    prix = find_first(annonce, PRIX_SELECTORS).replace('\n', ' ')
+                    infos = find_first(annonce, INFOS_SELECTORS).replace('\n', ' ')
+
+                    if not prix:
                         continue
-                    
-                    try:
-                        titre = annonce.find_element(By.CSS_SELECTOR, "[class*='c-text-theme-heading-3']").text.strip()
-                        prix_brut = annonce.find_element(By.CSS_SELECTOR, "[class*='c-text-theme-heading-1']").text
-                        prix = prix_brut.replace('\n', ' ').strip()
-                        infos = annonce.find_element(By.CSS_SELECTOR, "[class*='c-text-theme-heading-4']").text.replace('\n', ' ').strip()
-                        
-                        writer.writerow([titre, prix, infos, lien])
-                        liens_vus.add(lien)
-                        compteur_nouveaux += 1
-                        print(f"🏠 {titre} - {prix}")
-                    except:
-                        continue
-                except:
+
+                    writer.writerow([titre, prix, infos, lien])
+                    liens_vus.add(lien)
+                    compteur_nouveaux += 1
+                    print(f"🏠 {titre} - {prix}")
+                except Exception:
                     continue
 
             print(f"📊 Page {page_num} terminée : {compteur_nouveaux} annonces ajoutées.")
 
-            # Si on ne trouve plus rien de nouveau sur une page, on s'arrête
             if compteur_nouveaux == 0:
                 print("🏁 Fin des nouvelles annonces.")
                 continuer = False

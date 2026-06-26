@@ -5,23 +5,55 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
 import csv
+import re
 import os
 
-# Configuration des chemins et URL
-OUTPUT_PATH = "backend/data/annonces_lyon_seloger.csv"
+script_dir = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_seloger.csv')
 base_url = "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=AD08FR28808"
 
+CARD_SELECTORS = [
+    "a[data-testid='card-mfe-covering-link-testid']",
+    "a[data-testid*='covering-link']",
+    "a[data-testid*='card']",
+]
+# Sélecteurs DOM fallback quand le title attribute n'est pas parsable
+TITRE_DOM_SELECTORS = ["[data-testid*='title']", "h2", "h3", "[class*='title']"]
+PRIX_DOM_SELECTORS = ["[data-testid*='price']", "[class*='price']", "[class*='prix']"]
+LIEU_DOM_SELECTORS = ["[data-testid*='location']", "[class*='location']", "[class*='lieu']", "[class*='address']"]
+INFOS_DOM_SELECTORS = ["[data-testid*='detail']", "[class*='detail']", "[class*='info']", "[class*='surface']"]
+
+def find_text(element, selectors):
+    for sel in selectors:
+        try:
+            return element.find_element(By.CSS_SELECTOR, sel).text.strip()
+        except Exception:
+            continue
+    return ""
+
+def parse_title_attribute(full_title):
+    """Parse 'Type - Lieu - Prix - Infos' format. Returns None if format unrecognized."""
+    if not full_title or ' - ' not in full_title:
+        return None
+    parts = full_title.split(' - ')
+    titre = parts[0].strip()
+    lieu = parts[1].strip() if len(parts) > 1 else "Lyon"
+    prix = ""
+    infos_parts = []
+    for part in parts[2:]:
+        if re.search(r'\d.*€', part):
+            prix = part.strip()
+        else:
+            infos_parts.append(part.strip())
+    return titre, lieu, prix, " - ".join(infos_parts)
+
 if __name__ == '__main__':
-    
     print("🥷 Lancement du mode Furtif Automatique pour SeLoger...")
-    
-    # Création du dossier de destination s'il n'existe pas
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    
+
     options = uc.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
-    # Utilisation de ta version spécifique de Chrome
-    driver = uc.Chrome(options=options, version_main=144)
+    driver = uc.Chrome(options=options)
 
     liens_vus = set()
 
@@ -33,91 +65,80 @@ if __name__ == '__main__':
         continuer = True
 
         while continuer:
-            # Gestion de l'URL pour la pagination
             url = base_url if page_num == 1 else f"{base_url}&page={page_num}"
-            
             print(f"\n--- 📄 Analyse de la Page {page_num} ---")
             driver.get(url)
 
-            # --- DÉTECTION DU CAPTCHA / COOKIES ---
             if page_num == 1:
                 print("⏳ En attente de la validation du Captcha ou des Cookies...")
-                try:
-                    # On attend que le lien d'une annonce apparaisse (preuve que le Captcha est passé)
-                    WebDriverWait(driver, 120).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "a[data-testid='card-mfe-covering-link-testid']"))
-                    )
-                    print("✅ Page accessible détectée.")
-                except Exception:
-                    print("❌ Temps d'attente dépassé (Captcha non résolu ?).")
-                    break
-            else:
-                # Pause plus longue pour SeLoger (très sensible)
-                time.sleep(random.uniform(5, 8))
-
-            # --- RÉCUPÉRATION DES ANNONCES ---
-            try:
-                # On utilise l'attribut data-testid qui est le plus stable sur SeLoger
-                annonces = driver.find_elements(By.CSS_SELECTOR, "a[data-testid='card-mfe-covering-link-testid']")
-                
-                if not annonces:
-                    print("🛑 Aucune annonce trouvée sur cette page.")
-                    break
-
-                compteur_page = 0
-                for annonce in annonces:
+                card_found = False
+                for sel in CARD_SELECTORS:
                     try:
-                        # 1. LIEN
-                        lien = annonce.get_attribute("href")
-                        
-                        if not lien or lien in liens_vus:
-                            continue
-
-                        # 2. EXTRACTION VIA L'ATTRIBUT TITLE
-                        # Le format de SeLoger dans "title" est souvent : "Type - Lieu - Prix - Infos"
-                        full_title = annonce.get_attribute("title")
-                        
-                        if not full_title:
-                            continue
-
-                        parts = full_title.split(' - ')
-                        
-                        # Découpage intelligent
-                        titre = parts[0].strip() if len(parts) > 0 else "Inconnu"
-                        lieu = parts[1].strip() if len(parts) > 1 else "Lyon"
-                        
-                        # Recherche du prix (cherche le symbole €)
-                        prix = "N/C"
-                        infos_liste = []
-                        for p in parts[2:]:
-                            if "€" in p:
-                                prix = p.strip()
-                            else:
-                                infos_liste.append(p.strip())
-                        
-                        infos = " - ".join(infos_liste)
-
-                        # Sauvegarde
-                        writer.writerow([titre, prix, lieu, infos, lien])
-                        liens_vus.add(lien)
-                        compteur_page += 1
-                        print(f"🏠 {titre} ({lieu}) -- 💰 {prix}")
-
+                        WebDriverWait(driver, 120).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+                        )
+                        print(f"✅ Page accessible ({sel})")
+                        card_found = True
+                        break
                     except Exception:
                         continue
-                
-                print(f"📊 Page {page_num} terminée : {compteur_page} nouvelles annonces.")
+                if not card_found:
+                    print("❌ Aucune carte détectée. Captcha non résolu ou structure changée.")
+                    break
+            else:
+                time.sleep(random.uniform(5, 8))
 
-                # Condition d'arrêt
-                if compteur_page == 0:
-                    print("🏁 Plus de nouvelles annonces uniques.")
-                    continuer = False
-                else:
-                    page_num += 1
-                    
-            except Exception as e:
-                print(f"❌ Erreur critique sur la page : {e}")
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+
+            annonces = []
+            for sel in CARD_SELECTORS:
+                annonces = driver.find_elements(By.CSS_SELECTOR, sel)
+                if annonces:
+                    break
+
+            if not annonces:
+                print("🛑 Aucune annonce trouvée sur cette page.")
                 break
+
+            compteur_page = 0
+            for annonce in annonces:
+                try:
+                    lien = annonce.get_attribute("href")
+                    if not lien or lien in liens_vus:
+                        continue
+
+                    # Stratégie 1 : parser l'attribut title
+                    full_title = annonce.get_attribute("title") or ""
+                    parsed = parse_title_attribute(full_title)
+
+                    if parsed:
+                        titre, lieu, prix, infos = parsed
+                    else:
+                        # Stratégie 2 : extraction DOM directe
+                        titre = find_text(annonce, TITRE_DOM_SELECTORS)
+                        prix = find_text(annonce, PRIX_DOM_SELECTORS)
+                        lieu = find_text(annonce, LIEU_DOM_SELECTORS)
+                        infos = find_text(annonce, INFOS_DOM_SELECTORS)
+
+                    if not prix:
+                        continue
+
+                    writer.writerow([titre, prix, lieu, infos, lien])
+                    liens_vus.add(lien)
+                    compteur_page += 1
+                    print(f"🏠 {titre} ({lieu}) -- 💰 {prix}")
+
+                except Exception:
+                    continue
+
+            print(f"📊 Page {page_num} terminée : {compteur_page} nouvelles annonces.")
+
+            if compteur_page == 0:
+                print("🏁 Plus de nouvelles annonces uniques.")
+                continuer = False
+            else:
+                page_num += 1
 
     print(f"\n✨ Scraping SeLoger terminé ! Fichier : {OUTPUT_PATH}")
     driver.quit()
