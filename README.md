@@ -25,12 +25,11 @@ Le projet repose sur une architecture moderne conteneurisée :
 
 ---
 
-## IA: local vs cloud
+## IA: Google Gemini (cloud)
 
-Le projet sait documenter deux modes d'exécution LLM:
+Le chatbot ("Immotep") utilise **Google AI / Gemini** via `backend/services/chat_service.py` — c'est aujourd'hui le seul backend LLM implémenté dans le code. Il évite le serveur GPU/local, s'intègre simplement côté backend et le free tier suffit généralement pour une démonstration à trafic modéré.
 
-* **LM Studio en local** : utile pour montrer la maîtrise d'un LLM self-hosted/local, sans dépendre d'un provider externe. Ce mode demande une machine locale allumée et assez puissante, ce qui le rend moins adapté à une démo portfolio publique.
-* **Google AI / Gemini** : mode retenu pour le déploiement portfolio. Il évite le serveur GPU/local, s'intègre simplement côté backend et le free tier suffit généralement pour une démonstration à trafic modéré.
+> Un mode **LM Studio en local** (self-hosted, sans dépendre d'un provider externe) a été envisagé mais n'a jamais été implémenté — il n'existe aucune abstraction de provider dans le code actuel. À considérer comme une piste future plutôt qu'un mode disponible.
 
 Le backend actif garde la clé API uniquement côté serveur via `GEMINI_API_KEY`. Le modèle par défaut est `gemini-2.5-flash`, avec des réponses courtes et un contexte RAG borné pour limiter les coûts et les délais.
 
@@ -160,25 +159,40 @@ Sur Render, cette variable est obligatoire. En local seulement, si `VITE_API_URL
 
 ## ⚙️ Les Scripts de Données (ETL)
 
-Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/`.
+Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/`, orchestrés par le DAG Airflow `Airflow/dags/oracle_loyers_dag.py` (planifié quotidiennement à 2h) selon deux branches parallèles qui convergent :
 
-Voici l'ordre logique d'exécution pour régénérer la base de données :
+```text
+api_overpass.py ──→ enrich_cavaliers_cp.py ─┐
+                                              ├──→ clean_immo.py ──→ train_model.py
+data_fusion.py ──────────────────────────────┘
+```
 
-1.  **`enrich_cavaliers_cp.py`**
-    * Récupère les coordonnées GPS des cavaliers (commerces) et leur attribue un code postal précis via l'API Data Gouv (Batch processing).
-    * *Input :* `cavaliers_lyon.csv` (brut) -> *Output :* `cavaliers_lyon.csv` (enrichi avec CP).
+1.  **`api_overpass.py`**
+    * Récupère ~1 668 lieux répartis sur 21 catégories de POI ("cavaliers") à Lyon via l'API Overpass (OpenStreetMap).
+    * *Output :* `cavaliers_lyon.csv` (brut, avec bascule sur 3 miroirs Overpass en cas d'erreur 429/504).
 
-2.  **`geocoding_jitter.py`**
-    * Place les annonces immobilières sur la carte.
-    * *Innovation :* Utilise l'enveloppe convexe (Convex Hull) des cavaliers pour dessiner la forme réelle des quartiers et éviter de placer des points dans le Rhône, tout en respectant les limites administratives.
+2.  **`enrich_cavaliers_cp.py`**
+    * Attribue un code postal précis à chaque cavalier via l'API Data Gouv (Batch processing).
+    * *Input/Output :* `cavaliers_lyon.csv` (enrichi avec CP, écriture atomique).
 
-3.  **`compute_features.py`**
-    * Le cœur du calcul. Pour chaque annonce, calcule la distance exacte vers les points d'intérêt (Kebab le plus proche, densité de bars à 500m, etc.).
-    * Génère le fichier "Gold Standard" : `master_immo_final.csv`.
+3.  **`data_fusion.py`**
+    * Fusionne et nettoie les 6 CSV d'annonces scrapées (Century21, Orpi, SeLoger, PAP, ParuVendu, Vizzit — voir section Scraping ci-dessous).
+    * *Output :* `base_de_donnees_immo_lyon_complet.csv`.
 
-4.  **`train_model.py`**
-    * Entraîne le modèle XGBoost sur les données calculées.
-    * Génère le fichier modèle : `backend/models/price_predictor.pkl`.
+4.  **`clean_immo.py`**
+    * Le cœur du calcul, en 5 étapes internes séquentielles :
+      1. **Géocodage & jitter** — place les annonces sans coordonnées réelles sur la carte, en utilisant l'enveloppe convexe (Convex Hull) des cavaliers pour dessiner la forme réelle des quartiers (fallback sur des zones circulaires par code postal si pas assez de cavaliers).
+      2. **Assignation des quartiers** — attribue un nom de quartier lisible (ex: "Croix-Rousse Plateau") à partir du code postal et des coordonnées.
+      3. **Classification du type de bien** (Studio/T1, T2, T3, Grand T4+) à partir du texte de l'annonce ou, à défaut, de la surface.
+      4. **Calcul des features de distance** — pour chaque annonce, distance au cavalier le plus proche et densité à 500 m, pour chacune des 21 catégories (BallTree/haversine).
+      5. **Réindexation des IDs**.
+    * *Input :* `base_de_donnees_immo_lyon_complet.csv` + `cavaliers_lyon.csv` -> *Output :* le fichier "Gold Standard" `master_immo_final.csv`.
+
+5.  **`train_model.py`**
+    * Entraîne le modèle XGBoost sur `master_immo_final.csv`.
+    * Génère le fichier modèle : `backend/models/price_predictor.pkl` (non versionné dans git — à régénérer localement).
+
+> Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline.
 
 ---
 
@@ -186,43 +200,49 @@ Voici l'ordre logique d'exécution pour régénérer la base de données :
 
 ```text
 oracle-des-loyers/
-├── docker-compose.yml         # Chef d'orchestre des conteneurs
+├── docker-compose.yml         # Chef d'orchestre des conteneurs (backend, frontend, Airflow)
 ├── README.md                  # Ce fichier
+│
+├── Airflow/                   # Orchestration du pipeline ETL (DAG planifié, cf. section ETL)
+│   └── dags/oracle_loyers_dag.py
+│
+├── scripts/                   # Scrapers (exécution manuelle, hors DAG Airflow)
+│   ├── scraper_century_21.py, scraper_orpi.py, scraper_pap.py,
+│   │   scraper_paruvendu.py, scraper_seloger.py, scraper_vizzit.py
+│   └── api_overpass.py, api_data_gouv.py  # ⚠️ dupliqués avec backend/scripts/, voir Backlog
 │
 ├── backend/                   # API Flask & Logique métier
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── app.py                 # Point d'entrée serveur (Routes API)
+│   ├── app.py                 # Point d'entrée serveur actif (Routes API Flask)
 │   │
-│   ├── data/                  # LE COFFRE-FORT
-│   │   ├── base_de_donnees_immo_lyon_complet.csv
-│   │   ├── cavaliers_lyon.csv
-│   │   └── master_immo_final.csv
+│   ├── data/                  # LE COFFRE-FORT (CSV bruts, fusionnés, master, conversations.db)
+│   ├── models/                # Cerveaux entraînés (price_predictor.pkl, non versionné en git)
 │   │
-│   ├── models/                # Cerveaux entraînés
-│   │   └── price_predictor.pkl
+│   ├── scripts/               # L'USINE À DONNÉES (voir section ETL pour l'ordre réel)
+│   │   ├── api_overpass.py, enrich_cavaliers_cp.py
+│   │   ├── data_fusion.py, clean_immo.py, train_model.py
+│   │   └── generate_map.py, analyze_impact.py, test_prediction.py, test_api.py
 │   │
-│   ├── scripts/               # L'USINE À DONNÉES
-│   │   ├── enrich_cavaliers_cp.py
-│   │   ├── geocoding_jitter.py
-│   │   ├── compute_features.py
-│   │   └── train_model.py
+│   ├── services/              # Modules métier actifs
+│   │   ├── chat_service.py    # Chatbot Gemini + RAG (seul chemin LLM actif)
+│   │   ├── data_loader.py, map_generator.py, utils.py
 │   │
-│   ├── services/              # Modules utilitaires
-│   │   ├── data_loader.py
-│   │   └── map_generator.py
-│   │
-│   └── static/                # Fichiers servis publiquement (Cartes HTML)
+│   ├── core/                  # Constantes partagées
+│   ├── tests/                 # Suite pytest (chat, config runtime)
+│   └── static/                # Fichiers servis publiquement (cartes HTML)
 │
 └── frontend/                  # Interface React
     ├── Dockerfile
     ├── package.json
-    ├── public/
+    ├── public/data/           # Carte interactive générée (map_pings_lyon_calques.html)
     └── src/
         ├── components/
         │   ├── ChatOracle.jsx # Composant Chatbot
-        │   ├── Map.jsx        # Composant Carte Interactive
+        │   ├── MapComponent.jsx # Composant Carte Interactive (Leaflet)
         │   └── Sidebar.jsx    # Formulaire de prédiction
         └── services/
             └── api.js         # Pont vers le backend
 ```
+
+> **Dette technique connue** (trackée dans le backlog Linear) : `backend/main.py` (FastAPI) et les modules `smart_agent.py`/`prompt_system.py`/`conversation_manager.py` sont du code hérité, non branchés sur `app.py` — à ne pas prendre comme référence d'architecture active. `backend/src/api/` et `backend/src/ml_engine/` sont des dossiers vides.
