@@ -118,6 +118,19 @@ def handle_rate_limit_exceeded(error):
     return jsonify({"error": "Trop de requêtes. Réessayez dans quelques instants."}), 429
 
 
+@app.after_request
+def set_security_headers(response):
+    """
+    En-têtes de sécurité de base (ORA-69), sans impact fonctionnel :
+    l'API ne sert que du JSON, jamais de HTML/JS, donc pas de CSP applicative
+    à définir ici (voir frontend/ pour le CSP éventuel côté SPA).
+    """
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
+
 def get_request_json():
     data = request.get_json(silent=True)
     if data is not None:
