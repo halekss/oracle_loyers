@@ -1,4 +1,3 @@
-import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -8,14 +7,23 @@ import re
 import os
 import sys
 
-from csv_atomic_writer import atomic_csv_writer
-from scraper_utils import get_scraper_logger
+from scraper_utils import (
+    atomic_csv_writer,
+    get_chrome_driver,
+    get_scraper_logger,
+    load_existing_rows,
+    load_site_config,
+    pick_proxy,
+    pick_user_agent,
+    retry_with_backoff,
+)
 
+site_config = load_site_config("orpi")
 logger = get_scraper_logger("orpi")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_orpi.csv')
-base_url = "https://www.orpi.com/recherche/rent?transaction=rent&locations%5B0%5D%5Bvalue%5D=lyon&sort=date-down&layoutType=list&page={}"
+OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', f"annonces_{site_config['ville_slug']}_orpi.csv")
+base_url = site_config['base_url']
 
 # Sélecteurs avec fallbacks ordonnés par stabilité
 CARD_SELECTORS = ["article.c-overlay", "article[class*='overlay']", "article[class*='card']", "article"]
@@ -48,24 +56,35 @@ def extract_price_from_text(text):
     match = re.search(r'(\d[\d\s]*€|\d[\d\s]*eur)', text, re.IGNORECASE)
     return match.group(1).strip() if match else ""
 
+@retry_with_backoff(max_retries=3, backoff_seconds=2)
+def load_page(driver, url):
+    driver.get(url)
+
 if __name__ == '__main__':
-    logger.info("Lancement du mode 'Ascenseur' Automatique pour ORPI...")
+    logger.info("Lancement du mode 'Ascenseur' Automatique pour ORPI (%s)...", site_config['ville_nom'])
 
-    options = uc.ChromeOptions()
-    options.add_argument('--ignore-certificate-errors')
-    driver = uc.Chrome(options=options)
+    driver = get_chrome_driver(user_agent=pick_user_agent(), proxy=pick_proxy())
 
-    liens_vus = set()
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH)
     erreurs = 0
+    total_nouveaux_run = 0
+    total_cards_vues = 0
 
     with atomic_csv_writer(OUTPUT_PATH, ['Titre_Lieu', 'Prix', 'Infos', 'Lien']) as writer:
+        for row in existing_rows:
+            writer.writerow(row)
+
         page_num = 1
         continuer = True
 
         while continuer:
             url = base_url.format(page_num)
             logger.info("Analyse de la page %s", page_num)
-            driver.get(url)
+            try:
+                load_page(driver, url)
+            except Exception as exc:
+                logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
+                break
 
             if page_num == 1:
                 logger.info("En attente de la validation des cookies sur Orpi...")
@@ -100,6 +119,7 @@ if __name__ == '__main__':
                 logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
                 break
 
+            total_cards_vues += len(annonces)
             compteur_nouveaux = 0
             for annonce in annonces:
                 try:
@@ -135,6 +155,7 @@ if __name__ == '__main__':
                     continue
 
             logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_nouveaux)
+            total_nouveaux_run += compteur_nouveaux
 
             if compteur_nouveaux == 0:
                 logger.info("Fin des nouvelles annonces.")
@@ -144,11 +165,11 @@ if __name__ == '__main__':
 
     driver.quit()
 
-    if len(liens_vus) == 0:
+    if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour ORPI. Le site a peut-être changé de structure.")
         sys.exit(1)
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

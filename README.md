@@ -178,7 +178,17 @@ data_fusion.py ─────────────────────�
     * Entraîne le modèle XGBoost sur `master_immo_final.csv`.
     * Génère le fichier modèle : `backend/models/price_predictor.pkl`, **versionné dans git** (comme `master_immo_final.csv`) pour qu'un environnement fraîchement déployé dispose d'un modèle fonctionnel sans étape manuelle. L'entraînement est déterministe (`random_state=42`) ; relancez `train_model.py` et committez le `.pkl` après toute mise à jour de `master_immo_final.csv`.
 
-> Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline.
+> Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
+
+### 🕵️ Anti-détection des scrapers — limites légales
+
+Les 6 scrapers tirent à chaque run un User-Agent réaliste au hasard dans un pool (`scraping_config.json` → `user_agents`, via `scraper_utils.pick_user_agent()`), et supportent optionnellement un pool de proxies (`proxies`, vide/désactivé par défaut, via `pick_proxy()`).
+
+**Ces mécanismes ne dispensent pas de respecter le cadre légal du scraping :**
+* Consulter et respecter le `robots.txt` et les CGU de chaque site avant toute collecte (voir les issues dédiées ORA-67/ORA-93 pour la vérification formelle par portail).
+* Ne pas contourner une mesure de blocage explicite (bannissement d'IP, CAPTCHA résolu manuellement de façon répétée, mur de paiement) — la rotation UA/proxy sert à réduire le risque de faux-positifs de détection anti-bot, pas à forcer un accès refusé.
+* Respecter un rythme de requêtes raisonnable (la temporisation aléatoire déjà en place entre les requêtes) pour ne pas dégrader le service du site cible.
+* Ne collecter que des données publiquement accessibles, à usage non commercial dans le cadre de ce projet.
 
 ---
 
