@@ -1,0 +1,88 @@
+name: Scraper Selector Canary
+
+# ORA-21 : exécute quotidiennement les tests Playwright "canari" (ORA-20) qui
+# valident que les sélecteurs CSS des 6 scrapers matchent encore la structure
+# live des sites sources, une heure avant le DAG Airflow (2h) qui consomme ces
+# données — pour alerter avant que le pipeline ETL ne tourne sur des données
+# vides ou corrompues plutôt que de le découvrir après coup.
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+jobs:
+  playwright-canary:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scripts/requirements.txt
+
+      # setuptools fournit le shim distutils dont dépend undetected-chromedriver==3.5.5,
+      # supprimé de la stdlib depuis Python 3.12 (undetected-chromedriver n'est pas
+      # utilisé par ce job, mais scraper_utils.py l'importe au chargement du module).
+      - run: pip install setuptools
+      - run: pip install -r requirements.txt pytest
+
+      - run: python -m playwright install --with-deps chromium
+
+      - name: Tests Playwright canari (sélecteurs CSS live)
+        run: python -m pytest tests/e2e -v
+
+      - name: Alerter en cas d'échec (issue GitHub)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const label = "scraper-canary-alert";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: label,
+            });
+
+            if (openIssues.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: openIssues[0].number,
+                body: `Nouvel échec du canari : ${runUrl}`,
+              });
+              return;
+            }
+
+            const body = [
+              `Le job \`playwright-canary\` a échoué : ${runUrl}`,
+              "",
+              "Un ou plusieurs sélecteurs CSS des scrapers ne matchent plus sur le site live correspondant (ou le site a temporairement bloqué/timeout l'accès).",
+              "Voir le log du run pour repérer le message `SÉLECTEUR CASSÉ (<site>)` qui identifie le site et les sélecteurs en cause.",
+              "",
+              "**Procédure de triage** (voir aussi le README, section « Anti-détection des scrapers ») :",
+              "1. Ouvrir le log du run échoué ci-dessus et repérer le(s) message(s) `SÉLECTEUR CASSÉ (<site>)`.",
+              "2. Visiter manuellement la page de résultats du site concerné et inspecter le DOM (ou relancer ce workflow via `workflow_dispatch` pour confirmer que ce n'est pas un incident ponctuel : CAPTCHA, blocage IP, timeout réseau).",
+              "3. Si le site a réellement changé de structure : mettre à jour les sélecteurs dans `scripts/scraper_<site>.py`, ainsi que la fixture correspondante dans `scripts/tests/fixtures/` (ORA-19) pour qu'elle reste représentative.",
+              "4. Vérifier que `scripts/tests/test_scraper_extraction_fixtures.py` et ce canari passent de nouveau.",
+              "5. Fermer cette issue une fois corrigé (ou si le nouvel échec ci-dessus s'avère être un faux positif isolé).",
+            ].join("\n");
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "🚨 Canari sélecteurs scrapers en échec",
+              body,
+              labels: [label],
+            });
