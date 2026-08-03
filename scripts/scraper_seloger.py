@@ -1,4 +1,3 @@
-import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -8,14 +7,24 @@ import re
 import os
 import sys
 
-from csv_atomic_writer import atomic_csv_writer
-from scraper_utils import get_scraper_logger
+from scraper_utils import (
+    atomic_csv_writer,
+    get_chrome_driver,
+    get_scraper_logger,
+    load_existing_rows,
+    load_site_config,
+    pick_proxy,
+    pick_user_agent,
+    retry_with_backoff,
+)
 
+site_config = load_site_config("seloger")
 logger = get_scraper_logger("seloger")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_seloger.csv')
-base_url = "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=AD08FR28808"
+OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', f"annonces_{site_config['ville_slug']}_seloger.csv")
+base_url = site_config['base_url']
+PAGE_QUERY_PARAM = site_config['page_query_param']
 
 CARD_SELECTORS = [
     "a[data-testid='card-mfe-covering-link-testid']",
@@ -52,24 +61,35 @@ def parse_title_attribute(full_title):
             infos_parts.append(part.strip())
     return titre, lieu, prix, " - ".join(infos_parts)
 
+@retry_with_backoff(max_retries=3, backoff_seconds=2)
+def load_page(driver, url):
+    driver.get(url)
+
 if __name__ == '__main__':
-    logger.info("Lancement du mode Furtif Automatique pour SeLoger...")
+    logger.info("Lancement du mode Furtif Automatique pour SeLoger (%s)...", site_config['ville_nom'])
 
-    options = uc.ChromeOptions()
-    options.add_argument('--ignore-certificate-errors')
-    driver = uc.Chrome(options=options)
+    driver = get_chrome_driver(user_agent=pick_user_agent(), proxy=pick_proxy())
 
-    liens_vus = set()
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH)
     erreurs = 0
+    total_nouveaux_run = 0
+    total_cards_vues = 0
 
     with atomic_csv_writer(OUTPUT_PATH, ['Titre', 'Prix', 'Lieu', 'Infos', 'Lien']) as writer:
+        for row in existing_rows:
+            writer.writerow(row)
+
         page_num = 1
         continuer = True
 
         while continuer:
-            url = base_url if page_num == 1 else f"{base_url}&page={page_num}"
+            url = base_url if page_num == 1 else f"{base_url}&{PAGE_QUERY_PARAM}={page_num}"
             logger.info("Analyse de la page %s", page_num)
-            driver.get(url)
+            try:
+                load_page(driver, url)
+            except Exception as exc:
+                logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
+                break
 
             if page_num == 1:
                 logger.info("En attente de la validation du Captcha ou des Cookies...")
@@ -103,6 +123,7 @@ if __name__ == '__main__':
                 logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
                 break
 
+            total_cards_vues += len(annonces)
             compteur_page = 0
             for annonce in annonces:
                 try:
@@ -137,6 +158,7 @@ if __name__ == '__main__':
                     continue
 
             logger.info("Page %s terminée : %s nouvelles annonces.", page_num, compteur_page)
+            total_nouveaux_run += compteur_page
 
             if compteur_page == 0:
                 logger.info("Plus de nouvelles annonces uniques.")
@@ -146,11 +168,11 @@ if __name__ == '__main__':
 
     driver.quit()
 
-    if len(liens_vus) == 0:
+    if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour SeLoger. Le site a peut-être changé de structure.")
         sys.exit(1)
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

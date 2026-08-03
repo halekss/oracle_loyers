@@ -5,19 +5,33 @@ import random
 import os
 import sys
 
-from csv_atomic_writer import atomic_csv_writer
-from scraper_utils import get_scraper_logger
+from scraper_utils import (
+    atomic_csv_writer,
+    get_scraper_logger,
+    load_existing_rows,
+    load_site_config,
+    pick_proxy,
+    pick_user_agent,
+    retry_with_backoff,
+)
 
+site_config = load_site_config("paruvendu")
 logger = get_scraper_logger("paruvendu")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_paruvendu.csv')
-base_url = "https://www.paruvendu.fr/immobilier/recherche/location/lyon/?rechpv=1&tt=5&tbApp=1&tbDup=1&tbChb=1&tbLof=1&tbAtl=1&tbPla=1&tbMai=1&tbVil=1&tbCha=1&tbPro=1&tbHot=1&tbMou=1&tbFer=1&nbp0=99&pa=FR&lol=0&ray=50&codeINSEE=69000,"
+OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', f"annonces_{site_config['ville_slug']}_paruvendu.csv")
+base_url = site_config['base_url']
+PAGE_QUERY_PARAM = site_config['page_query_param']
+
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": pick_user_agent() or DEFAULT_USER_AGENT,
     "Accept-Language": "fr-FR,fr;q=0.9",
 }
+
+_proxy = pick_proxy()
+PROXIES = {"http": _proxy, "https": _proxy} if _proxy else None
 
 # Sélecteurs avec fallbacks ordonnés par stabilité
 CARD_SELECTORS = [
@@ -49,26 +63,36 @@ def find_bs4(soup_elem, selectors):
             continue
     return None
 
-if __name__ == '__main__':
-    logger.info("Lancement du Scraper ParuVendu (Mode Rapide)...")
+@retry_with_backoff(max_retries=3, backoff_seconds=2, exceptions=(requests.exceptions.RequestException,))
+def fetch_page(url):
+    return requests.get(url, headers=headers, timeout=15, proxies=PROXIES)
 
-    liens_vus = set()
+if __name__ == '__main__':
+    logger.info("Lancement du Scraper ParuVendu (Mode Rapide) (%s)...", site_config['ville_nom'])
+
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH)
     erreurs = 0
+    total_nouveaux_run = 0
+    total_cards_vues = 0
     page_num = 1
     continuer = True
 
     with atomic_csv_writer(OUTPUT_PATH, ['Titre', 'Prix', 'Lien']) as writer:
+        for row in existing_rows:
+            writer.writerow(row)
+
         while continuer:
-            url_page = base_url if page_num == 1 else f"{base_url}&p={page_num}"
+            url_page = base_url if page_num == 1 else f"{base_url}&{PAGE_QUERY_PARAM}={page_num}"
             logger.info("Analyse de la page %s", page_num)
 
             try:
-                response = requests.get(url_page, headers=headers, timeout=15)
-                if response.status_code != 200:
-                    logger.error("Erreur de réponse HTTP : %s", response.status_code)
-                    break
-            except Exception as e:
-                logger.error("Erreur connexion : %s", e)
+                response = fetch_page(url_page)
+            except requests.exceptions.RequestException as exc:
+                logger.error("Échec réseau persistant après plusieurs tentatives sur la page %s : %s", page_num, exc)
+                break
+
+            if response.status_code != 200:
+                logger.error("Erreur de réponse HTTP : %s", response.status_code)
                 break
 
             soup = BeautifulSoup(response.text, "html.parser")
@@ -84,6 +108,7 @@ if __name__ == '__main__':
                 logger.warning("Aucune annonce trouvée sur la page %s (fin des résultats).", page_num)
                 break
 
+            total_cards_vues += len(annonces)
             compteur_page = 0
             for annonce in annonces:
                 try:
@@ -112,6 +137,7 @@ if __name__ == '__main__':
                     continue
 
             logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_page)
+            total_nouveaux_run += compteur_page
 
             if compteur_page == 0:
                 logger.info("Plus de nouvelles annonces disponibles.")
@@ -120,11 +146,11 @@ if __name__ == '__main__':
                 page_num += 1
                 time.sleep(random.uniform(1.5, 3))
 
-    if len(liens_vus) == 0:
+    if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour ParuVendu. Le site a peut-être changé de structure.")
         sys.exit(1)
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

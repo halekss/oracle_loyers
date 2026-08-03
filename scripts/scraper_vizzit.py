@@ -1,4 +1,3 @@
-import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -7,14 +6,23 @@ import random
 import os
 import sys
 
-from csv_atomic_writer import atomic_csv_writer
-from scraper_utils import get_scraper_logger
+from scraper_utils import (
+    atomic_csv_writer,
+    get_chrome_driver,
+    get_scraper_logger,
+    load_existing_rows,
+    load_site_config,
+    pick_proxy,
+    pick_user_agent,
+    retry_with_backoff,
+)
 
+site_config = load_site_config("vizzit")
 logger = get_scraper_logger("vizzit")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_vizzit.csv')
-SEARCH_URL = "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-type-rentals-hab_appartement-on-hab_house-on-city_id-city_34209,city_34210,city_34211,city_34212,city_34213,city_34214,city_34215,city_34216,city_34217-tf_ids-235728"
+OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', f"annonces_{site_config['ville_slug']}_vizzit.csv")
+SEARCH_URL = site_config['base_url']
 
 CARD_SELECTORS = [
     "div.item__content-area",
@@ -47,27 +55,35 @@ def find_attr(element, selectors, attr):
             continue
     return ""
 
-def get_driver():
-    options = uc.ChromeOptions()
-    prefs = {"profile.managed_default_content_settings.images": 2}
-    options.add_experimental_option("prefs", prefs)
-    return uc.Chrome(options=options)
+@retry_with_backoff(max_retries=3, backoff_seconds=2)
+def load_page(driver, url):
+    driver.get(url)
 
 if __name__ == '__main__':
-    logger.info("Lancement du scraper Vizzit Automatique...")
+    logger.info("Lancement du scraper Vizzit Automatique (%s)...", site_config['ville_nom'])
 
-    driver = get_driver()
+    driver = get_chrome_driver(block_images=True, user_agent=pick_user_agent(), proxy=pick_proxy())
     wait = WebDriverWait(driver, 15)
     erreurs = 0
+    total_nouveaux_run = 0
+    total_cards_vues = 0
+
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH)
 
     with atomic_csv_writer(OUTPUT_PATH, ['Lieu', 'Prix', 'Details', 'Description', 'Lien']) as writer:
+        for row in existing_rows:
+            writer.writerow(row)
+
         page_num = 1
-        liens_vus = set()
         continuer = True
 
         while continuer:
             logger.info("Analyse de la page %s", page_num)
-            driver.get(SEARCH_URL.format(page_num))
+            try:
+                load_page(driver, SEARCH_URL.format(page_num))
+            except Exception as exc:
+                logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
+                break
 
             if page_num == 1:
                 logger.info("En attente de la validation des cookies sur Vizzit...")
@@ -97,6 +113,7 @@ if __name__ == '__main__':
                 logger.warning("Fin des résultats à la page %s.", page_num)
                 break
 
+            total_cards_vues += len(blocs)
             annonces_a_visiter = []
             for b in blocs:
                 try:
@@ -120,7 +137,7 @@ if __name__ == '__main__':
             compteur_page = 0
             for info in annonces_a_visiter:
                 try:
-                    driver.get(info['lien'])
+                    load_page(driver, info['lien'])
                     description = ""
                     for sel in DESC_SELECTORS:
                         try:
@@ -141,10 +158,14 @@ if __name__ == '__main__':
                 except Exception as exc:
                     erreurs += 1
                     logger.warning("Erreur lors de la récupération d'une annonce : %s", exc)
-                    driver.get(SEARCH_URL.format(page_num))
+                    try:
+                        load_page(driver, SEARCH_URL.format(page_num))
+                    except Exception as exc_recovery:
+                        logger.error("Impossible de revenir à la page de résultats %s : %s", page_num, exc_recovery)
                     continue
 
             logger.info("Page %s terminée : %s annonces sauvegardées.", page_num, compteur_page)
+            total_nouveaux_run += compteur_page
 
             if compteur_page == 0:
                 continuer = False
@@ -153,11 +174,11 @@ if __name__ == '__main__':
 
     driver.quit()
 
-    if len(liens_vus) == 0:
+    if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour Vizzit. Le site a peut-être changé de structure.")
         sys.exit(1)
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

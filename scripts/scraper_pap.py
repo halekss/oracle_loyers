@@ -1,4 +1,3 @@
-import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -7,14 +6,23 @@ import random
 import os
 import sys
 
-from csv_atomic_writer import atomic_csv_writer
-from scraper_utils import get_scraper_logger
+from scraper_utils import (
+    atomic_csv_writer,
+    get_chrome_driver,
+    get_scraper_logger,
+    load_existing_rows,
+    load_site_config,
+    pick_proxy,
+    pick_user_agent,
+    retry_with_backoff,
+)
 
+site_config = load_site_config("pap")
 logger = get_scraper_logger("pap")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_pap.csv')
-BASE_URL = "https://www.pap.fr/annonce/locations-appartement-lyon-69-g43590-a-partir-du-2-pieces?page={}"
+OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', f"annonces_{site_config['ville_slug']}_pap.csv")
+BASE_URL = site_config['base_url']
 
 CARD_SELECTORS = [
     "div[class*='search-list-item']",
@@ -51,24 +59,36 @@ def scroll_to_bottom(driver):
         last_height = new_height
         logger.info("Suite chargée...")
 
-if __name__ == '__main__':
-    logger.info("Lancement du mode Furtif pour PAP...")
+@retry_with_backoff(max_retries=3, backoff_seconds=2)
+def load_page(driver, url):
+    driver.get(url)
 
-    options = uc.ChromeOptions()
-    driver = uc.Chrome(options=options)
+if __name__ == '__main__':
+    logger.info("Lancement du mode Furtif pour PAP (%s)...", site_config['ville_nom'])
+
+    driver = get_chrome_driver(ignore_certificate_errors=False, user_agent=pick_user_agent(), proxy=pick_proxy())
     wait = WebDriverWait(driver, 60)
 
-    liens_vus = set()
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH)
     erreurs = 0
+    total_nouveaux_run = 0
+    total_cards_vues = 0
 
     with atomic_csv_writer(OUTPUT_PATH, ['Lieu', 'Prix', 'Détails', 'Lien']) as writer:
+        for row in existing_rows:
+            writer.writerow(row)
+
         page_num = 1
         continuer = True
 
         while continuer:
             url = BASE_URL.format(page_num)
             logger.info("Analyse de la page %s", page_num)
-            driver.get(url)
+            try:
+                load_page(driver, url)
+            except Exception as exc:
+                logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
+                break
 
             if page_num == 1:
                 logger.info("Attente automatique du chargement des annonces...")
@@ -100,6 +120,7 @@ if __name__ == '__main__':
                 logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
                 break
 
+            total_cards_vues += len(annonces)
             logger.info("%s annonces détectées.", len(annonces))
             compteur = 0
 
@@ -131,6 +152,7 @@ if __name__ == '__main__':
                     continue
 
             logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur)
+            total_nouveaux_run += compteur
 
             if compteur == 0:
                 logger.info("Plus de nouvelles annonces.")
@@ -141,11 +163,11 @@ if __name__ == '__main__':
 
     driver.quit()
 
-    if len(liens_vus) == 0:
+    if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour PAP. Le site a peut-être changé de structure.")
         sys.exit(1)
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

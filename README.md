@@ -177,8 +177,32 @@ data_fusion.py ─────────────────────�
 5.  **`train_model.py`**
     * Entraîne le modèle XGBoost sur `master_immo_final.csv`.
     * Génère le fichier modèle : `backend/models/price_predictor.pkl`, **versionné dans git** (comme `master_immo_final.csv`) pour qu'un environnement fraîchement déployé dispose d'un modèle fonctionnel sans étape manuelle. L'entraînement est déterministe (`random_state=42`) ; relancez `train_model.py` et committez le `.pkl` après toute mise à jour de `master_immo_final.csv`.
+    * Via `data_versioning.py`, archive aussi un snapshot content-addressé des données utilisées et écrit `price_predictor.pkl.meta.json` (référence explicite au snapshot + métriques MAE/R²) — voir "Versioning des snapshots de données" ci-dessous.
 
-> Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline.
+> Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
+
+### 🕵️ Anti-détection des scrapers — limites légales
+
+Les 6 scrapers tirent à chaque run un User-Agent réaliste au hasard dans un pool (`scraping_config.json` → `user_agents`, via `scraper_utils.pick_user_agent()`), et supportent optionnellement un pool de proxies (`proxies`, vide/désactivé par défaut, via `pick_proxy()`).
+
+**Ces mécanismes ne dispensent pas de respecter le cadre légal du scraping :**
+* Consulter et respecter le `robots.txt` et les CGU de chaque site avant toute collecte (voir les issues dédiées ORA-67/ORA-93 pour la vérification formelle par portail).
+* Ne pas contourner une mesure de blocage explicite (bannissement d'IP, CAPTCHA résolu manuellement de façon répétée, mur de paiement) — la rotation UA/proxy sert à réduire le risque de faux-positifs de détection anti-bot, pas à forcer un accès refusé.
+* Respecter un rythme de requêtes raisonnable (la temporisation aléatoire déjà en place entre les requêtes) pour ne pas dégrader le service du site cible.
+* Ne collecter que des données publiquement accessibles, à usage non commercial dans le cadre de ce projet.
+
+### 📦 Versioning des snapshots de données
+
+Chaque exécution de `train_model.py` archive un instantané de `master_immo_final.csv` via `backend/scripts/data_versioning.py` (équivalent léger à DVC, sans dépendance ni stockage distant à configurer) :
+
+* **`backend/data/snapshots/master_immo_final_<sha256>.csv`** — une copie content-addressée du jeu de données (un re-run sur des données identiques ne duplique pas le fichier, seul le hash change si les données changent). Ces fichiers sont versionnés dans git au même titre que le reste de `backend/data/`.
+* **`backend/data/snapshots/manifest.csv`** — historique de chaque snapshot (timestamp, sha256, fichier, nombre de lignes).
+* **`backend/models/price_predictor.pkl.meta.json`** — référence explicitement, pour le modèle entraîné, le `data_snapshot_sha256`/`data_snapshot_file` utilisé ainsi que les métriques (MAE, R²). Versionné dans git comme le `.pkl` qu'il décrit (ORA-29).
+
+**Reproduire un ancien modèle à partir de son snapshot :**
+1. Récupérer le `data_snapshot_sha256` voulu (depuis un `price_predictor.pkl.meta.json` conservé, ou depuis `backend/data/snapshots/manifest.csv`).
+2. Copier le snapshot correspondant par-dessus les données actives : `cp backend/data/snapshots/master_immo_final_<sha256>.csv backend/data/master_immo_final.csv`.
+3. Relancer `python backend/scripts/train_model.py` — le modèle est ré-entraîné sur exactement les mêmes données, et un nouveau `.meta.json` confirme le même `data_snapshot_sha256`.
 
 ---
 
@@ -195,7 +219,8 @@ oracle-des-loyers/
 ├── scripts/                   # Scrapers (exécution manuelle, hors DAG Airflow)
 │   ├── scraper_century_21.py, scraper_orpi.py, scraper_pap.py,
 │   │   scraper_paruvendu.py, scraper_seloger.py, scraper_vizzit.py
-│   └── api_overpass.py, api_data_gouv.py  # ⚠️ dupliqués avec backend/scripts/, voir Backlog
+│   ├── scraper_utils.py, csv_atomic_writer.py, scraping_config.json  # Communs aux 6 scrapers
+│   └── api_overpass.py  # ⚠️ dupliqué avec backend/scripts/, voir Backlog (ORA-7)
 │
 ├── backend/                   # API Flask & Logique métier
 │   ├── Dockerfile

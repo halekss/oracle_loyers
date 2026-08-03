@@ -3,6 +3,22 @@ import pandas as pd
 import time
 import os
 
+DEDUP_KEY_COLUMNS = ['latitude', 'longitude', 'type_osm', 'categorie_cavalier', 'nom_lieu']
+
+def merge_cavaliers(df_old, df_new):
+    """Fusionne les cavaliers déjà connus avec les cavaliers fraîchement extraits.
+
+    Comportement documenté : la clé de dédoublonnage est
+    (latitude, longitude, type_osm, categorie_cavalier, nom_lieu) avec keep='last'.
+    Un POI dont seuls la catégorie ou le nom ont changé (ré-étiquetage OSM) diffère
+    donc sur la clé : il n'est PAS traité comme un doublon de l'ancienne entrée et
+    les deux lignes sont conservées côte à côte (pas de remplacement silencieux).
+    Seule une ligne strictement identique sur les 5 colonnes à une exécution
+    précédente est déduplicée, la plus récente (df_new) étant conservée.
+    """
+    df_combined = pd.concat([df_old, df_new])
+    return df_combined.drop_duplicates(subset=DEDUP_KEY_COLUMNS, keep='last')
+
 def get_cavaliers_data(city_name="Lyon"):
     """
     Récupère la liste complète des lieux pour chaque catégorie
@@ -134,13 +150,11 @@ def get_cavaliers_data(city_name="Lyon"):
             print(f"\n\n📂 Le fichier '{chemin_complet}' existe déjà. Fusion en cours...")
             try:
                 df_old = pd.read_csv(chemin_complet)
-                
-                df_combined = pd.concat([df_old, df_new])
-                
-                len_before = len(df_combined)
-                df_combined.drop_duplicates(subset=['latitude', 'longitude', 'type_osm'], keep='last', inplace=True)
+
+                len_before = len(df_old) + len(df_new)
+                df_combined = merge_cavaliers(df_old, df_new)
                 len_after = len(df_combined)
-                
+
                 print(f"♻️ Doublons supprimés : {len_before - len_after}")
                 
                 df_combined.to_csv(chemin_complet, index=False, encoding='utf-8-sig')
