@@ -1,3 +1,5 @@
+import hashlib
+import io
 import json
 import pandas as pd
 import numpy as np
@@ -7,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
 
-from data_versioning import record_model_metadata, snapshot_dataset
+from data_versioning import archive_model_version, record_model_metadata, snapshot_dataset
 
 # Vérification XGBoost
 try:
@@ -65,15 +67,15 @@ print(f"📊 Données prêtes : {X.shape[0]} annonces x {X.shape[1]} critères."
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # --- 6. ENTRAÎNEMENT XGBOOST ---
-model = XGBRegressor(
-    n_estimators=1500,
-    learning_rate=0.01,
-    max_depth=7,
-    subsample=0.7,
-    colsample_bytree=0.6,
-    n_jobs=-1,
-    random_state=42
-)
+hyperparameters = {
+    'n_estimators': 1500,
+    'learning_rate': 0.01,
+    'max_depth': 7,
+    'subsample': 0.7,
+    'colsample_bytree': 0.6,
+    'random_state': 42,
+}
+model = XGBRegressor(n_jobs=-1, **hyperparameters)
 
 model.fit(X_train, y_train)
 
@@ -110,10 +112,21 @@ print("\n🔍 Top 12 des critères décisifs :")
 print(importances.head(12).to_string(index=False))
 
 # --- 9. SAUVEGARDE ---
-joblib.dump(model, model_save_path)
-print(f"\n💾 Modèle sauvegardé : {model_save_path}")
+# Sérialisé en mémoire d'abord pour pouvoir hasher le binaire exact écrit sur
+# disque (ORA-31 : identifie chaque modèle entraîné par un hash de version).
+model_buffer = io.BytesIO()
+joblib.dump(model, model_buffer)
+model_bytes = model_buffer.getvalue()
+model_version = hashlib.sha256(model_bytes).hexdigest()[:12]
 
-# --- 10. VERSIONING DES DONNÉES (ORA-28) ---
+with open(model_save_path, 'wb') as f:
+    f.write(model_bytes)
+print(f"\n💾 Modèle sauvegardé : {model_save_path} (version {model_version})")
+
+versioned_path = archive_model_version(model_save_path, model_bytes, model_version)
+print(f"🗂️  Version archivée : {versioned_path} — voir rollback_model.py pour y revenir sans réentraîner.")
+
+# --- 10. VERSIONING DES DONNÉES (ORA-28) ET MÉTADONNÉES DU MODÈLE (ORA-31) ---
 # Trace quelle version de master_immo_final.csv a servi à entraîner ce modèle,
 # pour pouvoir reproduire un ancien modèle à partir de son snapshot.
 snapshots_dir = os.path.join(script_dir, '..', 'data', 'snapshots')
@@ -124,6 +137,8 @@ meta_path = record_model_metadata(
     data_snapshot_sha256=data_snapshot_sha256,
     data_snapshot_file=data_snapshot_file,
     metrics={'mae': float(mae), 'r2': float(r2)},
+    model_version=model_version,
+    hyperparameters=hyperparameters,
 )
 print(f"📌 Snapshot des données : {data_snapshot_file} ({data_snapshot_sha256[:12]}...)")
 print(f"📎 Métadonnées du modèle : {meta_path}")

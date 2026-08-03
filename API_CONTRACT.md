@@ -10,6 +10,35 @@ Toutes les routes `POST` acceptent un corps JSON (`Content-Type: application/jso
 
 ---
 
+## `GET /api/health`
+
+Expose l'état du serveur et la version du modèle de prédiction actuellement chargé (ORA-31). Non soumis au rate limiting (`@limiter.exempt`).
+
+- **Payload d'entrée** : aucun.
+- **Réponse `200`** :
+
+```json
+{
+  "status": "ok",
+  "model_loaded": true,
+  "model": {
+    "model_version": "5af9e5a1be0c",
+    "trained_at": "2026-08-03T13:21:36.516616+00:00",
+    "metrics": { "mae": 167.03, "r2": 0.755 }
+  }
+}
+```
+
+`status` vaut `"degraded"` et `model.model_version`/`trained_at`/`metrics` sont `null` si le modèle ou ses métadonnées (`backend/models/price_predictor.pkl.meta.json`) sont indisponibles.
+
+Exemple :
+
+```bash
+curl http://localhost:5000/api/health
+```
+
+---
+
 ## `GET /api/listings`
 
 Renvoie les annonces immobilières utilisées pour l'affichage sur la carte.

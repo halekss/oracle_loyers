@@ -179,6 +179,7 @@ data_fusion.py ─────────────────────�
     * Génère le fichier modèle : `backend/models/price_predictor.pkl`, **versionné dans git** (comme `master_immo_final.csv`) pour qu'un environnement fraîchement déployé dispose d'un modèle fonctionnel sans étape manuelle. L'entraînement est déterministe (`random_state=42`) ; relancez `train_model.py` et committez le `.pkl` après toute mise à jour de `master_immo_final.csv`.
     * Via `data_versioning.py`, archive aussi un snapshot content-addressé des données utilisées et écrit `price_predictor.pkl.meta.json` (référence explicite au snapshot + métriques MAE/R² du run courant) — voir "Versioning des snapshots de données" ci-dessous.
     * Chaque run ajoute en plus une ligne (`trained_at`, `mae`, `r2`, `dataset_size`, `n_features`) à `backend/models/training_metrics.jsonl`, un historique continu des métriques permettant de comparer plusieurs runs/versions du modèle dans le temps sans avoir à parcourir l'historique git.
+    * Chaque modèle entraîné est identifié par un hash (`model_version`, sha256 du binaire) inclus dans `price_predictor.pkl.meta.json` avec ses hyperparamètres ; une copie est archivée dans `backend/models/versions/`. `GET /api/health` expose la version actuellement chargée. Pour revenir à une version antérieure **sans réentraîner** : `python backend/scripts/rollback_model.py <model_version>`.
 
 > Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
 
@@ -220,6 +221,14 @@ Chaque exécution de `train_model.py` archive un instantané de `master_immo_fin
 1. Récupérer le `data_snapshot_sha256` voulu (depuis un `price_predictor.pkl.meta.json` conservé, ou depuis `backend/data/snapshots/manifest.csv`).
 2. Copier le snapshot correspondant par-dessus les données actives : `cp backend/data/snapshots/master_immo_final_<sha256>.csv backend/data/master_immo_final.csv`.
 3. Relancer `python backend/scripts/train_model.py` — le modèle est ré-entraîné sur exactement les mêmes données, et un nouveau `.meta.json` confirme le même `data_snapshot_sha256`.
+
+### 🔖 Versioning du modèle et rollback sans réentraîner
+
+Le mécanisme ci-dessus reproduit un ancien modèle en **ré-entraînant** sur son snapshot de données. Pour un retour arrière immédiat (ex : le modèle fraîchement entraîné se comporte mal en production), chaque run archive aussi une copie binaire prête à l'emploi :
+
+* **`backend/models/versions/price_predictor_<model_version>.pkl`** — copie du modèle archivée sous son hash (`model_version` = sha256 tronqué du binaire, présent dans `price_predictor.pkl.meta.json`). Versionnée dans git.
+* **`GET /api/health`** — expose `model_version`, `trained_at` et `metrics` (MAE/R²) du modèle actuellement chargé par le backend.
+* **`python backend/scripts/rollback_model.py <model_version>`** — restaure instantanément cette version comme modèle actif (`price_predictor.pkl`) et met à jour `.meta.json`, **sans ré-entraîner**.
 
 ---
 
