@@ -1,0 +1,5 @@
+{
+  "checked_at": "2026-08-03T17:18:02.661856+00:00",
+  "status": "insufficient_history",
+  "message": "Un seul snapshot de données enregistré à ce jour : pas assez d'historique pour détecter une dérive."
+}
