@@ -19,32 +19,6 @@ export const apiFetchOptions = (payload) => ({
 });
 
 export const api = {
-  // Récupérer les annonces pour la carte
-  getListings: async () => {
-    try {
-      const response = await fetch(`${API_URL}/listings`);
-      if (!response.ok) throw new Error("Erreur listings");
-      return await response.json();
-    } catch (error) {
-      console.error("❌ Erreur Listings:", error);
-      return [];
-    }
-  },
-
-  // Prédiction ML (Feature existante)
-  getPrediction: async (searchData) => {
-    try {
-      const response = await fetch(`${API_URL}/predict`, {
-        ...apiFetchOptions(searchData),
-      });
-      if (!response.ok) throw new Error("Erreur serveur Oracle");
-      return await response.json();
-    } catch (error) {
-      console.error("❌ Erreur API Predict:", error);
-      throw error;
-    }
-  },
-
   // SCAN QUARTIER
   getQuartierStats: async (quartierName, typeLocal = 'Tout') => {
     try {
