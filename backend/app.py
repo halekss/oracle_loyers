@@ -9,6 +9,7 @@ from flasgger import Swagger
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
+from services.cavaliers_factors import summarize_cavaliers
 from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
 
@@ -333,7 +334,8 @@ def get_quartier_stats():
             "count": int(count),
             "prix_moyen": round(float(mean_price), 0),
             "prix_m2_moyen": round(float(mean_price_m2), 0),
-            "center": center
+            "center": center,
+            "facteurs": summarize_cavaliers(filtered_df),
         })
 
     except Exception as e:
