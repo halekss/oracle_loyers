@@ -4,9 +4,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
-import csv
 import re
 import os
+
+from csv_atomic_writer import atomic_csv_writer
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_orpi.csv')
@@ -45,7 +46,6 @@ def extract_price_from_text(text):
 
 if __name__ == '__main__':
     print("🥷 Lancement du mode 'Ascenseur' Automatique pour ORPI...")
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
     options = uc.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
@@ -53,10 +53,7 @@ if __name__ == '__main__':
 
     liens_vus = set()
 
-    with open(OUTPUT_PATH, 'w', newline='', encoding='utf-8-sig') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Titre_Lieu', 'Prix', 'Infos', 'Lien'])
-
+    with atomic_csv_writer(OUTPUT_PATH, ['Titre_Lieu', 'Prix', 'Infos', 'Lien']) as writer:
         page_num = 1
         continuer = True
 
