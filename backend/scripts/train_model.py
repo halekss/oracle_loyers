@@ -5,6 +5,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
 
+from data_versioning import record_model_metadata, snapshot_dataset
+
 # Vérification XGBoost
 try:
     from xgboost import XGBRegressor
@@ -95,3 +97,18 @@ print(importances.head(12).to_string(index=False))
 # --- 9. SAUVEGARDE ---
 joblib.dump(model, model_save_path)
 print(f"\n💾 Modèle sauvegardé : {model_save_path}")
+
+# --- 10. VERSIONING DES DONNÉES (ORA-28) ---
+# Trace quelle version de master_immo_final.csv a servi à entraîner ce modèle,
+# pour pouvoir reproduire un ancien modèle à partir de son snapshot.
+snapshots_dir = os.path.join(script_dir, '..', 'data', 'snapshots')
+data_snapshot_sha256 = snapshot_dataset(data_path, snapshots_dir)
+data_snapshot_file = f"master_immo_final_{data_snapshot_sha256[:12]}.csv"
+meta_path = record_model_metadata(
+    model_save_path,
+    data_snapshot_sha256=data_snapshot_sha256,
+    data_snapshot_file=data_snapshot_file,
+    metrics={'mae': float(mae), 'r2': float(r2)},
+)
+print(f"📌 Snapshot des données : {data_snapshot_file} ({data_snapshot_sha256[:12]}...)")
+print(f"📎 Métadonnées du modèle : {meta_path}")
