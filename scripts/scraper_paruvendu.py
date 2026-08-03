@@ -2,8 +2,9 @@ import requests
 from bs4 import BeautifulSoup
 import time
 import random
-import csv
 import os
+
+from csv_atomic_writer import atomic_csv_writer
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_paruvendu.csv')
@@ -46,16 +47,12 @@ def find_bs4(soup_elem, selectors):
 
 if __name__ == '__main__':
     print("🦁 Lancement du Scraper ParuVendu (Mode Rapide)...")
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
     liens_vus = set()
     page_num = 1
     continuer = True
 
-    with open(OUTPUT_PATH, 'w', newline='', encoding='utf-8-sig') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['Titre', 'Prix', 'Lien'])
-
+    with atomic_csv_writer(OUTPUT_PATH, ['Titre', 'Prix', 'Lien']) as writer:
         while continuer:
             url_page = base_url if page_num == 1 else f"{base_url}&p={page_num}"
             print(f"\n--- 📄 Analyse de la Page {page_num} ---")

@@ -4,8 +4,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
-import csv
 import os
+
+from csv_atomic_writer import atomic_csv_writer
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_vizzit.csv')
@@ -50,15 +51,11 @@ def get_driver():
 
 if __name__ == '__main__':
     print("🚀 Lancement du scraper Vizzit Automatique...")
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
     driver = get_driver()
     wait = WebDriverWait(driver, 15)
 
-    with open(OUTPUT_PATH, 'w', newline='', encoding='utf-8-sig') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Lieu', 'Prix', 'Details', 'Description', 'Lien'])
-
+    with atomic_csv_writer(OUTPUT_PATH, ['Lieu', 'Prix', 'Details', 'Description', 'Lien']) as writer:
         page_num = 1
         liens_vus = set()
         continuer = True
