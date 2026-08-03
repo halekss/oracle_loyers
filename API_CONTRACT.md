@@ -188,6 +188,7 @@ Route du chatbot "Immotep" : combine une réponse "groundée" sur les données r
 
 - **Codes d'erreur** :
   - `400` si `message` est vide : `{ "response": "Silence... Tu n'as rien à dire ?" }`
+  - `429` si la limite dédiée à cette route est dépassée (`RATE_LIMIT_CHAT`, défaut `15 per hour` par IP — plus stricte que la limite globale, pour protéger le quota Gemini) : `{ "error": "Trop de requêtes. Réessayez dans quelques instants." }`
   - `500` en cas d'exception non gérée : `{ "response": "Erreur interne côté serveur. Immotep revient dès que l'API répond correctement." }`
   - En cas d'absence de `GEMINI_API_KEY`, de timeout ou de quota Gemini dépassé, la route reste en `200` mais `intent` vaut `"error"` et `response` explique la cause.
 

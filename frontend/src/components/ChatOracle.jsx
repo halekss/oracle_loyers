@@ -8,6 +8,8 @@ const describeChatError = (error) => {
     switch (error.type) {
       case 'network':
         return "**Connexion perdue.** Immotep ne capte plus de réseau, vérifie ta connexion et réessaie.";
+      case 'rate_limit':
+        return "**Doucement.** Immotep a une limite de questions par heure pour économiser son quota. Reviens dans un instant.";
       case 'client':
         return "**Requête refusée.** Immotep n'a pas compris la demande envoyée.";
       case 'server':
