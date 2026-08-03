@@ -23,21 +23,23 @@ class RuntimeConfigTest(unittest.TestCase):
             {"CORS_ORIGINS": "https://oracle-loyers.onrender.com/, https://admin.example.com "},
             clear=False,
         ):
-            self.assertEqual(
-                app.get_cors_origins(),
-                ["https://oracle-loyers.onrender.com", "https://admin.example.com"],
-            )
+            origins = app.get_cors_origins()
+            self.assertEqual(origins[:2], ["https://oracle-loyers.onrender.com", "https://admin.example.com"])
+            self.assertIn("http://localhost:5173", origins)
 
     def test_get_cors_origins_keeps_frontend_origin_allowed_when_env_is_set(self):
         with patch.dict(os.environ, {"CORS_ORIGINS": "https://admin.example.com"}, clear=False):
-            self.assertEqual(
-                app.get_cors_origins(),
-                ["https://admin.example.com", "https://oracle-loyers.onrender.com"],
-            )
+            origins = app.get_cors_origins()
+            self.assertEqual(origins[0], "https://admin.example.com")
+            self.assertIn("https://oracle-loyers.onrender.com", origins)
+            self.assertIn("http://localhost:5173", origins)
 
-    def test_get_cors_origins_defaults_to_open_cors(self):
+    def test_get_cors_origins_defaults_to_restrictive_list_without_wildcard(self):
         with patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(app.get_cors_origins(), "*")
+            origins = app.get_cors_origins()
+            self.assertNotEqual(origins, "*")
+            self.assertEqual(origins, app.DEFAULT_CORS_ORIGINS)
+            self.assertIn("https://oracle-loyers.onrender.com", origins)
 
 
 if __name__ == "__main__":
