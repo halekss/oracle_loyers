@@ -25,6 +25,12 @@ Le projet repose sur une architecture moderne conteneurisée :
 
 ---
 
+## 📄 Contrat API
+
+Les 4 routes exposées par `backend/app.py` (`/api/listings`, `/api/quartier-stats`, `/api/predict`, `/api/chat`) sont documentées de manière formelle (payloads, réponses, codes d'erreur, exemples) dans [`API_CONTRACT.md`](./API_CONTRACT.md), qui fait référence en cas de divergence avec le code.
+
+---
+
 ## IA: Google Gemini (cloud)
 
 Le chatbot ("Immotep") utilise **Google AI / Gemini** via `backend/services/chat_service.py` — c'est aujourd'hui le seul backend LLM implémenté dans le code. Il évite le serveur GPU/local, s'intègre simplement côté backend et le free tier suffit généralement pour une démonstration à trafic modéré.
