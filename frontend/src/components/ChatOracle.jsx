@@ -1,7 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api } from '../services/api';
+import { api, ApiError } from '../services/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+const describeChatError = (error) => {
+  if (error instanceof ApiError) {
+    switch (error.type) {
+      case 'network':
+        return "**Connexion perdue.** Immotep ne capte plus de réseau, vérifie ta connexion et réessaie.";
+      case 'client':
+        return "**Requête refusée.** Immotep n'a pas compris la demande envoyée.";
+      case 'server':
+        return "**Service indisponible.** Le serveur d'Immotep tousse, réessaie dans quelques instants.";
+      default:
+        break;
+    }
+  }
+  return "**Service indisponible.** Immotep est en pause café. Réessaie dans quelques instants.";
+};
 
 export default function ChatOracle({ analysis, context, quartier, onInsight }) {
   // Message d'accueil par défaut
@@ -54,9 +70,9 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
       }
     } catch (error) {
       console.error('Erreur chat:', error);
-      setMessages(prev => [...prev, { 
-        sender: 'oracle', 
-        text: "**Service indisponible.** Immotep est en pause café. Réessaie dans quelques instants."
+      setMessages(prev => [...prev, {
+        sender: 'oracle',
+        text: describeChatError(error)
       }]);
     } finally {
       setIsLoading(false);

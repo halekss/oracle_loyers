@@ -1,0 +1,46 @@
+import { Component } from 'react';
+
+// Les Error Boundary React doivent être des composants classe : aucun
+// équivalent à base de hooks n'existe pour intercepter les erreurs de rendu.
+export default class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('Erreur de rendu capturée par ErrorBoundary:', error, info);
+  }
+
+  handleReload = () => {
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen w-screen bg-slate-950 text-slate-200 gap-4 p-6 text-center">
+          <h1 className="text-xl font-black tracking-tighter text-white">
+            ORACLE <span className="text-purple-500">DES LOYERS</span>
+          </h1>
+          <p className="text-sm text-slate-400 max-w-md">
+            Un problème d'affichage inattendu est survenu. Rechargez la page pour continuer.
+          </p>
+          <button
+            type="button"
+            onClick={this.handleReload}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white text-sm font-semibold transition-colors"
+          >
+            Recharger la page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
