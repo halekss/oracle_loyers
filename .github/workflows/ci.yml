@@ -101,3 +101,26 @@ jobs:
 
       - run: npm run test:e2e
         working-directory: frontend
+
+  deploy:
+    # CD (ORA-64) : ne se déclenche que sur un push vers main, et seulement
+    # si backend/scrapers/frontend/e2e ont TOUS réussi — `needs:` + le `if:`
+    # explicite ci-dessous (nécessaire car ajouter un `if:` sur un job avec
+    # `needs` remplace la condition implicite success(), il faut la
+    # réécrire explicitement pour qu'un échec de test bloque bien le déploi).
+    name: Déploiement (Render)
+    needs: [backend, scrapers, frontend, e2e]
+    if: success() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déclencher le déploiement backend (Render Deploy Hook)
+        if: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND != '' }}
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}"
+
+      - name: Déclencher le déploiement frontend (Render Deploy Hook)
+        if: ${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND != '' }}
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}"
+
+      - name: Avertir si aucun hook n'est configuré
+        if: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND == '' && secrets.RENDER_DEPLOY_HOOK_FRONTEND == '' }}
+        run: echo "::warning::Aucun secret RENDER_DEPLOY_HOOK_BACKEND/RENDER_DEPLOY_HOOK_FRONTEND configuré — déploiement non déclenché. Voir README, section CD."

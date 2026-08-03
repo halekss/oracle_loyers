@@ -150,6 +150,17 @@ Les variables utiles (`GEMINI_API_KEY`, `GEMINI_MODEL`, `CORS_ORIGINS`, etc.) so
 
 Le frontend lit l'URL de l'API via Vite (`VITE_API_URL`, voir [`.env.example`](./.env.example)). Sur Render, cette variable est obligatoire. En local seulement, si elle n'est pas définie, le frontend utilise `http://localhost:5000/api`.
 
+### 🚚 Déploiement continu (CD, ORA-64)
+
+Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render (via son [Deploy Hook](https://render.com/docs/deploy-hooks)) uniquement quand **tous** les jobs de CI (`backend`, `scrapers`, `frontend`, `e2e`) ont réussi sur un push vers `main` — `needs: [...]` + `if: success() && ...` : un échec de test bloque bien le déploiement (le job `deploy` est alors sauté, pas juste marqué en échec).
+
+**Configuration requise (à faire une seule fois, côté Render puis GitHub) :**
+1. Dans le dashboard Render, pour chaque service (backend, frontend) : *Settings → Deploy Hook* → copier l'URL générée.
+2. Dans GitHub, *Settings → Secrets and variables → Actions* : créer `RENDER_DEPLOY_HOOK_BACKEND` et `RENDER_DEPLOY_HOOK_FRONTEND` avec ces URLs. Tant qu'un secret n'est pas défini, l'étape correspondante est sautée sans faire échouer le job (message d'avertissement dans les logs).
+3. **Désactiver l'auto-deploy natif de Render** sur ces deux services (*Settings → Auto-Deploy → No*) — sinon Render redéploierait à chaque push, y compris si la CI échoue, en plus du déploiement déclenché par ce workflow.
+
+**Rollback :** chaque déploiement Render reste visible dans l'historique du service (*Dashboard → Deploys*). En cas de déploiement problématique, cliquer sur un déploiement antérieur réussi puis *Rollback to this deploy* revient immédiatement dessus (pas besoin de revert Git ni de relancer la CI).
+
 ---
 
 ## ⚙️ Les Scripts de Données (ETL)
