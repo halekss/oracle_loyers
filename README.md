@@ -31,6 +31,12 @@ Les 4 routes exposées par `backend/app.py` (`/api/listings`, `/api/quartier-sta
 
 ---
 
+## 🔒 Confidentialité des données
+
+Quelles données personnelles sont collectées (messages du chatbot, adresse IP pour le rate limiting), pendant combien de temps, et ce qui n'est **pas** collecté (pas de cookies, pas de compte, pas d'analytics) : voir [`PRIVACY.md`](./PRIVACY.md).
+
+---
+
 ## IA: Google Gemini (cloud)
 
 Le chatbot ("Immotep") utilise **Google AI / Gemini** via `backend/services/chat_service.py` — c'est aujourd'hui le seul backend LLM implémenté dans le code. Il évite le serveur GPU/local, s'intègre simplement côté backend et le free tier suffit généralement pour une démonstration à trafic modéré.
