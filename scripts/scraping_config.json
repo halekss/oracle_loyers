@@ -1,0 +1,36 @@
+{
+  "ville_active": "lyon",
+  "user_agents": [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+  ],
+  "proxies": [],
+  "villes": {
+    "lyon": {
+      "nom": "Lyon",
+      "slug": "lyon",
+      "century21": {
+        "base_url": "https://www.century21.fr/annonces/f/location-maison-appartement/v-lyon/page-{}/"
+      },
+      "orpi": {
+        "base_url": "https://www.orpi.com/recherche/rent?transaction=rent&locations%5B0%5D%5Bvalue%5D=lyon&sort=date-down&layoutType=list&page={}"
+      },
+      "pap": {
+        "base_url": "https://www.pap.fr/annonce/locations-appartement-lyon-69-g43590-a-partir-du-2-pieces?page={}"
+      },
+      "seloger": {
+        "base_url": "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=AD08FR28808",
+        "page_query_param": "page"
+      },
+      "vizzit": {
+        "base_url": "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-type-rentals-hab_appartement-on-hab_house-on-city_id-city_34209,city_34210,city_34211,city_34212,city_34213,city_34214,city_34215,city_34216,city_34217-tf_ids-235728"
+      },
+      "paruvendu": {
+        "base_url": "https://www.paruvendu.fr/immobilier/recherche/location/lyon/?rechpv=1&tt=5&tbApp=1&tbDup=1&tbChb=1&tbLof=1&tbAtl=1&tbPla=1&tbMai=1&tbVil=1&tbCha=1&tbPro=1&tbHot=1&tbMou=1&tbFer=1&nbp0=99&pa=FR&lol=0&ray=50&codeINSEE=69000,",
+        "page_query_param": "p"
+      }
+    }
+  }
+}
