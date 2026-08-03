@@ -9,6 +9,9 @@ import os
 import sys
 
 from csv_atomic_writer import atomic_csv_writer
+from scraper_utils import get_scraper_logger
+
+logger = get_scraper_logger("seloger")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_seloger.csv')
@@ -50,13 +53,14 @@ def parse_title_attribute(full_title):
     return titre, lieu, prix, " - ".join(infos_parts)
 
 if __name__ == '__main__':
-    print("🥷 Lancement du mode Furtif Automatique pour SeLoger...")
+    logger.info("Lancement du mode Furtif Automatique pour SeLoger...")
 
     options = uc.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
     driver = uc.Chrome(options=options)
 
     liens_vus = set()
+    erreurs = 0
 
     with atomic_csv_writer(OUTPUT_PATH, ['Titre', 'Prix', 'Lieu', 'Infos', 'Lien']) as writer:
         page_num = 1
@@ -64,24 +68,24 @@ if __name__ == '__main__':
 
         while continuer:
             url = base_url if page_num == 1 else f"{base_url}&page={page_num}"
-            print(f"\n--- 📄 Analyse de la Page {page_num} ---")
+            logger.info("Analyse de la page %s", page_num)
             driver.get(url)
 
             if page_num == 1:
-                print("⏳ En attente de la validation du Captcha ou des Cookies...")
+                logger.info("En attente de la validation du Captcha ou des Cookies...")
                 card_found = False
                 for sel in CARD_SELECTORS:
                     try:
                         WebDriverWait(driver, 120).until(
                             EC.presence_of_element_located((By.CSS_SELECTOR, sel))
                         )
-                        print(f"✅ Page accessible ({sel})")
+                        logger.info("Page accessible (%s)", sel)
                         card_found = True
                         break
                     except Exception:
                         continue
                 if not card_found:
-                    print("❌ Aucune carte détectée. Captcha non résolu ou structure changée.")
+                    logger.error("Aucune carte détectée. Captcha non résolu ou structure changée.")
                     break
             else:
                 time.sleep(random.uniform(5, 8))
@@ -96,7 +100,7 @@ if __name__ == '__main__':
                     break
 
             if not annonces:
-                print("🛑 Aucune annonce trouvée sur cette page.")
+                logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
                 break
 
             compteur_page = 0
@@ -125,15 +129,17 @@ if __name__ == '__main__':
                     writer.writerow([titre, prix, lieu, infos, lien])
                     liens_vus.add(lien)
                     compteur_page += 1
-                    print(f"🏠 {titre} ({lieu}) -- 💰 {prix}")
+                    logger.info("Annonce trouvée : %s (%s) -- %s", titre, lieu, prix)
 
-                except Exception:
+                except Exception as exc:
+                    erreurs += 1
+                    logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
                     continue
 
-            print(f"📊 Page {page_num} terminée : {compteur_page} nouvelles annonces.")
+            logger.info("Page %s terminée : %s nouvelles annonces.", page_num, compteur_page)
 
             if compteur_page == 0:
-                print("🏁 Plus de nouvelles annonces uniques.")
+                logger.info("Plus de nouvelles annonces uniques.")
                 continuer = False
             else:
                 page_num += 1
@@ -141,7 +147,10 @@ if __name__ == '__main__':
     driver.quit()
 
     if len(liens_vus) == 0:
-        print(f"❌ ERREUR : 0 annonce trouvée pour SeLoger. Le site a peut-être changé de structure.")
+        logger.error("0 annonce trouvée pour SeLoger. Le site a peut-être changé de structure.")
         sys.exit(1)
 
-    print(f"\n✨ Scraping SeLoger terminé ! {len(liens_vus)} annonces collectées dans : {OUTPUT_PATH}")
+    logger.info(
+        "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
+        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+    )

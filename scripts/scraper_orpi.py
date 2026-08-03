@@ -9,6 +9,9 @@ import os
 import sys
 
 from csv_atomic_writer import atomic_csv_writer
+from scraper_utils import get_scraper_logger
+
+logger = get_scraper_logger("orpi")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_orpi.csv')
@@ -46,13 +49,14 @@ def extract_price_from_text(text):
     return match.group(1).strip() if match else ""
 
 if __name__ == '__main__':
-    print("🥷 Lancement du mode 'Ascenseur' Automatique pour ORPI...")
+    logger.info("Lancement du mode 'Ascenseur' Automatique pour ORPI...")
 
     options = uc.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
     driver = uc.Chrome(options=options)
 
     liens_vus = set()
+    erreurs = 0
 
     with atomic_csv_writer(OUTPUT_PATH, ['Titre_Lieu', 'Prix', 'Infos', 'Lien']) as writer:
         page_num = 1
@@ -60,24 +64,24 @@ if __name__ == '__main__':
 
         while continuer:
             url = base_url.format(page_num)
-            print(f"\n--- 📄 Analyse de la Page {page_num} ---")
+            logger.info("Analyse de la page %s", page_num)
             driver.get(url)
 
             if page_num == 1:
-                print("⏳ En attente de la validation des cookies sur Orpi...")
+                logger.info("En attente de la validation des cookies sur Orpi...")
                 card_found = False
                 for sel in CARD_SELECTORS:
                     try:
                         WebDriverWait(driver, 60).until(
                             EC.presence_of_element_located((By.CSS_SELECTOR, sel))
                         )
-                        print(f"✅ Accès détecté avec sélecteur : {sel}")
+                        logger.info("Accès détecté avec sélecteur : %s", sel)
                         card_found = True
                         break
                     except Exception:
                         continue
                 if not card_found:
-                    print("❌ Aucun sélecteur de carte ne correspond. Structure inconnue.")
+                    logger.error("Aucun sélecteur de carte ne correspond. Structure inconnue.")
                     break
             else:
                 time.sleep(random.uniform(3, 6))
@@ -93,7 +97,7 @@ if __name__ == '__main__':
                     break
 
             if not annonces:
-                print("🛑 Aucune annonce trouvée sur cette page.")
+                logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
                 break
 
             compteur_nouveaux = 0
@@ -123,15 +127,17 @@ if __name__ == '__main__':
                     writer.writerow([titre, prix, infos, href])
                     liens_vus.add(href)
                     compteur_nouveaux += 1
-                    print(f"🏠 {titre[:60]}... -- 💰 {prix}")
+                    logger.info("Annonce trouvée : %s -- %s", titre[:60], prix)
 
-                except Exception:
+                except Exception as exc:
+                    erreurs += 1
+                    logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
                     continue
 
-            print(f"📊 Page {page_num} terminée : {compteur_nouveaux} annonces ajoutées.")
+            logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_nouveaux)
 
             if compteur_nouveaux == 0:
-                print("🏁 Fin des nouvelles annonces.")
+                logger.info("Fin des nouvelles annonces.")
                 continuer = False
             else:
                 page_num += 1
@@ -139,7 +145,10 @@ if __name__ == '__main__':
     driver.quit()
 
     if len(liens_vus) == 0:
-        print(f"❌ ERREUR : 0 annonce trouvée pour ORPI. Le site a peut-être changé de structure.")
+        logger.error("0 annonce trouvée pour ORPI. Le site a peut-être changé de structure.")
         sys.exit(1)
 
-    print(f"\n✨ Terminé ! {len(liens_vus)} annonces sauvegardées dans : {OUTPUT_PATH}")
+    logger.info(
+        "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
+        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+    )
