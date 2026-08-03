@@ -1,4 +1,3 @@
-import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -7,7 +6,7 @@ import random
 import os
 import sys
 
-from csv_atomic_writer import atomic_csv_writer
+from scraper_utils import get_chrome_driver, find_first, atomic_csv_writer, retry_with_backoff
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_century21.csv')
@@ -33,20 +32,14 @@ INFOS_SELECTORS = [
     "[class*='detail']",
 ]
 
-def find_first(element, selectors):
-    for sel in selectors:
-        try:
-            return element.find_element(By.CSS_SELECTOR, sel).text.strip()
-        except Exception:
-            continue
-    return ""
+@retry_with_backoff(max_retries=3, backoff_seconds=2)
+def load_page(driver, url):
+    driver.get(url)
 
 if __name__ == '__main__':
     print("🥷 Lancement du mode Furtif Automatique pour Century 21...")
 
-    options = uc.ChromeOptions()
-    options.add_argument('--ignore-certificate-errors')
-    driver = uc.Chrome(options=options)
+    driver = get_chrome_driver()
 
     liens_vus = set()
 
@@ -57,7 +50,7 @@ if __name__ == '__main__':
         while continuer:
             url = base_url.format(page_num)
             print(f"\n--- 📄 Analyse de la Page {page_num} ---")
-            driver.get(url)
+            load_page(driver, url)
 
             if page_num == 1:
                 print("⏳ En attente de la validation des cookies...")
