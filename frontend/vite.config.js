@@ -16,5 +16,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
     globals: true,
+    // tests/e2e/ contient les specs Playwright (ORA-59), exécutées via
+    // `npm run test:e2e`, pas par Vitest.
+    exclude: ['tests/e2e/**', 'node_modules/**'],
   },
 })

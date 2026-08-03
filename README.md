@@ -184,6 +184,11 @@ data_fusion.py ─────────────────────�
 
 > Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
 
+### 🧪 Tests frontend (Vitest + E2E Playwright)
+
+* **`npm test`** (`frontend/`) — Vitest (environment jsdom, cohérent avec Vite) : tests unitaires (`services/api.js`, config Vite) et tests de composants React (`ChatOracle`, `SearchForm`, `MapComponent` — rendu, interactions clés, gestion d'erreur). Exécuté en CI à chaque push/PR.
+* **`npm run test:e2e`** (`frontend/`) — Playwright pilote le parcours utilisateur critique (saisie des critères → estimation affichée → carte visible → message chatbot → réponse reçue) contre le **vrai build de production** (`vite preview`, pas `npm run dev`) et un **vrai backend Flask** — `playwright.config.js` démarre les deux via `webServer` sur des ports dédiés (5055/4173), sans mock réseau. Fonctionne sans `GEMINI_API_KEY` (le backend répond alors avec un message explicite plutôt que planter). Job CI dédié (`e2e`) car il nécessite à la fois Python et Node.
+
 ### 🧪 Tests de scraping et canari Playwright
 
 Deux niveaux de tests protègent les 6 scrapers contre une refonte silencieuse des sites sources :

@@ -26,4 +26,12 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Config Node (pas de globals navigateur) : playwright.config.js lit
+    // process.env pour distinguer l'exécution locale de la CI.
+    files: ['playwright.config.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])

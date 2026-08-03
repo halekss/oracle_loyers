@@ -21,6 +21,11 @@ node_modules/
 frontend/dist/
 frontend/.env
 .DS_Store
+
+# Artefacts de tests E2E Playwright (ORA-59)
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 # Airflow logs
 Airflow/logs/
 airflow/logs/
