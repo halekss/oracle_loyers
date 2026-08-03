@@ -18,4 +18,5 @@ tqdm
 folium
 Flask
 flask-cors
+flask-limiter
 google-genai

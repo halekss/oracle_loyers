@@ -6,6 +6,8 @@ Base URL locale : `http://localhost:5000/api` (voir `VITE_API_URL` dans [`.env.e
 
 Toutes les routes `POST` acceptent un corps JSON (`Content-Type: application/json` ou `text/plain` contenant du JSON — le frontend envoie `text/plain` pour éviter un preflight CORS).
 
+**Rate limiting** : toutes les routes ci-dessous sont soumises à une limite globale par IP (`RATE_LIMIT_DEFAULT` dans [`.env.example`](./.env.example), défaut `200 per day, 50 per hour`). Un dépassement renvoie `429 { "error": "Trop de requêtes. Réessayez dans quelques instants." }`.
+
 ---
 
 ## `GET /api/listings`
