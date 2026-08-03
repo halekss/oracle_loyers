@@ -28,7 +28,6 @@ RADIUS_METERS = 500
 # des features de distance et un modèle identiques). Ne pas changer sans
 # ré-entraîner et recommitter price_predictor.pkl.
 GEOCODING_JITTER_SEED = 42
-POLYGONS_MAP = {} # Stockage des formes géographiques
 FALLBACK_ZONES = {
     "69001": {"lat": 45.7705, "lon": 4.8306, "radius": 0.005},
     "69002": {"lat": 45.7533, "lon": 4.8327, "radius": 0.008},
@@ -45,26 +44,34 @@ FALLBACK_ZONES = {
 # =============================================================================
 # ETAPE 1 : GEOCODING & JITTER (geocoding_jitter.py)
 # =============================================================================
-def build_shapes_from_cavaliers():
-    """Dessine les arrondissements basés sur les cavaliers"""
+def build_shapes_from_cavaliers(cavaliers_csv_path=CAVALIERS_CSV):
+    """Dessine les arrondissements basés sur les cavaliers.
+
+    Renvoie un dict {code_postal: shapely.Polygon} au lieu de muter un global,
+    pour rester testable avec des entrées/sorties explicites.
+    """
     print("   🎨 Construction des formes géographiques...")
-    if not os.path.exists(CAVALIERS_CSV):
+    polygons_map = {}
+
+    if not os.path.exists(cavaliers_csv_path):
         print("   ⚠️ Pas de fichier cavaliers, utilisation des cercles simples.")
-        return
+        return polygons_map
 
     try:
-        df_cav = pd.read_csv(CAVALIERS_CSV)
+        df_cav = pd.read_csv(cavaliers_csv_path)
         df_cav['code_postal'] = df_cav['code_postal'].fillna(0).astype(str).apply(lambda x: x.split('.')[0])
         valid_cav = df_cav[df_cav['code_postal'].str.startswith('69')]
         grouped = valid_cav.groupby('code_postal')
-        
+
         for cp, group in grouped:
             if len(group) >= 4:
                 points = list(zip(group.longitude, group.latitude))
                 hull = MultiPoint(points).convex_hull
-                POLYGONS_MAP[cp] = hull.buffer(0.001)
+                polygons_map[cp] = hull.buffer(0.001)
     except Exception as e:
         print(f"   ⚠️ Erreur formes : {e}")
+
+    return polygons_map
 
 def get_random_point_in_polygon(polygon):
     minx, miny, maxx, maxy = polygon.bounds
@@ -79,9 +86,9 @@ def get_point_in_circle(center_lat, center_lon, radius):
     r = radius * np.sqrt(random.uniform(0, 1))
     return center_lat + r * np.cos(angle), center_lon + r * np.sin(angle)
 
-def get_point_for_zipcode(cp):
-    if cp in POLYGONS_MAP:
-        return get_random_point_in_polygon(POLYGONS_MAP[cp])
+def get_point_for_zipcode(cp, polygons_map):
+    if cp in polygons_map:
+        return get_random_point_in_polygon(polygons_map[cp])
     elif cp in FALLBACK_ZONES:
         z = FALLBACK_ZONES[cp]
         return get_point_in_circle(z["lat"], z["lon"], z["radius"])
@@ -94,11 +101,11 @@ def clean_zipcode(val):
     except:
         return str(val).strip()
 
-def step_geocoding(df):
+def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_SEED):
     print("\n📍 ETAPE 1 : Géocodage & Jitter...")
-    random.seed(GEOCODING_JITTER_SEED)
-    build_shapes_from_cavaliers()
-    
+    random.seed(seed)
+    polygons_map = build_shapes_from_cavaliers(cavaliers_csv_path)
+
     df['code_postal'] = df['code_postal'].fillna(69000).apply(clean_zipcode)
     
     lats, lons = [], []
@@ -114,7 +121,7 @@ def step_geocoding(df):
         # --- MODIFICATION END ---
 
         # Sinon (pas de coords), on génère comme avant
-        lat, lon = get_point_for_zipcode(row['code_postal'])
+        lat, lon = get_point_for_zipcode(row['code_postal'], polygons_map)
         lats.append(lat)
         lons.append(lon)
     
@@ -196,17 +203,22 @@ def get_nearest_distance_and_count(df_main, df_poi):
     
     return dist_meters, counts
 
-def step_features(df):
+def step_features(df, df_cavaliers):
+    """Calcule les distances/comptages aux points d'intérêt.
+
+    `df_cavaliers` est fourni explicitement par l'appelant (plutôt que lu depuis un
+    chemin de fichier en dur) pour rester testable avec un petit jeu de données en mémoire.
+    Un `df_cavaliers` vide est un cas limite valide : `df` est renvoyé inchangé.
+    """
     print("\n🧮 ETAPE 4 : Calcul des distances (Points d'intérêt)...")
-    if not os.path.exists(CAVALIERS_CSV):
-        print("   ❌ Erreur : Fichier cavaliers manquant.")
+    if df_cavaliers is None or df_cavaliers.empty:
+        print("   ⚠️ Pas de données cavaliers, aucune feature de distance calculée.")
         return df
 
-    df_cav = pd.read_csv(CAVALIERS_CSV)
-    categories = df_cav['categorie_cavalier'].unique()
-    
+    categories = df_cavaliers['categorie_cavalier'].unique()
+
     for cat in categories:
-        subset_cav = df_cav[df_cav['categorie_cavalier'] == cat]
+        subset_cav = df_cavaliers[df_cavaliers['categorie_cavalier'] == cat]
         clean_name = cat.replace(" - ", "_").replace(" ", "_").lower()
         
         # Calculs
@@ -232,6 +244,12 @@ def step_ids(df):
 # =============================================================================
 # MAIN PIPELINE
 # =============================================================================
+def load_cavaliers(cavaliers_csv_path=CAVALIERS_CSV):
+    """Charge le CSV des cavaliers, ou un DataFrame vide (mêmes colonnes) s'il est absent."""
+    if os.path.exists(cavaliers_csv_path):
+        return pd.read_csv(cavaliers_csv_path)
+    return pd.DataFrame(columns=['categorie_cavalier', 'type_osm', 'nom_lieu', 'latitude', 'longitude'])
+
 def main():
     print("🚀 DÉMARRAGE DU PIPELINE ETL COMPLET")
     print(f"📂 Entrée : {INPUT_RAW_CSV}")
@@ -241,14 +259,15 @@ def main():
     if not os.path.exists(INPUT_RAW_CSV):
         print("❌ Fichier d'entrée introuvable.")
         return
-    
+
     df = pd.read_csv(INPUT_RAW_CSV)
-    
-    # 2. Exécution séquentielle en mémoire
-    df = step_geocoding(df)
+    df_cavaliers = load_cavaliers(CAVALIERS_CSV)
+
+    # 2. Exécution séquentielle en mémoire (orchestration pure, pas de logique métier ici)
+    df = step_geocoding(df, CAVALIERS_CSV)
     df = step_quartiers(df)
     df = step_types(df)
-    df = step_features(df)
+    df = step_features(df, df_cavaliers)
     df = step_ids(df)
 
     # 3. Sauvegarde finale
