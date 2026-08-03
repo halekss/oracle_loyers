@@ -181,6 +181,22 @@ data_fusion.py ─────────────────────�
 
 > Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
 
+### 🧪 Tests de scraping et canari Playwright
+
+Deux niveaux de tests protègent les 6 scrapers contre une refonte silencieuse des sites sources :
+
+* **`scripts/tests/test_scraper_extraction_fixtures.py`** (ORA-19) — tests unitaires rapides, sans réseau ni navigateur, basés sur une fixture HTML statique par site (`scripts/tests/fixtures/`) qui réutilise les sélecteurs CSS réels de chaque `scraper_*.py`. Exécutés à chaque push/PR (job `scrapers` de `.github/workflows/ci.yml`).
+* **`scripts/tests/e2e/test_playwright_selectors.py`** (ORA-20) — canari Playwright qui navigue vers la page de résultats *live* de chaque site et vérifie que les sélecteurs actuels y retournent encore des annonces avec titre/prix non vides. Un échec logge explicitement `SÉLECTEUR CASSÉ (<site>)` pour le distinguer d'un incident réseau ponctuel. Ne remplace pas les scrapers de production (`undetected_chromedriver` reste nécessaire pour l'anti-bot) — sert uniquement de détecteur de changement HTML.
+
+**Planification et alerte (ORA-21)** — `.github/workflows/scraper-selector-canary.yml` exécute le canari Playwright chaque jour à 1h UTC (une heure avant le DAG Airflow de 2h, pour alerter avant que le pipeline ETL ne tourne sur des données obsolètes/vides) et sur déclenchement manuel (`workflow_dispatch`). En cas d'échec, une issue GitHub `scraper-canari-alert` est créée automatiquement (ou un commentaire est ajouté si une issue ouverte existe déjà, pour éviter le spam d'échecs consécutifs).
+
+**Procédure de triage lors d'une alerte :**
+1. Ouvrir le log du run échoué et repérer le(s) message(s) `SÉLECTEUR CASSÉ (<site>)`.
+2. Visiter manuellement la page de résultats du site concerné, ou relancer le workflow (`workflow_dispatch`) pour écarter un incident ponctuel (CAPTCHA, blocage IP, timeout réseau).
+3. Si le site a réellement changé de structure : mettre à jour les sélecteurs dans `scripts/scraper_<site>.py` **et** la fixture correspondante dans `scripts/tests/fixtures/`.
+4. Vérifier que les tests ORA-19 et le canari Playwright passent de nouveau.
+5. Fermer l'issue.
+
 ### 🕵️ Anti-détection des scrapers — limites légales
 
 Les 6 scrapers tirent à chaque run un User-Agent réaliste au hasard dans un pool (`scraping_config.json` → `user_agents`, via `scraper_utils.pick_user_agent()`), et supportent optionnellement un pool de proxies (`proxies`, vide/désactivé par défaut, via `pick_proxy()`).
