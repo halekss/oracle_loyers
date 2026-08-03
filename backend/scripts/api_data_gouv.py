@@ -1,6 +1,7 @@
-import requests
 import pandas as pd
 import time
+
+from http_retry import request_with_retry
 
 # 1. Vos données brutes
 # Je sépare l'adresse et le nom pour faciliter la recherche
@@ -25,24 +26,25 @@ def geocode_adresse(adresse, ville="Lyon"):
         "limit": 1 # On veut juste le meilleur résultat
     }
     
-    try:
-        response = requests.get(url, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            if data['features']:
-                # L'API renvoie du GeoJSON [longitude, latitude]
-                coords = data['features'][0]['geometry']['coordinates']
-                score = data['features'][0]['properties']['score']
-                
-                # On inverse pour avoir le format classique (Lat, Lon)
-                return {
-                    "latitude": coords[1],
-                    "longitude": coords[0],
-                    "score_confiance": score
-                }
-    except Exception as e:
-        print(f"Erreur pour {adresse}: {e}")
-    
+    response = request_with_retry("GET", url, params=params, timeout=15)
+    if response is None:
+        print(f"❌ Géocodage impossible pour {adresse} après plusieurs tentatives.")
+        return None
+
+    if response.status_code == 200:
+        data = response.json()
+        if data['features']:
+            # L'API renvoie du GeoJSON [longitude, latitude]
+            coords = data['features'][0]['geometry']['coordinates']
+            score = data['features'][0]['properties']['score']
+
+            # On inverse pour avoir le format classique (Lat, Lon)
+            return {
+                "latitude": coords[1],
+                "longitude": coords[0],
+                "score_confiance": score
+            }
+
     return None
 
 # 2. Exécution
