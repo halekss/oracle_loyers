@@ -10,6 +10,29 @@ Toutes les routes `POST` acceptent un corps JSON (`Content-Type: application/jso
 
 ---
 
+## Authentification (ORA-46)
+
+**Décision : aucune authentification n'est mise en place sur les routes actuelles.**
+
+Toutes les routes exposées par `backend/app.py` sont en lecture seule ou de simple consultation publique, sans aucune action sensible :
+
+| Route | Nature |
+|---|---|
+| `GET /api/health` | Lecture — état du serveur et version du modèle |
+| `GET /api/listings` | Lecture — annonces publiques affichées sur la carte |
+| `POST /api/quartier-stats` | Lecture — agrégats calculés à la volée sur le CSV (aucune écriture) |
+| `POST /api/quartier-historique` | Lecture — historique des snapshots (aucune écriture) |
+| `POST /api/predict` | Lecture — inférence du modèle ML déjà chargé en mémoire (aucune écriture, aucun ré-entraînement) |
+| `POST /api/chat` | Lecture — chatbot RAG groundé sur les données existantes (aucune écriture) |
+
+Aucune de ces routes ne supprime ou ne modifie de données, ne déclenche de ré-entraînement, ni n'expose de logs ou d'informations d'administration. Le ré-entraînement du modèle est piloté exclusivement par le DAG Airflow (hors périmètre HTTP, protégé par l'authentification Airflow elle-même via `AIRFLOW_ADMIN_USERNAME`/`AIRFLOW_ADMIN_PASSWORD`). Il n'existe aujourd'hui **aucune route d'administration ou de déclenchement manuel exposée via Flask**.
+
+Ce projet est une démo portfolio publique sans notion d'utilisateur ni de compte : imposer une authentification (API-key ou JWT) sur des routes de consultation publiques ajouterait de la friction et de la complexité sans bénéfice de sécurité réel. La protection en place aujourd'hui (rate limiting par IP, CORS restreint à une liste d'origines de confiance) est jugée suffisante et proportionnée au risque.
+
+**Cette décision doit être réévaluée dès qu'une route d'administration, de suppression de données, de déclenchement manuel de ré-entraînement, ou d'accès à des logs/informations sensibles serait ajoutée.** Dans ce cas, le mécanisme recommandé est une API-key simple (en-tête `X-API-Key`, comparée à une variable d'environnement type `ADMIN_API_KEY`), suffisant pour un projet de cette taille sans système d'utilisateurs.
+
+---
+
 ## `GET /api/health`
 
 Expose l'état du serveur et la version du modèle de prédiction actuellement chargé (ORA-31). Non soumis au rate limiting (`@limiter.exempt`).
