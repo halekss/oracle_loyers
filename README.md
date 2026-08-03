@@ -29,6 +29,8 @@ Le projet repose sur une architecture moderne conteneurisée :
 
 Les 4 routes exposées par `backend/app.py` (`/api/listings`, `/api/quartier-stats`, `/api/predict`, `/api/chat`) sont documentées de manière formelle (payloads, réponses, codes d'erreur, exemples) dans [`API_CONTRACT.md`](./API_CONTRACT.md), qui fait référence en cas de divergence avec le code.
 
+Une documentation interactive Swagger/OpenAPI (générée via [Flasgger](https://github.com/flasgger/flasgger)) est aussi disponible une fois le backend lancé, sur [http://localhost:5000/apidocs/](http://localhost:5000/apidocs/) (spec JSON brute sur `/apispec.json`).
+
 ---
 
 ## 🔒 Confidentialité des données
@@ -94,6 +96,7 @@ docker-compose up --build
 Une fois lancé, accédez à :
 *  **Frontend** : [http://localhost:5173](http://localhost:5173) (ou 3000 selon config)
 *  **Backend** : [http://localhost:5000](http://localhost:5000)
+*  **Documentation Swagger/OpenAPI** : [http://localhost:5000/apidocs/](http://localhost:5000/apidocs/)
 
 ---
 
