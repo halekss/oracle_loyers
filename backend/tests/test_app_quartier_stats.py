@@ -21,6 +21,13 @@ class QuartierStatsRouteTest(unittest.TestCase):
         self.assertTrue(data["found"])
         self.assertEqual(data["quartier_detecte"], "Gerland")
 
+        # ORA-73 : facteurs explicatifs ("4 Cavaliers") pour l'export PDF.
+        self.assertIn("facteurs", data)
+        self.assertEqual(len(data["facteurs"]), 4)
+        for facteur in data["facteurs"]:
+            self.assertIn("categorie", facteur)
+            self.assertIn("phrase", facteur)
+
     def test_route_rejects_blank_quartier_with_400(self):
         client = app.app.test_client()
 

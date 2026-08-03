@@ -1,13 +1,15 @@
 import React from "react";
 
 export default function ResultCard({ data, loading }) {
-  
+
   const safeData = data || {};
   const stats = safeData.stats || {};
 
   const estimatedPrice = safeData.estimated_price || 0;
   const m2PriceRaw = stats.prix_m2 || 0;
   const confiance = safeData.confiance;
+  const quartier = safeData.quartier;
+  const facteurs = safeData.facteurs || [];
 
   const formatPrice = (p) => p ? Math.round(p).toLocaleString('fr-FR') : "--";
 
@@ -66,6 +68,49 @@ export default function ResultCard({ data, loading }) {
         </div>
       </div>
 
+      {data && (
+        <>
+          {/* LES 4 CAVALIERS — visible à l'écran, masqué à l'impression (repris dans le rapport imprimable ci-dessous) */}
+          {facteurs.length > 0 && (
+            <div className="mt-3 print:hidden space-y-1.5">
+              <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-1">Les 4 Cavaliers</p>
+              {facteurs.map((f) => (
+                <div key={f.categorie} className="text-[11px] text-slate-400 bg-slate-900/50 rounded-lg px-2 py-1.5 border border-slate-800">
+                  <span className="text-purple-400 font-bold">{f.categorie} — </span>
+                  {f.phrase}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="print:hidden mt-3 w-full text-[10px] uppercase tracking-widest font-bold text-purple-400 border border-purple-500/30 rounded-lg py-2 hover:bg-purple-500/10 transition-colors"
+          >
+            Exporter en PDF
+          </button>
+
+          {/* RAPPORT IMPRIMABLE — masqué à l'écran, seul élément visible à l'impression (voir index.css) */}
+          <div id="printable-report" className="hidden print:block text-black">
+            <h1 className="text-2xl font-black mb-1">Oracle des Loyers — Rapport d'estimation</h1>
+            {quartier && <p className="text-sm mb-4">Quartier : {quartier}</p>}
+            <p className="text-xl font-bold mb-1">Estimation : {formatPrice(estimatedPrice)} € / mois</p>
+            <p className="text-sm mb-4">Prix moyen au m² : {formatPrice(m2PriceRaw)} €</p>
+            {facteurs.length > 0 && (
+              <>
+                <h2 className="text-lg font-bold mb-2">Les 4 Cavaliers du quartier</h2>
+                <ul className="space-y-1 text-sm list-disc list-inside">
+                  {facteurs.map((f) => (
+                    <li key={f.categorie}><strong>{f.categorie}</strong> — {f.phrase}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <p className="text-[10px] text-gray-500 mt-6">Estimation générée par l'Oracle des Loyers, à titre indicatif — non contractuelle.</p>
+          </div>
+        </>
+      )}
     </div>
   );
 }

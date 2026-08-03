@@ -85,6 +85,7 @@ function App() {
         count: data.count,
         type: data.type_filtre,
         confiance,
+        facteurs: data.facteurs || [],
       });
       setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
       if (data.center?.lat && data.center?.lng) {

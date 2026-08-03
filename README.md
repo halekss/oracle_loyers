@@ -10,6 +10,8 @@ Au-delà des données classiques (surface, prix), l'Oracle croise les données a
 3.   **Nuisance** (Bars de nuit, Voies ferrées, Urgences) -> *Fait baisser les prix.*
 4.   **Superstition** (Cimetières, Pompes funèbres) -> *Impact psychologique à la baisse.*
 
+Ces facteurs, jusqu'ici uniquement internes au modèle (features `dist_*`/`nb_*_500m`), sont désormais aussi résumés en phrases lisibles pour l'utilisateur (`backend/services/cavaliers_factors.py`, exposées par `/api/quartier-stats`) et exportables en PDF (ORA-73, voir section Contrat API).
+
 ---
 
 ## 🏗️ Architecture Technique
@@ -228,7 +230,7 @@ python backend/scripts/generate_map.py
 
 ### 🧪 Tests frontend (Vitest + E2E Playwright)
 
-* **`npm test`** (`frontend/`) — Vitest (environment jsdom, cohérent avec Vite) : tests unitaires (`services/api.js`, config Vite) et tests de composants React (`ChatOracle`, `SearchForm`, `MapComponent` — rendu, interactions clés, gestion d'erreur). Exécuté en CI à chaque push/PR.
+* **`npm test`** (`frontend/`) — Vitest (environment jsdom, cohérent avec Vite) : tests unitaires (`services/api.js`, config Vite) et tests de composants React (`ChatOracle`, `SearchForm`, `MapComponent`, `ResultCard` — rendu, interactions clés, gestion d'erreur, export PDF). Exécuté en CI à chaque push/PR.
 * **`npm run test:e2e`** (`frontend/`) — Playwright pilote le parcours utilisateur critique (saisie des critères → estimation affichée → carte visible → message chatbot → réponse reçue) contre le **vrai build de production** (`vite preview`, pas `npm run dev`) et un **vrai backend Flask** — `playwright.config.js` démarre les deux via `webServer` sur des ports dédiés (5055/4173), sans mock réseau. Fonctionne sans `GEMINI_API_KEY` (le backend répond alors avec un message explicite plutôt que planter). Job CI dédié (`e2e`) car il nécessite à la fois Python et Node.
 
 ### 🧪 Tests de scraping et canari Playwright

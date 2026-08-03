@@ -93,9 +93,17 @@ Calcule des statistiques réelles (prix moyen, prix/m², nombre de biens) à par
   "count": 42,
   "prix_moyen": 780,
   "prix_m2_moyen": 16,
-  "center": { "lat": 45.735, "lng": 4.831 }
+  "center": { "lat": 45.735, "lng": 4.831 },
+  "facteurs": [
+    { "categorie": "Vice", "phrase": "2 bar(s) à moins de 500m — parfait pour un verre, moins pour dormir." },
+    { "categorie": "Gentrification", "phrase": "Une salle de sport à 338m — la gentrification muscle aussi les mollets." },
+    { "categorie": "Nuisance", "phrase": "Une aire de jeux à 208m — cris d'enfants inclus, gratuitement." },
+    { "categorie": "Superstition", "phrase": "Ni cimetière ni pompes funèbres à moins de 500m — rien à signaler côté au-delà." }
+  ]
 }
 ```
+
+`facteurs` (ORA-73) : résumé des 4 "Cavaliers" pour le quartier détecté, sous forme de phrases concrètes (pas un score abstrait) générées par `backend/services/cavaliers_factors.py` à partir des colonnes `dist_*`/`nb_*_500m` de `master_immo_final.csv`. Utilisé par le frontend pour l'export PDF de l'estimation (bouton "Exporter en PDF", `window.print()` sur un rapport dédié).
 
 - **Réponse `200`** (quartier trouvé mais aucun bien pour le type demandé) :
 

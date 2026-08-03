@@ -147,3 +147,26 @@
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Export PDF (ORA-73) : n'imprimer que #printable-report (ResultCard.jsx),
+   pas le reste de l'appli (carte, chat, formulaire) — approche standard
+   "print only this element" plutôt qu'une page dédiée. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #printable-report,
+  #printable-report * {
+    visibility: visible;
+  }
+
+  #printable-report {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    padding: 2rem;
+  }
+}
