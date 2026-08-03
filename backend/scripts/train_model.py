@@ -40,8 +40,13 @@ df = pd.read_csv(data_path)
 y = df['prix']
 
 # --- 3. NETTOYAGE AGRESSIF ---
-# On vire les colonnes d'identification pure
-features_to_drop = ['id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'ville', 'titre', 'date']
+# On vire les colonnes d'identification pure. `ville` est INTENTIONNELLEMENT
+# gardée (pas dans cette liste) : encodée automatiquement par le one-hot plus
+# bas comme `quartier`/`type_local`, elle permet au modèle d'apprendre un
+# effet prix par ville dès qu'il y en a plus d'une dans les données (ORA-71).
+# Tant qu'une seule ville existe, `drop_first=True` supprime cette unique
+# catégorie : aucun changement de comportement avec les données actuelles.
+features_to_drop = ['id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'titre', 'date']
 X = df.drop(columns=features_to_drop, errors='ignore')
 
 # On vire les colonnes 'nb_' (Nombres) pour ne garder que les 'dist_'

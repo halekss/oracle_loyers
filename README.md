@@ -174,7 +174,7 @@ data_fusion.py ─────────────────────�
 ```
 
 1.  **`api_overpass.py`**
-    * Récupère ~1 668 lieux répartis sur 21 catégories de POI ("cavaliers") à Lyon via l'API Overpass (OpenStreetMap).
+    * Récupère ~1 668 lieux répartis sur 21 catégories de POI ("cavaliers") via l'API Overpass (OpenStreetMap), pour la ville active lue dans `scripts/scraping_config.json` (`resolve_active_city_name()` — même config que les 6 scrapers, pas de nom de ville en dur dans le code, voir ORA-71 ci-dessous).
     * *Output :* `cavaliers_lyon.csv` (brut, avec bascule sur 3 miroirs Overpass en cas d'erreur 429/504).
 
 2.  **`enrich_cavaliers_cp.py`**
@@ -203,6 +203,18 @@ data_fusion.py ─────────────────────�
     * `backend/tests/test_model_regression.py` (suite pytest, exécuté en CI) vérifie que le MAE/R² restent dans une plage acceptable sur un jeu de validation fixe (même split que l'entraînement), et que `/api/predict` ne régresse pas vers le bug historique de placeholder à 0 — remplace l'ancien script manuel `test_prediction.py`.
 
 > Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
+
+### 🌍 Généricité multi-ville (ORA-71) — état actuel
+
+Deux points du pipeline étaient en dur sur Lyon indépendamment de `scraping_config.json` : corrigés ici.
+
+* **`api_overpass.py`** lit désormais la ville active depuis `scraping_config.json` (`resolve_active_city_name()`) au lieu d'un nom en dur — la fonction interne `get_cavaliers_data(city_name=...)` était déjà paramétrable.
+* **`train_model.py`** n'exclut plus `ville` de l'entraînement : encodée en one-hot comme `quartier`/`type_local`, elle permet au modèle d'apprendre un effet prix par ville dès qu'il y en a plusieurs dans `master_immo_final.csv`. Avec une seule ville (l'état actuel), `drop_first=True` supprime cette unique catégorie : **aucun changement de comportement du modèle actuel** (vérifié : MAE/R² inchangés après ré-entraînement).
+* Vérifié avec une ville fictive de test (`backend/tests/test_api_overpass.py::ResolveActiveCityNameTest`, `backend/tests/test_model_regression.py::MultiCityFeatureGenericizationTest`) — **pas** avec une vraie deuxième ville.
+
+**Ce qui n'est pas fait** (portée volontairement exclue de ce ticket, à traiter séparément si une vraie 2ᵉ ville est ajoutée) :
+* Choisir une ville réelle et vérifier en direct les URLs des 6 scrapers pour elle (comme la revue robots.txt/CGU, mais par ville).
+* `data_fusion.py`, `clean_immo.py`, `enrich_cavaliers_cp.py`, `generate_map.py` référencent encore des noms de fichiers en dur (`cavaliers_lyon.csv`, `metro_lyon.json`, `annonces_lyon_*.csv`) plutôt que le slug lu depuis la config — une vraie 2ᵉ ville nécessiterait de généraliser aussi ces noms de fichiers.
 
 ### 🗺️ Génération de la carte
 
