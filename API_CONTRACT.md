@@ -101,25 +101,48 @@ curl -X POST http://localhost:5000/api/quartier-stats \
 
 ## `POST /api/predict`
 
-Prédiction de prix par Machine Learning (XGBoost).
+Prédiction de prix par Machine Learning (modèle XGBoost `backend/models/price_predictor.pkl`, chargé au démarrage). Construit le vecteur de 45 features attendu par le modèle à partir du payload (distances aux points d'intérêt calculées à la volée depuis `cavaliers_lyon.csv`, coordonnées/code postal déduits du quartier si absents du payload).
 
-> ⚠️ **État actuel : placeholder non fonctionnel.** La route ignore le payload d'entrée et renvoie toujours des valeurs à zéro (voir `backend/app.py`, route `predict`). Le modèle `price_predictor.pkl` est chargé au démarrage mais n'est pas encore utilisé par cette route. À ne pas considérer comme fiable côté frontend tant que ce n'est pas corrigé.
+- **Payload d'entrée** :
 
-- **Payload d'entrée (attendu à terme)** : caractéristiques du bien (surface, quartier, type de bien, etc. — non encore stabilisé).
-- **Réponse `200` (actuelle)** :
+| Champ | Type | Obligatoire | Description |
+|---|---|---|---|
+| `surface` | number | oui | Surface en m², doit être strictement positive |
+| `quartier` | string | oui | Recherche textuelle souple sur les quartiers connus (ex. `"Gerland"`) |
+| `type_local` | string | oui | Un de `"Studio/T1"`, `"T2"`, `"T3"`, `"Grand (T4+)"` (alias acceptés : `"T1"`, `"T4"`, `"T4+"`, `"T5"`, `"Maison"`, `"Studio"`) |
+| `type` | string | non | Type de bien brut : `"Appartement"` (défaut), `"Maison"` ou `"Studio"` |
+| `latitude`, `longitude` | number | non | Si absents, moyenne des annonces réelles du quartier détecté |
+| `code_postal` | number | non | Si absent, code postal le plus fréquent du quartier détecté |
 
 ```json
-{ "estimated_price": 0, "price_m2": 0, "confiance": "Non disponible" }
+{ "surface": 45, "quartier": "Gerland", "type_local": "T2" }
 ```
 
-- **Codes d'erreur** : `500` en cas d'exception, `{ "error": "..." }`.
+- **Réponse `200`** :
+
+```json
+{
+  "estimated_price": 962,
+  "price_m2": 21,
+  "confiance": "Moyenne",
+  "comparables": 14,
+  "quartier_detecte": "Gerland",
+  "type_local_detecte": "T2"
+}
+```
+
+`confiance` (`"Faible"` / `"Moyenne"` / `"Élevée"`) est dérivée du nombre réel de `comparables` (annonces du même quartier et type dans `master_immo_final.csv`) : `< 5` → Faible, `< 20` → Moyenne, `>= 20` → Élevée.
+
+- **Codes d'erreur** :
+  - `400` si le payload est invalide (`surface`/`quartier`/`type_local` manquant ou incorrect) : `{ "error": "Payload invalide", "details": ["..."] }`
+  - `500` si le modèle n'est pas chargé, si les données de référence sont indisponibles, ou en cas d'exception pendant la prédiction : `{ "error": "..." }`
 
 Exemple :
 
 ```bash
 curl -X POST http://localhost:5000/api/predict \
   -H "Content-Type: application/json" \
-  -d '{}'
+  -d '{"surface":45,"quartier":"Gerland","type_local":"T2"}'
 ```
 
 ---
