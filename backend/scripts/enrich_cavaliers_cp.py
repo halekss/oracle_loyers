@@ -1,8 +1,9 @@
 import pandas as pd
-import requests
 import os
 import io
 import time
+
+from http_retry import request_with_retry
 
 # --- CONFIGURATION ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -46,9 +47,14 @@ def enrich_and_overwrite():
 
     try:
         start_time = time.time()
-        # Timeout généreux pour le traitement batch
-        response = requests.post(API_URL, files=files, data=data, timeout=60)
-        
+        # Timeout généreux pour le traitement batch, avec retry/backoff sur erreur transitoire
+        response = request_with_retry("POST", API_URL, files=files, data=data, timeout=60)
+
+        if response is None:
+            print("❌ Échec définitif de l'appel à l'API Data Gouv après plusieurs tentatives.")
+            print("⚠️ Le fichier original n'a pas été touché.")
+            return
+
         if response.status_code == 200:
             duration = time.time() - start_time
             print(f"✅ Réponse reçue en {duration:.2f} s.")
