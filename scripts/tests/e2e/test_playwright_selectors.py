@@ -50,6 +50,33 @@ CARD_WAIT_MS = 20000
 
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
+# Répertoire d'artefacts de diagnostic (capture écran + HTML brut), peuplé
+# uniquement en cas d'échec afin de distinguer un vrai changement de site d'un
+# blocage anti-bot/cookie-wall sans avoir à reproduire le test en local (voir
+# le workflow scraper-selector-canary.yml, qui upload ce dossier en artefact
+# CI). Volontairement ignoré par git (contenu éphémère, propre à chaque run).
+DIAG_DIR = os.path.join(os.path.dirname(__file__), "diagnostics")
+
+
+def save_diagnostics(page, site_name):
+    """Capture une screenshot pleine page et un dump HTML brut de `page` sous
+    DIAG_DIR/<site_name>.{png,html}, sur la meilleure tentative (n'importe
+    quelle erreur Playwright pendant la capture est avalée : le diagnostic est
+    un bonus, il ne doit jamais masquer l'échec réel du test)."""
+    os.makedirs(DIAG_DIR, exist_ok=True)
+    safe_name = site_name.lower().replace(" ", "_")
+    try:
+        page.screenshot(path=os.path.join(DIAG_DIR, f"{safe_name}.png"), full_page=True)
+    except PlaywrightError:
+        pass
+    try:
+        html = page.content()
+    except PlaywrightError:
+        html = None
+    if html is not None:
+        with open(os.path.join(DIAG_DIR, f"{safe_name}.html"), "w", encoding="utf-8") as f:
+            f.write(html)
+
 
 def new_page(browser):
     """Contexte Playwright avec un User-Agent réaliste (cf. scraper_utils.pick_user_agent),
@@ -101,6 +128,7 @@ def assert_selector_canary(test_case, *, site_name, url, card_selectors, title_s
             cards, matched_selector = find_cards(page, card_selectors)
 
             if cards is None:
+                save_diagnostics(page, site_name)
                 test_case.fail(
                     f"SÉLECTEUR CASSÉ ({site_name}) : aucun des sélecteurs de carte "
                     f"{card_selectors} ne matche sur {url}. Refonte de site probable."
@@ -108,6 +136,7 @@ def assert_selector_canary(test_case, *, site_name, url, card_selectors, title_s
 
             count = cards.count()
             if count < MIN_ANNONCES:
+                save_diagnostics(page, site_name)
                 test_case.fail(
                     f"SÉLECTEUR CASSÉ ({site_name}) : seulement {count} annonce(s) trouvée(s) "
                     f"via '{matched_selector}' sur {url} (minimum attendu : {MIN_ANNONCES})."
@@ -117,6 +146,8 @@ def assert_selector_canary(test_case, *, site_name, url, card_selectors, title_s
             titre = find_first_locator_text(first_card, title_selectors)
             prix = find_first_locator_text(first_card, price_selectors)
 
+            if not titre or not prix:
+                save_diagnostics(page, site_name)
             if not titre:
                 test_case.fail(
                     f"SÉLECTEUR CASSÉ ({site_name}) : titre vide pour la première annonce "
@@ -178,23 +209,27 @@ class SeLogerSelectorCanaryTest(unittest.TestCase):
                 cards, _ = find_cards(page, scraper_seloger.CARD_SELECTORS)
 
                 if cards is None:
+                    save_diagnostics(page, "SeLoger")
                     self.fail(
                         f"SÉLECTEUR CASSÉ (SeLoger) : aucun des sélecteurs de carte "
                         f"{scraper_seloger.CARD_SELECTORS} ne matche. Refonte de site probable."
                     )
                 if cards.count() < MIN_ANNONCES:
+                    save_diagnostics(page, "SeLoger")
                     self.fail(f"SÉLECTEUR CASSÉ (SeLoger) : seulement {cards.count()} annonce(s) trouvée(s).")
 
                 # SeLoger encode titre/lieu/prix/infos dans l'attribut title de la carte
                 full_title = cards.first.get_attribute("title") or ""
                 parsed = scraper_seloger.parse_title_attribute(full_title)
                 if parsed is None:
+                    save_diagnostics(page, "SeLoger")
                     self.fail(
                         "SÉLECTEUR CASSÉ (SeLoger) : l'attribut title de la carte ne suit plus le "
                         f"format 'Type - Lieu - Prix - Infos' attendu (valeur reçue : {full_title!r})."
                     )
                 titre, lieu, prix, infos = parsed
                 if not titre or not prix:
+                    save_diagnostics(page, "SeLoger")
                     self.fail(f"SÉLECTEUR CASSÉ (SeLoger) : titre ou prix vide après parsing ({parsed!r}).")
             finally:
                 browser.close()

@@ -37,3 +37,7 @@ scripts/logs/
 
 # Fichiers de sauvegarde locaux (ex : docker-compose.yml.backup, voir ORA-8)
 *.backup
+
+# Diagnostics du canari Playwright (screenshots/HTML dumps sur échec, propres
+# à chaque run CI, uploadés en artefact — voir scripts/tests/e2e)
+scripts/tests/e2e/diagnostics/

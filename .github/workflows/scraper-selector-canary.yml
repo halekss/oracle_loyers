@@ -40,6 +40,19 @@ jobs:
       - name: Tests Playwright canari (sélecteurs CSS live)
         run: python -m pytest tests/e2e -v
 
+      # Screenshots + dumps HTML capturés par test_playwright_selectors.py sur
+      # chaque échec ("SÉLECTEUR CASSÉ") : permet de distinguer un vrai
+      # changement de site d'un blocage anti-bot/cookie-wall sans avoir à
+      # relancer le test (impossible à reproduire en local, cf. README).
+      - name: Uploader les diagnostics (screenshots + HTML) en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-diagnostics
+          path: scripts/tests/e2e/diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Alerter en cas d'échec (issue GitHub)
         if: failure()
         uses: actions/github-script@v7
@@ -73,6 +86,7 @@ jobs:
               "",
               "**Procédure de triage** (voir aussi le README, section « Anti-détection des scrapers ») :",
               "1. Ouvrir le log du run échoué ci-dessus et repérer le(s) message(s) `SÉLECTEUR CASSÉ (<site>)`.",
+              "   Télécharger l'artefact `canary-diagnostics` du run (screenshot + HTML de la page au moment de l'échec) pour voir concrètement ce que Playwright a chargé (cookie-wall, page de blocage anti-bot, DOM réellement différent...).",
               "2. Visiter manuellement la page de résultats du site concerné et inspecter le DOM (ou relancer ce workflow via `workflow_dispatch` pour confirmer que ce n'est pas un incident ponctuel : CAPTCHA, blocage IP, timeout réseau).",
               "3. Si le site a réellement changé de structure : mettre à jour les sélecteurs dans `scripts/scraper_<site>.py`, ainsi que la fixture correspondante dans `scripts/tests/fixtures/` (ORA-19) pour qu'elle reste représentative.",
               "4. Vérifier que `scripts/tests/test_scraper_extraction_fixtures.py` et ce canari passent de nouveau.",
