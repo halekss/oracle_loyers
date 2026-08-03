@@ -36,7 +36,7 @@ function App() {
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
 
-  const handleScan = async (quartier, typeLocal) => {
+  const handleScan = async (quartier, typeLocal, surfaceInput) => {
     setLoading(true);
     setError(null);
     setResult(null);
@@ -44,20 +44,51 @@ function App() {
     try {
       const data = await api.getQuartierStats(quartier, typeLocal);
 
-      if (data.found) {
-        setResult({
-          estimated_price: data.prix_moyen,
-          stats: { prix_m2: data.prix_m2_moyen },
-          quartier: data.quartier_detecte,
-          count: data.count,
-          type: data.type_filtre,
-        });
-        setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
-        if (data.center?.lat && data.center?.lng) {
-          setMapCenter([data.center.lat, data.center.lng, 15]);
-        }
-      } else {
+      if (!data.found) {
         setError(data.message || "Aucun résultat trouvé.");
+        return;
+      }
+
+      // Par défaut, l'estimation affichée est la moyenne réelle du secteur
+      // (/api/quartier-stats). Si une surface est renseignée et qu'un type de
+      // bien précis est sélectionné, on tente en plus la vraie prédiction ML
+      // (/api/predict) et on l'utilise comme estimation principale — avec
+      // repli silencieux sur la moyenne réelle si l'IA échoue.
+      let estimatedPrice = data.prix_moyen;
+      let priceM2 = data.prix_m2_moyen;
+      let confiance = null;
+
+      const surfaceValue = parseFloat(surfaceInput);
+      const hasValidSurface = Number.isFinite(surfaceValue) && surfaceValue > 0;
+
+      if (hasValidSurface && typeLocal !== 'Tout') {
+        try {
+          const prediction = await api.predict({
+            surface: surfaceValue,
+            quartier: data.quartier_detecte,
+            type_local: typeLocal,
+          });
+          if (typeof prediction.estimated_price === 'number') {
+            estimatedPrice = prediction.estimated_price;
+            priceM2 = prediction.price_m2;
+            confiance = prediction.confiance;
+          }
+        } catch (predictErr) {
+          console.error("Estimation IA indisponible, repli sur la moyenne réelle du secteur :", predictErr);
+        }
+      }
+
+      setResult({
+        estimated_price: estimatedPrice,
+        stats: { prix_m2: priceM2 },
+        quartier: data.quartier_detecte,
+        count: data.count,
+        type: data.type_filtre,
+        confiance,
+      });
+      setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
+      if (data.center?.lat && data.center?.lng) {
+        setMapCenter([data.center.lat, data.center.lng, 15]);
       }
     } catch (err) {
       console.error(err);
