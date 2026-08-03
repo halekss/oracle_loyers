@@ -29,3 +29,6 @@ Airflow/logs/
 
 # Logs des scrapers (résumés persistés par run, voir ORA-13)
 scripts/logs/
+
+# Fichiers de sauvegarde locaux (ex : docker-compose.yml.backup, voir ORA-8)
+*.backup
