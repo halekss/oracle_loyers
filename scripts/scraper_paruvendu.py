@@ -35,6 +35,9 @@ PROXIES = {"http": _proxy, "https": _proxy} if _proxy else None
 
 # Sélecteurs avec fallbacks ordonnés par stabilité
 CARD_SELECTORS = [
+    # Refonte observée le 2026-08-03 (canari ORA-21) : blocAnnonce est
+    # maintenant porté par un <div>, plus par un <article>.
+    ("div", {"class": "blocAnnonce"}),
     ("article", {"class": "blocAnnonce"}),
     ("article", {"class_": lambda c: c and "annonce" in c.lower()}),
     ("div", {"class": "annonce"}),
@@ -51,6 +54,9 @@ PRIX_SELECTORS = [
     ("span", {"class_": lambda c: c and "prix" in c.lower()}),
     ("div", {"class_": lambda c: c and "prix" in c.lower()}),
     ("span", {"class_": lambda c: c and "price" in c.lower()}),
+    # Refonte observée le 2026-08-03 (canari ORA-21) : le prix n'a plus de
+    # classe dédiée, seul son conteneur ("encoded-lnk") reste identifiable.
+    ("div", {"class": "encoded-lnk"}),
 ]
 
 def find_bs4(soup_elem, selectors):

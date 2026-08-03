@@ -219,10 +219,12 @@ Deux niveaux de tests protègent les 6 scrapers contre une refonte silencieuse d
 
 **Procédure de triage lors d'une alerte :**
 1. Ouvrir le log du run échoué et repérer le(s) message(s) `SÉLECTEUR CASSÉ (<site>)`.
-2. Visiter manuellement la page de résultats du site concerné, ou relancer le workflow (`workflow_dispatch`) pour écarter un incident ponctuel (CAPTCHA, blocage IP, timeout réseau).
+2. Télécharger l'artefact `canary-diagnostics` du run (screenshot + HTML de la page au moment de l'échec, capturés automatiquement par `save_diagnostics()` dans le test) : il permet de voir immédiatement si la page a chargé normalement (site réellement changé) ou si Playwright a été bloqué (CAPTCHA, cookie-wall).
 3. Si le site a réellement changé de structure : mettre à jour les sélecteurs dans `scripts/scraper_<site>.py` **et** la fixture correspondante dans `scripts/tests/fixtures/`.
 4. Vérifier que les tests ORA-19 et le canari Playwright passent de nouveau.
 5. Fermer l'issue.
+
+**Faux-positifs anti-bot connus (confirmés via `canary-diagnostics` le 2026-08-03) :** PAP est bloqué par une page de challenge Cloudflare (`<title>Just a moment...</title>`) et SeLoger par un CAPTCHA DataDome (iframe `geo.captcha-delivery.com`) dès que Playwright headless nu y accède — contrairement à `undetected_chromedriver` (scrapers de production), Playwright n'a pas de patch anti-détection. Un échec du canari sur ces deux sites précisément est donc probablement ce blocage plutôt qu'une refonte ; vérifier l'artefact avant de toucher aux sélecteurs de production. Ce même jour, Orpi, ParuVendu et Vizzit avaient en revanche réellement changé de structure (titre Orpi, tag de carte ParuVendu, classe de carte Vizzit) — sélecteurs corrigés.
 
 ### 🕵️ Anti-détection des scrapers — limites légales
 
