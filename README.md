@@ -68,11 +68,13 @@ C'est la méthode la plus simple pour lancer tout le projet (Front + Back + Base
 * **Docker Desktop** installé et lancé.
 * Une clé **Google AI Studio** pour le chatbot (`GEMINI_API_KEY`).
 
-### 1. Configuration de l'IA (Gemini)
-Copiez [`.env.example`](./.env.example) en `.env` à la racine et renseignez au minimum `GEMINI_API_KEY` (les autres variables ont des valeurs par défaut raisonnables).
+### 1. Configuration de l'IA (Gemini) et d'Airflow
+Copiez [`.env.example`](./.env.example) en `.env` à la racine et renseignez au minimum `GEMINI_API_KEY` (les autres variables Gemini ont des valeurs par défaut raisonnables). Les variables Airflow (`AIRFLOW__WEBSERVER__SECRET_KEY`, `AIRFLOW_ADMIN_USERNAME`, `AIRFLOW_ADMIN_PASSWORD`) sont, elles, obligatoires : `docker-compose up` refuse de démarrer si l'une d'elles est absente (plus de secret/admin par défaut committé).
 
 ```bash
 cp .env.example .env
+# puis éditez .env : GEMINI_API_KEY, AIRFLOW__WEBSERVER__SECRET_KEY (ex. via `openssl rand -hex 30`),
+# AIRFLOW_ADMIN_USERNAME et AIRFLOW_ADMIN_PASSWORD
 ```
 
 ### 2. Lancement de l'application
