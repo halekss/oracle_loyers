@@ -132,8 +132,8 @@ Route du chatbot "Immotep" : combine une réponse "groundée" sur les données r
 
 | Champ | Type | Obligatoire | Description |
 |---|---|---|---|
-| `message` | string | oui | Message utilisateur |
-| `context` | string | non | Contexte texte libre (ex. `"Quartier: Gerland, Type: T2, Prix Moyen: 780€"`) fourni par le frontend après un scan de quartier |
+| `message` | string | oui | Message utilisateur (tronqué côté serveur à 2000 caractères avant interpolation dans le prompt Gemini) |
+| `context` | string | non | Contexte texte libre (ex. `"Quartier: Gerland, Type: T2, Prix Moyen: 780€"`) fourni par le frontend après un scan de quartier (tronqué à 2000 caractères) |
 
 ```json
 { "message": "Que vaut un T2 à Gerland ?", "context": "Quartier: Gerland, Type: T2" }
