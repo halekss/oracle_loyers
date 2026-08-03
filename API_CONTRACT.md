@@ -138,6 +138,49 @@ curl -X POST http://localhost:5000/api/quartier-stats \
 
 ---
 
+## `POST /api/quartier-historique`
+
+Évolution du prix moyen/m² pour un quartier à travers les snapshots de données enregistrés (ORA-72, voir README section "Versioning des snapshots de données"). Même recherche textuelle insensible à la casse que `/api/quartier-stats`.
+
+- **Payload d'entrée** : identique à `/api/quartier-stats` (`quartier` obligatoire, `type_local` optionnel, défaut `"Tout"`).
+
+- **Réponse `200`** (assez d'historique) :
+
+```json
+{
+  "found": true,
+  "status": "ok",
+  "quartier": "Gerland",
+  "historique": [
+    { "date": "2026-01-01T00:00:00+00:00", "prix_m2_moyen": 20, "count": 42 },
+    { "date": "2026-01-08T00:00:00+00:00", "prix_m2_moyen": 21, "count": 45 }
+  ]
+}
+```
+
+- **Réponse `200`** (pas assez d'historique — un seul snapshot enregistré à ce jour, état actuel du projet) :
+
+```json
+{
+  "found": true,
+  "status": "insufficient_history",
+  "message": "Pas encore assez d'historique de données pour observer une tendance (un seul snapshot enregistré à ce jour).",
+  "historique": []
+}
+```
+
+- **Codes d'erreur** : `400` si `quartier` est vide, comme `/api/quartier-stats`.
+
+Exemple :
+
+```bash
+curl -X POST http://localhost:5000/api/quartier-historique \
+  -H "Content-Type: application/json" \
+  -d '{"quartier":"Gerland","type_local":"T2"}'
+```
+
+---
+
 ## `POST /api/predict`
 
 Prédiction de prix par Machine Learning (modèle XGBoost `backend/models/price_predictor.pkl`, chargé au démarrage). Construit le vecteur de 45 features attendu par le modèle à partir du payload (distances aux points d'intérêt calculées à la volée depuis `cavaliers_lyon.csv`, coordonnées/code postal déduits du quartier si absents du payload).

@@ -29,7 +29,7 @@ Le projet repose sur une architecture moderne conteneurisée :
 
 ## 📄 Contrat API
 
-Les 4 routes exposées par `backend/app.py` (`/api/listings`, `/api/quartier-stats`, `/api/predict`, `/api/chat`) sont documentées de manière formelle (payloads, réponses, codes d'erreur, exemples) dans [`API_CONTRACT.md`](./API_CONTRACT.md), qui fait référence en cas de divergence avec le code.
+Les 5 routes exposées par `backend/app.py` (`/api/listings`, `/api/quartier-stats`, `/api/quartier-historique`, `/api/predict`, `/api/chat`) sont documentées de manière formelle (payloads, réponses, codes d'erreur, exemples) dans [`API_CONTRACT.md`](./API_CONTRACT.md), qui fait référence en cas de divergence avec le code.
 
 Une documentation interactive Swagger/OpenAPI (générée via [Flasgger](https://github.com/flasgger/flasgger)) est aussi disponible une fois le backend lancé, sur [http://localhost:5000/apidocs/](http://localhost:5000/apidocs/) (spec JSON brute sur `/apispec.json`).
 
@@ -284,6 +284,8 @@ Chaque exécution de `train_model.py` archive un instantané de `master_immo_fin
 * **`backend/data/snapshots/master_immo_final_<sha256>.csv`** — une copie content-addressée du jeu de données (un re-run sur des données identiques ne duplique pas le fichier, seul le hash change si les données changent). Ces fichiers sont versionnés dans git au même titre que le reste de `backend/data/`.
 * **`backend/data/snapshots/manifest.csv`** — historique de chaque snapshot (timestamp, sha256, fichier, nombre de lignes).
 * **`backend/models/price_predictor.pkl.meta.json`** — référence explicitement, pour le modèle entraîné, le `data_snapshot_sha256`/`data_snapshot_file` utilisé ainsi que les métriques (MAE, R²). Versionné dans git comme le `.pkl` qu'il décrit (ORA-29).
+
+`manifest.csv` alimente aussi `/api/quartier-historique` (ORA-72, `backend/services/price_history.py`) : évolution du prix moyen/m² par quartier à travers les snapshots disponibles, affichée dans l'UI (`PriceHistory.jsx`) sous le résultat d'une recherche. Avec un seul snapshot enregistré (état actuel du projet), l'API renvoie `status: "insufficient_history"` plutôt qu'une tendance fictive à un seul point — le tableau se peuplera naturellement au fil des prochains entraînements.
 
 **Reproduire un ancien modèle à partir de son snapshot :**
 1. Récupérer le `data_snapshot_sha256` voulu (depuis un `price_predictor.pkl.meta.json` conservé, ou depuis `backend/data/snapshots/manifest.csv`).

@@ -93,6 +93,23 @@ export const api = {
     }
   },
 
+  // Historique du prix moyen/m² par quartier — /api/quartier-historique
+  getQuartierHistorique: async (quartierName, typeLocal = 'Tout') => {
+    try {
+      const response = await fetchWithClassification(`${API_URL}/quartier-historique`, {
+        ...apiFetchOptions({
+          quartier: quartierName,
+          type_local: typeLocal
+        }),
+      });
+
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Erreur Historique:", error);
+      throw error;
+    }
+  },
+
   // Prédiction ML (XGBoost) — /api/predict
   predict: async ({ surface, quartier, type_local, type = undefined }) => {
     try {

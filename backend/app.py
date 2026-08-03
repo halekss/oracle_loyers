@@ -10,6 +10,7 @@ from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
 from services.cavaliers_factors import summarize_cavaliers
+from services.price_history import compute_price_history
 from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
 
@@ -134,6 +135,8 @@ DATA_PATH = os.path.join(BASE_DIR, 'data', 'master_immo_final.csv')
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'price_predictor.pkl')
 MODEL_META_PATH = f"{MODEL_PATH}.meta.json"
 CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_lyon.csv')
+SNAPSHOTS_DIR = os.path.join(BASE_DIR, 'data', 'snapshots')
+SNAPSHOTS_MANIFEST_PATH = os.path.join(SNAPSHOTS_DIR, 'manifest.csv')
 
 # Chargement des services
 print("Chargement des données...")
@@ -341,6 +344,72 @@ def get_quartier_stats():
     except Exception as e:
         print(f"Erreur Stats Quartier: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/quartier-historique', methods=['POST'])
+def get_quartier_historique():
+    """
+    Évolution du prix moyen/m² pour un quartier à travers les snapshots de
+    données enregistrés (ORA-72). Avec un seul snapshot (pas assez de recul
+    pour une tendance), renvoie status="insufficient_history" plutôt qu'un
+    historique trompeur à un seul point.
+    ---
+    tags:
+      - Quartier
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - quartier
+          properties:
+            quartier:
+              type: string
+              example: Gerland
+            type_local:
+              type: string
+              example: T2
+              default: Tout
+    responses:
+      200:
+        description: >
+          historique (liste chronologique de {date, prix_m2_moyen, count})
+          et status ("ok" ou "insufficient_history").
+      400:
+        description: Le nom du quartier est manquant ou vide
+    """
+    try:
+        raw_payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Payload JSON invalide"}), 400
+
+    try:
+        payload = QuartierStatsRequestSchema(**raw_payload)
+    except (ValidationError, TypeError):
+        return jsonify({"error": "Le nom du quartier est vide"}), 400
+
+    quartier_input = payload.quartier.strip()
+    type_filter = payload.type_local
+
+    historique, status = compute_price_history(
+        quartier_input, type_filter, SNAPSHOTS_DIR, SNAPSHOTS_MANIFEST_PATH
+    )
+
+    if status == "insufficient_history":
+        return jsonify({
+            "found": True,
+            "status": "insufficient_history",
+            "message": "Pas encore assez d'historique de données pour observer une tendance (un seul snapshot enregistré à ce jour).",
+            "historique": [],
+        })
+
+    return jsonify({
+        "found": True,
+        "status": "ok",
+        "quartier": quartier_input,
+        "historique": historique,
+    })
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
