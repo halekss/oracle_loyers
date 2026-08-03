@@ -82,7 +82,6 @@ export default function MapComponent({ center }) {
   };
 
   const handleIframeLoad = () => {
-    console.log("🗺️ Carte chargée...");
     Object.keys(layers).forEach(key => sendLayerCommand(key, layers[key]));
   };
 
