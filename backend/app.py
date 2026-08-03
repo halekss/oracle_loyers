@@ -3,6 +3,8 @@ import json
 import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
@@ -48,6 +50,29 @@ def get_server_port():
 cors_origins = get_cors_origins()
 print(f"🔒 Politique CORS effective : {cors_origins}")
 CORS(app, origins=cors_origins)  # Autorise les requêtes du Frontend React
+
+
+def get_default_rate_limits():
+    """
+    Limites par défaut appliquées à toutes les routes, configurables via
+    RATE_LIMIT_DEFAULT (format Flask-Limiter, plusieurs limites séparées
+    par des virgules, ex : "200 per day,50 per hour").
+    """
+    raw = os.environ.get('RATE_LIMIT_DEFAULT', '200 per day,50 per hour')
+    return [part.strip() for part in raw.split(',') if part.strip()]
+
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=get_default_rate_limits(),
+    storage_uri="memory://",
+)
+
+
+@app.errorhandler(429)
+def handle_rate_limit_exceeded(error):
+    return jsonify({"error": "Trop de requêtes. Réessayez dans quelques instants."}), 429
 
 
 def get_request_json():
