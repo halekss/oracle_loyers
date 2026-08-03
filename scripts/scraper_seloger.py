@@ -6,6 +6,7 @@ import time
 import random
 import re
 import os
+import sys
 
 from csv_atomic_writer import atomic_csv_writer
 
@@ -137,5 +138,10 @@ if __name__ == '__main__':
             else:
                 page_num += 1
 
-    print(f"\n✨ Scraping SeLoger terminé ! Fichier : {OUTPUT_PATH}")
     driver.quit()
+
+    if len(liens_vus) == 0:
+        print(f"❌ ERREUR : 0 annonce trouvée pour SeLoger. Le site a peut-être changé de structure.")
+        sys.exit(1)
+
+    print(f"\n✨ Scraping SeLoger terminé ! {len(liens_vus)} annonces collectées dans : {OUTPUT_PATH}")
