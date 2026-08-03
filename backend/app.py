@@ -70,6 +70,15 @@ limiter = Limiter(
 )
 
 
+def get_chat_rate_limit():
+    """
+    Limite dédiée à /api/chat, plus stricte que le défaut global : protège
+    le quota gratuit Gemini contre un unique utilisateur/bot qui l'épuiserait
+    pour tout le monde. Configurable via RATE_LIMIT_CHAT.
+    """
+    return os.environ.get('RATE_LIMIT_CHAT', '15 per hour')
+
+
 @app.errorhandler(429)
 def handle_rate_limit_exceeded(error):
     return jsonify({"error": "Trop de requêtes. Réessayez dans quelques instants."}), 429
@@ -257,6 +266,7 @@ def predict():
     })
 
 @app.route('/api/chat', methods=['POST'])
+@limiter.limit(get_chat_rate_limit)
 def chat():
     """Route pour le Chatbot Immotep"""
     try:

@@ -23,8 +23,35 @@ class RateLimitConfigTest(unittest.TestCase):
         limits = app_module.get_default_rate_limits()
         self.assertGreaterEqual(len(limits), 1)
 
+    def test_get_chat_rate_limit_reads_env_var(self):
+        os.environ["RATE_LIMIT_CHAT"] = "5 per hour"
+        try:
+            self.assertEqual(app_module.get_chat_rate_limit(), "5 per hour")
+        finally:
+            del os.environ["RATE_LIMIT_CHAT"]
+
+    def test_get_chat_rate_limit_has_a_sensible_default(self):
+        os.environ.pop("RATE_LIMIT_CHAT", None)
+        self.assertTrue(app_module.get_chat_rate_limit())
+
 
 class RateLimitBehaviorTest(unittest.TestCase):
+    def test_chat_route_enforces_its_own_stricter_limit(self):
+        # Utilise la vraie route /api/chat de l'app avec une limite très
+        # basse (surchargée le temps du test) pour vérifier que le
+        # décorateur @limiter.limit(get_chat_rate_limit) est bien appliqué,
+        # indépendamment de la limite globale par défaut.
+        os.environ["RATE_LIMIT_CHAT"] = "2 per hour"
+        try:
+            client = app_module.app.test_client()
+            payload = {"message": "Quel prix à Gerland ?"}
+
+            statuses = [client.post("/api/chat", json=payload).status_code for _ in range(3)]
+
+            self.assertIn(429, statuses)
+        finally:
+            del os.environ["RATE_LIMIT_CHAT"]
+
     def test_exceeding_the_configured_limit_returns_429_with_json_error(self):
         # Reproduit le même montage (Limiter + errorhandler 429) que app.py,
         # sur une mini-app isolée avec une limite volontairement basse, pour

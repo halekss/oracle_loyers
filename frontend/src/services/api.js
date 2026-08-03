@@ -8,12 +8,15 @@ export class ApiError extends Error {
   constructor(message, { type = "unknown", status = null } = {}) {
     super(message);
     this.name = "ApiError";
-    this.type = type; // "network" | "client" | "server" | "unknown"
+    this.type = type; // "network" | "rate_limit" | "client" | "server" | "unknown"
     this.status = status;
   }
 }
 
 const classifyResponseError = (response) => {
+  if (response.status === 429) {
+    return new ApiError("Trop de requêtes (429)", { type: "rate_limit", status: response.status });
+  }
   if (response.status >= 500) {
     return new ApiError(`Erreur serveur (${response.status})`, { type: "server", status: response.status });
   }
@@ -59,6 +62,8 @@ export const describeApiError = (error) => {
     switch (error.type) {
       case "network":
         return "Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.";
+      case "rate_limit":
+        return "Trop de requêtes envoyées. Patientez un instant avant de réessayer.";
       case "client":
         return "La requête envoyée est invalide.";
       case "server":
