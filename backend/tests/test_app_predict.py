@@ -60,6 +60,18 @@ class PredictRouteTest(unittest.TestCase):
         data = response.get_json()
         self.assertTrue(any("quartier" in detail for detail in data["details"]))
 
+    def test_predict_route_rejects_malformed_field_shape_with_400(self):
+        client = app.app.test_client()
+
+        response = client.post(
+            "/api/predict",
+            json={"surface": 45, "quartier": ["Gerland"], "type_local": "T2"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertEqual(data["error"], "Payload invalide")
+
     def test_predict_route_returns_500_when_model_is_absent(self):
         client = app.app.test_client()
 
