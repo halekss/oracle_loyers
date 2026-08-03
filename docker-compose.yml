@@ -15,6 +15,14 @@ services:
       - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE:-0.7}
     command: python app.py
     restart: unless-stopped
+    healthcheck:
+      # urllib (stdlib) plutôt que curl/requests : évite d'installer un
+      # paquet supplémentaire juste pour le healthcheck.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - oracle-network
 
@@ -34,6 +42,15 @@ services:
       - backend
     command: ["npm", "run", "dev", "--", "--host"]
     restart: unless-stopped
+    healthcheck:
+      # target: dev sert le serveur de dev Vite (hot-reload) ici, pas le
+      # build statique nginx (utilisé par le stage "production", voir
+      # frontend/Dockerfile) : on vérifie donc que ce serveur répond.
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5173/', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - oracle-network
 

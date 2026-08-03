@@ -24,4 +24,7 @@ RUN npm run build
 FROM nginx:1.27-alpine AS production
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
+# wget (busybox) est présent par défaut dans nginx:alpine, pas besoin d'installer curl.
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 --start-period=10s \
+  CMD wget --quiet --spider http://localhost/ || exit 1
 CMD ["nginx", "-g", "daemon off;"]
