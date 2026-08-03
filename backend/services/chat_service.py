@@ -1,6 +1,9 @@
+import logging
 import os
 import re
 import unicodedata
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -771,6 +774,7 @@ Pour une comparaison, cite les moyennes calculées et le nombre d'annonces avant
                 "map_focus": map_focus,
             }
         except TimeoutError:
+            logger.warning("[LLM_UNAVAILABLE] Timeout du provider Gemini sur /api/chat.")
             return {
                 "response": (
                     "Le service IA met trop de temps à répondre. "
@@ -797,7 +801,14 @@ Pour une comparaison, cite les moyennes calculées et le nombre d'annonces avant
                     "map_focus": map_focus,
                 }
 
-            print(f"Erreur provider Gemini: {type(exc).__name__} - {exc}")
+            # Erreur critique : le provider LLM (Gemini) est indisponible pour
+            # une raison autre que le timeout/quota déjà gérés ci-dessus.
+            # logger.critical + tag distinctif pour que Sentry (si configuré
+            # via SENTRY_DSN) remonte une alerte dédiée sur le dashboard.
+            logger.critical(
+                "[LLM_UNAVAILABLE] Erreur provider Gemini sur /api/chat : %s - %s",
+                type(exc).__name__, exc, exc_info=True,
+            )
             return {
                 "response": (
                     "Le service IA est indisponible pour le moment. "
