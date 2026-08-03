@@ -10,7 +10,10 @@ venv/
 .env
 
 # Modèles IA (dans le backend)
-backend/models/*.pkl
+# price_predictor.pkl est volontairement versionné (voir ORA-29) : le
+# pipeline d'entraînement est déterministe, comme master_immo_final.csv
+# qui est lui aussi commité. Seuls d'éventuels artefacts non retenus
+# restent exclus.
 backend/models/*.joblib
 
 # Node / React (Frontend)
