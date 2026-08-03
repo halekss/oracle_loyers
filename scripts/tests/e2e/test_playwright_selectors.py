@@ -26,6 +26,7 @@ import os
 import sys
 import unittest
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -36,9 +37,41 @@ import scraper_pap
 import scraper_paruvendu
 import scraper_seloger
 import scraper_vizzit
+from scraper_utils import pick_user_agent
 
 MIN_ANNONCES = 3
 NAV_TIMEOUT_MS = 30000
+# Délai laissé à CHAQUE sélecteur candidat pour apparaître : ces sites sont en
+# grande partie rendus côté client (React/Next.js), le contenu n'existe pas
+# encore au moment de "domcontentloaded". Nettement plus court que les 60-120s
+# tolérés par les scrapers de production (qui gèrent aussi cookies/CAPTCHA),
+# suffisant pour un simple canari de présence de sélecteur.
+CARD_WAIT_MS = 20000
+
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+
+def new_page(browser):
+    """Contexte Playwright avec un User-Agent réaliste (cf. scraper_utils.pick_user_agent),
+    pour limiter le risque de faux-positif "SÉLECTEUR CASSÉ" causé par un blocage anti-bot
+    basique plutôt qu'un vrai changement de structure."""
+    context = browser.new_context(user_agent=pick_user_agent() or DEFAULT_USER_AGENT)
+    return context.new_page()
+
+
+def find_cards(page, card_selectors, wait_ms=CARD_WAIT_MS):
+    """Essaie chaque sélecteur de `card_selectors` dans l'ordre, en lui laissant
+    `wait_ms` pour apparaître dans le DOM avant de passer au suivant. Renvoie
+    (locator, sélecteur_matché) ou (None, None) si aucun n'apparaît à temps."""
+    for sel in card_selectors:
+        try:
+            page.wait_for_selector(sel, timeout=wait_ms, state="attached")
+        except PlaywrightError:
+            continue
+        locator = page.locator(sel)
+        if locator.count() > 0:
+            return locator, sel
+    return None, None
 
 
 def find_first_locator_text(card, selectors, default=""):
@@ -62,18 +95,10 @@ def assert_selector_canary(test_case, *, site_name, url, card_selectors, title_s
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
-            page = browser.new_page()
+            page = new_page(browser)
             page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until="domcontentloaded")
 
-            cards = None
-            matched_selector = None
-            for sel in card_selectors:
-                locator = page.locator(sel)
-                count = locator.count()
-                if count > 0:
-                    cards = locator
-                    matched_selector = sel
-                    break
+            cards, matched_selector = find_cards(page, card_selectors)
 
             if cards is None:
                 test_case.fail(
@@ -147,15 +172,10 @@ class SeLogerSelectorCanaryTest(unittest.TestCase):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             try:
-                page = browser.new_page()
+                page = new_page(browser)
                 page.goto(scraper_seloger.base_url, timeout=NAV_TIMEOUT_MS, wait_until="domcontentloaded")
 
-                cards = None
-                for sel in scraper_seloger.CARD_SELECTORS:
-                    locator = page.locator(sel)
-                    if locator.count() > 0:
-                        cards = locator
-                        break
+                cards, _ = find_cards(page, scraper_seloger.CARD_SELECTORS)
 
                 if cards is None:
                     self.fail(
