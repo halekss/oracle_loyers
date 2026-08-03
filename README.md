@@ -154,7 +154,7 @@ Le frontend lit l'URL de l'API via Vite (`VITE_API_URL`, voir [`.env.example`](.
 
 ### 🚚 Déploiement continu (CD, ORA-64)
 
-Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render (via son [Deploy Hook](https://render.com/docs/deploy-hooks)) uniquement quand **tous** les jobs de CI (`backend`, `scrapers`, `frontend`, `e2e`) ont réussi sur un push vers `main` — `needs: [...]` + `if: success() && ...` : un échec de test bloque bien le déploiement (le job `deploy` est alors sauté, pas juste marqué en échec).
+Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render (via son [Deploy Hook](https://render.com/docs/deploy-hooks)) uniquement quand **tous** les jobs de CI (`backend`, `scrapers`, `frontend`, `e2e`, `dependency-scan`) ont réussi sur un push vers `main` — `needs: [...]` + `if: success() && ...` : un échec de test (ou une vulnérabilité détectée par `dependency-scan`) bloque bien le déploiement (le job `deploy` est alors sauté, pas juste marqué en échec).
 
 **Configuration requise (à faire une seule fois, côté Render puis GitHub) :**
 1. Dans le dashboard Render, pour chaque service (backend, frontend) : *Settings → Deploy Hook* → copier l'URL générée.
@@ -162,6 +162,22 @@ Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render 
 3. **Désactiver l'auto-deploy natif de Render** sur ces deux services (*Settings → Auto-Deploy → No*) — sinon Render redéploierait à chaque push, y compris si la CI échoue, en plus du déploiement déclenché par ce workflow.
 
 **Rollback :** chaque déploiement Render reste visible dans l'historique du service (*Dashboard → Deploys*). En cas de déploiement problématique, cliquer sur un déploiement antérieur réussi puis *Rollback to this deploy* revient immédiatement dessus (pas besoin de revert Git ni de relancer la CI).
+
+### 🔎 Scan de vulnérabilités des dépendances (ORA-65)
+
+Le job `dependency-scan` de `.github/workflows/ci.yml` s'exécute sur chaque push/PR et vérifie les dépendances connues pour des vulnérabilités publiées (CVE/PYSEC via l'API [OSV](https://osv.dev/)) :
+
+- **`pip-audit -r requirements.txt`** (working-directory `backend`) sur `backend/requirements.txt`. `pip-audit` n'a pas de filtre de sévérité natif : **toute** vulnérabilité connue fait échouer l'étape, quelle que soit sa gravité.
+- **`npm audit --audit-level=critical`** (working-directory `frontend`, après `npm ci`) sur `frontend/package.json`. Seule une vulnérabilité de sévérité **critical** fait échouer le job ; les vulnérabilités low/moderate/high restent visibles dans les logs (le rapport `npm audit` est toujours affiché) mais ne bloquent pas la CI.
+
+**Comment traiter une alerte :**
+1. Regarder si un correctif existe : `pip-audit` liste la colonne `Fix Versions` ; `npm audit fix` corrige automatiquement ce qui peut l'être sans breaking change.
+2. Si un correctif casse d'autres dépendances, ou si la vulnérabilité ne s'applique pas réellement à notre usage (faux positif applicatif), l'ignorer **explicitement** plutôt que de laisser la CI rouge en permanence ou de désactiver le job :
+   - Python : ajouter `--ignore-vuln PYSEC-XXXX-XXXX` à la commande `pip-audit` dans `ci.yml`, avec un commentaire juste au-dessus expliquant pourquoi.
+   - JS : `npm audit` ne propose pas d'exclusion par ID directement dans la CLI stable ; documenter le cas ici et suivre le correctif upstream, ou geler `--audit-level` si le risque est jugé acceptable temporairement (à documenter également).
+3. Ne jamais supprimer ou commenter l'étape de scan pour faire passer la CI — l'objectif du job est justement d'empêcher qu'une dépendance vulnérable connue parte en prod silencieusement.
+
+**État au 2026-08-03 :** `pip-audit` sur `backend/requirements.txt` ne remonte aucune vulnérabilité connue. `npm audit` sur `frontend/package.json` remonte 9 vulnérabilités (1 low, 2 moderate, 6 high, 0 critical) sur des dépendances de outillage transitives (`postcss`, `js-yaml`, `minimatch`, `picomatch`, `brace-expansion`, `flatted`, `ajv`, `@babel/core`, `yaml`) — aucune n'est critique, le seuil `--audit-level=critical` n'échoue donc pas la CI ; elles restent visibles dans les logs pour correction ultérieure (`npm audit fix`).
 
 ---
 
