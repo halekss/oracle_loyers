@@ -269,7 +269,7 @@ oracle-des-loyers/
 │   ├── requirements.txt
 │   ├── app.py                 # Point d'entrée serveur actif (Routes API Flask)
 │   │
-│   ├── data/                  # LE COFFRE-FORT (CSV bruts, fusionnés, master, conversations.db)
+│   ├── data/                  # LE COFFRE-FORT (CSV bruts, fusionnés, master, snapshots)
 │   ├── models/                # Cerveaux entraînés (price_predictor.pkl, versionné en git)
 │   │
 │   ├── scripts/               # L'USINE À DONNÉES — source de vérité (voir section ETL) ;
@@ -298,4 +298,4 @@ oracle-des-loyers/
             └── api.js         # Pont vers le backend
 ```
 
-> **Dette technique connue** (trackée dans le backlog Linear) : `backend/main.py` (FastAPI) et les modules `smart_agent.py`/`prompt_system.py`/`conversation_manager.py` sont du code hérité, non branchés sur `app.py` — à ne pas prendre comme référence d'architecture active. `backend/src/api/` et `backend/src/ml_engine/` sont des dossiers vides.
+> **ORA-36** : les modules `smart_agent.py`/`prompt_system.py`/`conversation_manager.py` (ancienne architecture de chatbot "Oracle de Lyon", jamais branchée sur `app.py`) ont été supprimés, ainsi que `backend/data/conversations.db` qu'ils écrivaient — voir [`PRIVACY.md`](./PRIVACY.md) pour la politique de rétention des données de conversation.
