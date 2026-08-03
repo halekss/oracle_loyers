@@ -284,6 +284,17 @@ Le mécanisme ci-dessus reproduit un ancien modèle en **ré-entraînant** sur s
 * **`GET /api/health`** — expose `model_version`, `trained_at` et `metrics` (MAE/R²) du modèle actuellement chargé par le backend.
 * **`python backend/scripts/rollback_model.py <model_version>`** — restaure instantanément cette version comme modèle actif (`price_predictor.pkl`) et met à jour `.meta.json`, **sans ré-entraîner**.
 
+### 📈 Monitoring de dérive (drift) des prédictions (ORA-33)
+
+`backend/scripts/monitor_drift.py` compare la distribution des features numériques du modèle (mêmes colonnes que `train_model.py`) et de la cible `prix` — utilisée en proxy de dérive des prédictions, faute de journal de prédictions live — entre les données actuelles (`master_immo_final.csv`) et un snapshot de référence **glissant** tiré de `backend/data/snapshots/manifest.csv` (celui d'il y a 7 runs de retraining, pas le tout premier snapshot du projet : sinon, le marché évoluant naturellement sur plusieurs mois, la comparaison finirait par toujours signaler une dérive de façon permanente et non actionnable).
+
+La comparaison utilise un test de Kolmogorov-Smirnov à deux échantillons par feature ; une dérive est signalée sur la taille d'effet (statistique D > 0.15), pas uniquement la p-value (qui devient quasi toujours significative sur de gros volumes même pour un écart négligeable).
+
+* **`backend/data/drift_reports/drift_report_latest.json`** — dernier état (dérive détectée ou non, détail par feature). Versionné dans git.
+* **`backend/data/drift_reports/drift_history.jsonl`** — historique append-only de chaque exécution, pour visualiser la tendance dans le temps.
+* **`.github/workflows/model-drift-monitor.yml`** — exécute le contrôle chaque lundi à 3h UTC (et sur `workflow_dispatch`), commite le rapport mis à jour, et ouvre/commente une issue GitHub `model-drift-alert` en cas de dérive détectée (même mécanisme de dédoublonnage que le canari scrapers).
+* Avec un seul snapshot enregistré (état initial du projet), le rapport indique explicitement `"status": "insufficient_history"` plutôt que de prétendre à tort qu'il n'y a pas de dérive.
+
 ---
 
 ## 🗂️ Arborescence du Projet

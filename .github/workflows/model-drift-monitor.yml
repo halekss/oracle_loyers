@@ -1,0 +1,98 @@
+name: Model Drift Monitor
+
+# ORA-33 : compare périodiquement la distribution des features/cible du jeu de
+# données courant (backend/data/master_immo_final.csv, rafraîchi par le DAG
+# Airflow) à un snapshot de référence glissant (backend/data/snapshots/), pour
+# détecter une dérive du marché/des données sans attendre une dégradation
+# visible du modèle en production.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  drift-monitor:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Comparer les données actuelles au snapshot de référence
+        id: drift
+        run: python scripts/monitor_drift.py
+
+      - name: Committer le rapport de dérive mis à jour
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/drift_reports/
+          git diff --staged --quiet || git commit -m "chore(drift): mise à jour du rapport de dérive [skip ci]"
+          git push
+
+      - name: Alerter en cas de dérive détectée (issue GitHub)
+        if: failure() && steps.drift.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const label = "model-drift-alert";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const report = JSON.parse(fs.readFileSync('backend/data/drift_reports/drift_report_latest.json', 'utf8'));
+            const driftedFeatures = report.features.filter(f => f.drifted).map(f => f.feature);
+            if (report.target_drift && report.target_drift.drifted) {
+              driftedFeatures.push(report.target_drift.feature);
+            }
+
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: label,
+            });
+
+            const body = [
+              `Dérive de données détectée : ${runUrl}`,
+              "",
+              `Référence : \`${report.reference_snapshot}\` (${report.reference_snapshot_timestamp}, ${report.reference_row_count} lignes) vs données actuelles (${report.current_row_count} lignes).`,
+              `Features en dérive (statistique KS > ${report.ks_drift_threshold}) : ${driftedFeatures.join(', ')}`,
+              "",
+              "**Procédure de triage :**",
+              "1. Télécharger/consulter `backend/data/drift_reports/drift_report_latest.json` (commité automatiquement par ce workflow) pour le détail par feature.",
+              "2. Déterminer si la dérive reflète un vrai changement de marché (légitime) ou un problème en amont (bug scraper, refonte de site non détectée par le canari, erreur de nettoyage `clean_immo.py`).",
+              "3. Si légitime : envisager un réentraînement si ce n'est pas déjà automatique, ou documenter comme non actionnable.",
+              "4. Si anormal : corriger la source, pas seulement réentraîner sur des données corrompues.",
+              "5. Fermer cette issue une fois la cause identifiée (dérive acceptée ou corrigée).",
+            ].join("\n");
+
+            if (openIssues.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: openIssues[0].number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: "📊 Dérive de données détectée sur le modèle de prédiction",
+                body,
+                labels: [label],
+              });
+            }
