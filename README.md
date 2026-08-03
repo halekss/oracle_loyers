@@ -33,14 +33,7 @@ Le chatbot ("Immotep") utilise **Google AI / Gemini** via `backend/services/chat
 
 Le backend actif garde la clé API uniquement côté serveur via `GEMINI_API_KEY`. Le modèle par défaut est `gemini-2.5-flash`, avec des réponses courtes et un contexte RAG borné pour limiter les coûts et les délais.
 
-Variables disponibles:
-
-```bash
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-2.5-flash
-GEMINI_MAX_OUTPUT_TOKENS=800
-GEMINI_TEMPERATURE=0.7
-```
+Toutes les variables liées à Gemini (`GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_MAX_OUTPUT_TOKENS`, `GEMINI_TEMPERATURE`) sont documentées dans [`.env.example`](./.env.example), qui fait référence pour l'ensemble des variables d'environnement du projet.
 
 Limites à garder en tête: les quotas Google AI peuvent évoluer, le débit n'est pas garanti, et une clé API ne doit jamais être exposée dans le frontend. Une interaction courte avec contexte compact vaut souvent environ `1 000 à 3 000 tokens`, ce qui est largement suffisant pour une démo portfolio avec trafic modéré. Le risque principal est surtout un pic de visiteurs simultanés, pas une simple démonstration occasionnelle.
 
@@ -70,11 +63,10 @@ C'est la méthode la plus simple pour lancer tout le projet (Front + Back + Base
 * Une clé **Google AI Studio** pour le chatbot (`GEMINI_API_KEY`).
 
 ### 1. Configuration de l'IA (Gemini)
-Pour qu'Immotep, le chatbot de l'Oracle, puisse parler en déploiement portfolio, configurez Gemini côté backend.
+Copiez [`.env.example`](./.env.example) en `.env` à la racine et renseignez au minimum `GEMINI_API_KEY` (les autres variables ont des valeurs par défaut raisonnables).
 
 ```bash
-export GEMINI_API_KEY="votre-cle-google-ai"
-export GEMINI_MODEL="gemini-2.5-flash"
+cp .env.example .env
 ```
 
 ### 2. Lancement de l'application
@@ -135,25 +127,11 @@ npm run dev
 
 Le backend Flask lit le port depuis l'environnement, ce qui permet à Render de fournir `PORT` automatiquement.
 
-Variables utiles :
-
-```bash
-GEMINI_API_KEY="votre-cle-google-ai"
-GEMINI_MODEL="gemini-2.5-flash"
-CORS_ORIGINS="https://oracle-loyers.onrender.com"
-```
-
-`CORS_ORIGINS` est optionnel. S'il n'est pas défini, le backend garde un CORS ouvert pour éviter de bloquer une démo.
+Les variables utiles (`GEMINI_API_KEY`, `GEMINI_MODEL`, `CORS_ORIGINS`, etc.) sont listées dans [`.env.example`](./.env.example). `CORS_ORIGINS` est optionnel : s'il n'est pas défini, le backend garde un CORS ouvert pour éviter de bloquer une démo.
 
 ### Frontend
 
-Le frontend lit l'URL de l'API via Vite :
-
-```bash
-VITE_API_URL="https://votre-backend.onrender.com/api"
-```
-
-Sur Render, cette variable est obligatoire. En local seulement, si `VITE_API_URL` n'est pas défini, le frontend utilise `http://localhost:5000/api`.
+Le frontend lit l'URL de l'API via Vite (`VITE_API_URL`, voir [`.env.example`](./.env.example)). Sur Render, cette variable est obligatoire. En local seulement, si elle n'est pas définie, le frontend utilise `http://localhost:5000/api`.
 
 ---
 
