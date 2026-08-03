@@ -233,10 +233,24 @@ Deux niveaux de tests protègent les 6 scrapers contre une refonte silencieuse d
 Les 6 scrapers tirent à chaque run un User-Agent réaliste au hasard dans un pool (`scraping_config.json` → `user_agents`, via `scraper_utils.pick_user_agent()`), et supportent optionnellement un pool de proxies (`proxies`, vide/désactivé par défaut, via `pick_proxy()`).
 
 **Ces mécanismes ne dispensent pas de respecter le cadre légal du scraping :**
-* Consulter et respecter le `robots.txt` et les CGU de chaque site avant toute collecte (voir les issues dédiées ORA-67/ORA-93 pour la vérification formelle par portail).
 * Ne pas contourner une mesure de blocage explicite (bannissement d'IP, CAPTCHA résolu manuellement de façon répétée, mur de paiement) — la rotation UA/proxy sert à réduire le risque de faux-positifs de détection anti-bot, pas à forcer un accès refusé.
 * Respecter un rythme de requêtes raisonnable (la temporisation aléatoire déjà en place entre les requêtes) pour ne pas dégrader le service du site cible.
 * Ne collecter que des données publiquement accessibles, à usage non commercial dans le cadre de ce projet.
+
+**Revue robots.txt (ORA-67, 2026-08-03)** — chaque URL réellement ciblée par un scraper a été comparée mot pour mot aux règles `Disallow` du `robots.txt` du site correspondant :
+
+| Site | URL ciblée par le scraper | Règle `robots.txt` (User-agent: `*`) | Conforme ? |
+|---|---|---|---|
+| Century21 | `/annonces/f/location-maison-appartement/v-lyon/page-{}/` | `Disallow: /annonces/f/` | ❌ Non |
+| Orpi | `/recherche/rent?transaction=rent...` | `Disallow: /recherche/*` | ❌ Non |
+| PAP | `/annonce/...-a-partir-du-2-pieces?page={}` | `Disallow: /*?*` (toute URL avec query string) | ❌ Non |
+| SeLoger | `/classified-search?distributionTypes=...` | `Disallow: /classified-search?` | ❌ Non |
+| ParuVendu | `/immobilier/recherche/location/lyon/?rechpv=1...` | Aucune règle correspondante trouvée | ✅ Oui |
+| Vizzit | `/fr/properties/{}?searchQuery=...` | Aucune règle correspondante trouvée (note : `ClaudeBot` est bloqué nommément ailleurs dans ce fichier, sans rapport avec ce scraper) ; `Crawl-delay: 1` déjà respecté par la temporisation existante | ✅ Oui |
+
+**Décision explicite (posture du projet) :** 4 des 6 scrapers ciblent des chemins explicitement disallow par le site source. Le `robots.txt` n'a pas de valeur contractuelle contraignante (contrairement aux CGU), mais signale une volonté explicite du site. Décision assumée : **ne pas modifier les scrapers en production**, compte tenu du contexte du projet — usage non commercial/portfolio, volumes de requêtes faibles et temporisés, aucune donnée personnelle sensible collectée (annonces publiques uniquement), aucune republication de contenu protégé (voir point suivant). Le risque résiduel (accès jugé non souhaité par le site, même sans base légale contraignante) est assumé explicitement plutôt qu'ignoré. Cette décision est à réévaluer si l'usage du projet change (volumes, contexte commercial).
+
+**Affichage des annonces — photo hébergée vs lien (ORA-93, epic ORA-80) :** vérifié dans les en-têtes CSV de sortie des 6 scrapers (`atomic_csv_writer(OUTPUT_PATH, [...])` dans chaque `scraper_*.py`) : aucune colonne photo/image n'est collectée ni stockée, sur aucun des 6 sites. Chaque annonce n'expose que des champs texte (titre, prix, lieu, détails) et un lien `Lien` vers l'annonce originale. L'application n'héberge donc aucune photo scrapée — elle renvoie vers la source, à la manière d'un agrégateur/moteur de recherche. Ceci limite significativement le risque de reproduction non autorisée de contenu protégé (photos) par rapport à un hébergement direct.
 
 ### 📦 Versioning des snapshots de données
 
