@@ -2,8 +2,27 @@ import requests as r
 import pandas as pd
 import time
 import os
+import json
 
 DEDUP_KEY_COLUMNS = ['latitude', 'longitude', 'type_osm', 'categorie_cavalier', 'nom_lieu']
+
+# Même fichier de config que les scrapers (scripts/scraping_config.json) : une
+# seule source de vérité pour la ville active, pour qu'ajouter une ville ne
+# nécessite pas de modifier ce script (ORA-71).
+DEFAULT_SCRAPING_CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', '..', 'scripts', 'scraping_config.json'
+)
+
+
+def resolve_active_city_name(config_path=DEFAULT_SCRAPING_CONFIG_PATH):
+    """Lit le nom de la ville active (`villes.<ville_active>.nom`) depuis
+    `scraping_config.json`, la même config que `scraper_utils.load_site_config()`
+    utilise pour les 6 scrapers — pour qu'ajouter une ville en config suffise,
+    sans toucher au code de récupération des POI."""
+    with open(config_path, encoding='utf-8') as f:
+        config = json.load(f)
+    ville_active = config['ville_active']
+    return config['villes'][ville_active]['nom']
 
 def merge_cavaliers(df_old, df_new):
     """Fusionne les cavaliers déjà connus avec les cavaliers fraîchement extraits.
@@ -173,4 +192,4 @@ def get_cavaliers_data(city_name="Lyon"):
         print("\n⚠️ Aucune nouvelle donnée récupérée.")
 
 if __name__ == "__main__":
-    get_cavaliers_data("Lyon")
+    get_cavaliers_data(resolve_active_city_name())

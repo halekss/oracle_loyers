@@ -1,12 +1,14 @@
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
-from api_overpass import merge_cavaliers
+from api_overpass import merge_cavaliers, resolve_active_city_name
 
 
 def _row(lat, lon, type_osm, categorie, nom):
@@ -56,6 +58,36 @@ class MergeCavaliersTest(unittest.TestCase):
         result = merge_cavaliers(df_old, df_new)
 
         self.assertEqual(len(result), 2)
+
+
+class ResolveActiveCityNameTest(unittest.TestCase):
+    def test_resolves_name_of_the_currently_active_city(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = os.path.join(tmp_dir, "scraping_config.json")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "ville_active": "lyon",
+                    "villes": {"lyon": {"nom": "Lyon", "slug": "lyon"}},
+                }, f)
+
+            self.assertEqual(resolve_active_city_name(config_path), "Lyon")
+
+    def test_switching_active_city_requires_no_code_change(self):
+        """ORA-71 (AC#1) : ajouter une ville en config (même fictive) et basculer
+        `ville_active` dessus suffit à changer la ville résolue par ce script,
+        sans toucher au code Python."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = os.path.join(tmp_dir, "scraping_config.json")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "ville_active": "villefictivetest",
+                    "villes": {
+                        "lyon": {"nom": "Lyon", "slug": "lyon"},
+                        "villefictivetest": {"nom": "VilleFictiveTest", "slug": "villefictivetest"},
+                    },
+                }, f)
+
+            self.assertEqual(resolve_active_city_name(config_path), "VilleFictiveTest")
 
 
 if __name__ == "__main__":
