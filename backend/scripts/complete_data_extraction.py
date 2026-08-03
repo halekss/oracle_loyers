@@ -1,10 +1,11 @@
 import pandas as pd
-import requests
 import re
 import time
 import os
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
+
+from http_retry import request_with_retry
 
 # --- CONFIGURATION ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,15 +29,13 @@ def get_gps_from_url(url):
         return None, None
         
     try:
-        # On télécharge le code source de la page
-        # On utilise une session pour garder les cookies si besoin
-        with requests.Session() as s:
-            r = s.get(url, headers=HEADERS, timeout=10)
-            
-            if r.status_code != 200:
-                return None, None
-                
-            html = r.text
+        # Timeout explicite + retry/backoff sur erreur transitoire (modèle http_retry)
+        r = request_with_retry("GET", url, headers=HEADERS, timeout=10)
+
+        if r is None or r.status_code != 200:
+            return None, None
+
+        html = r.text
         
         # --- STRATÉGIE DE RECHERCHE ---
         

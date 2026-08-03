@@ -301,6 +301,39 @@ class GetChromeDriverOptionsTest(unittest.TestCase):
         self.assertFalse(any(a.startswith("--user-agent=") for a in captured["options"].arguments))
         self.assertFalse(any(a.startswith("--proxy-server=") for a in captured["options"].arguments))
 
+    def test_applies_default_page_load_timeout(self):
+        class FakeChromeOptions:
+            def add_argument(self, arg):
+                pass
+
+            def add_experimental_option(self, name, value):
+                pass
+
+        fake_driver = MagicMock()
+
+        with patch.object(scraper_utils.uc, "ChromeOptions", FakeChromeOptions), \
+             patch.object(scraper_utils.uc, "Chrome", lambda options=None: fake_driver):
+            driver = scraper_utils.get_chrome_driver()
+
+        fake_driver.set_page_load_timeout.assert_called_once_with(30)
+        self.assertIs(driver, fake_driver)
+
+    def test_page_load_timeout_is_overridable(self):
+        class FakeChromeOptions:
+            def add_argument(self, arg):
+                pass
+
+            def add_experimental_option(self, name, value):
+                pass
+
+        fake_driver = MagicMock()
+
+        with patch.object(scraper_utils.uc, "ChromeOptions", FakeChromeOptions), \
+             patch.object(scraper_utils.uc, "Chrome", lambda options=None: fake_driver):
+            scraper_utils.get_chrome_driver(page_load_timeout=60)
+
+        fake_driver.set_page_load_timeout.assert_called_once_with(60)
+
 
 if __name__ == "__main__":
     unittest.main()
