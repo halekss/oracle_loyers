@@ -145,7 +145,7 @@ Le frontend lit l'URL de l'API via Vite (`VITE_API_URL`, voir [`.env.example`](.
 
 ## ⚙️ Les Scripts de Données (ETL)
 
-Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/`, orchestrés par le DAG Airflow `Airflow/dags/oracle_loyers_dag.py` (planifié quotidiennement à 2h) selon deux branches parallèles qui convergent :
+Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/` — **seule source de vérité** pour ce pipeline (le root `scripts/` ne contient que les 6 scrapers, voir plus bas) — orchestrés par le DAG Airflow `Airflow/dags/oracle_loyers_dag.py` (planifié quotidiennement à 2h) selon deux branches parallèles qui convergent :
 
 ```text
 api_overpass.py ──→ enrich_cavaliers_cp.py ─┐
@@ -236,7 +236,7 @@ oracle-des-loyers/
 │   ├── scraper_century_21.py, scraper_orpi.py, scraper_pap.py,
 │   │   scraper_paruvendu.py, scraper_seloger.py, scraper_vizzit.py
 │   ├── scraper_utils.py, csv_atomic_writer.py, scraping_config.json  # Communs aux 6 scrapers
-│   └── api_overpass.py  # ⚠️ dupliqué avec backend/scripts/, voir Backlog (ORA-7)
+│   └── tests/                 # Tests unitaires (fixtures) + e2e (canari Playwright)
 │
 ├── backend/                   # API Flask & Logique métier
 │   ├── Dockerfile
@@ -246,7 +246,8 @@ oracle-des-loyers/
 │   ├── data/                  # LE COFFRE-FORT (CSV bruts, fusionnés, master, conversations.db)
 │   ├── models/                # Cerveaux entraînés (price_predictor.pkl, versionné en git)
 │   │
-│   ├── scripts/               # L'USINE À DONNÉES (voir section ETL pour l'ordre réel)
+│   ├── scripts/               # L'USINE À DONNÉES — source de vérité (voir section ETL) ;
+│   │   │                      # ce sont ces copies qu'utilise le DAG Airflow, pas celles de scripts/ (ORA-7)
 │   │   ├── api_overpass.py, enrich_cavaliers_cp.py
 │   │   ├── data_fusion.py, clean_immo.py, train_model.py
 │   │   └── generate_map.py, analyze_impact.py, test_prediction.py, test_api.py
