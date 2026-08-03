@@ -20,7 +20,9 @@ services:
       - oracle-network
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: dev
     container_name: oracle_frontend
     ports:
       - "5173:5173"
