@@ -112,15 +112,21 @@ jobs:
     needs: [backend, scrapers, frontend, e2e]
     if: success() && github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    # `secrets` n'est pas utilisable directement dans un `if:` (GitHub Actions
+    # rejette le workflow au parsing : "Unrecognized named-value: 'secrets'")
+    # — on le recopie d'abord en env de job pour pouvoir tester sa présence.
+    env:
+      RENDER_DEPLOY_HOOK_BACKEND: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}
+      RENDER_DEPLOY_HOOK_FRONTEND: ${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}
     steps:
       - name: Déclencher le déploiement backend (Render Deploy Hook)
-        if: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND != '' }}
-        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}"
+        if: ${{ env.RENDER_DEPLOY_HOOK_BACKEND != '' }}
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_BACKEND"
 
       - name: Déclencher le déploiement frontend (Render Deploy Hook)
-        if: ${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND != '' }}
-        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}"
+        if: ${{ env.RENDER_DEPLOY_HOOK_FRONTEND != '' }}
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_FRONTEND"
 
       - name: Avertir si aucun hook n'est configuré
-        if: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND == '' && secrets.RENDER_DEPLOY_HOOK_FRONTEND == '' }}
+        if: ${{ env.RENDER_DEPLOY_HOOK_BACKEND == '' && env.RENDER_DEPLOY_HOOK_FRONTEND == '' }}
         run: echo "::warning::Aucun secret RENDER_DEPLOY_HOOK_BACKEND/RENDER_DEPLOY_HOOK_FRONTEND configuré — déploiement non déclenché. Voir README, section CD."
