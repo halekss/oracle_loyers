@@ -187,6 +187,14 @@ class OrpiSelectorCanaryTest(unittest.TestCase):
 
 
 class PapSelectorCanaryTest(unittest.TestCase):
+    # Bloqué en permanence par un challenge Cloudflare ("Just a moment...")
+    # dès qu'un Chromium headless non-stealth y accède : confirmé via
+    # canary-diagnostics le 2026-08-03 (voir README, section canari). Playwright
+    # n'a pas les patchs anti-détection d'undetected_chromedriver (scrapers de
+    # production) ; ce n'est pas corrigeable par un ajustement de sélecteur.
+    # xfail plutôt que fail pour ne pas spammer l'issue GitHub chaque nuit —
+    # un "unexpected success" signalerait que le blocage a changé.
+    @unittest.expectedFailure
     def test_selectors_still_match_live_page(self):
         assert_selector_canary(
             self,
@@ -199,6 +207,10 @@ class PapSelectorCanaryTest(unittest.TestCase):
 
 
 class SeLogerSelectorCanaryTest(unittest.TestCase):
+    # Bloqué en permanence par un CAPTCHA DataDome dès qu'un Chromium headless
+    # non-stealth y accède : confirmé via canary-diagnostics le 2026-08-03 (voir
+    # README, section canari). Même raisonnement xfail que PapSelectorCanaryTest.
+    @unittest.expectedFailure
     def test_selectors_still_match_live_page(self):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)

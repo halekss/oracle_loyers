@@ -224,7 +224,9 @@ Deux niveaux de tests protègent les 6 scrapers contre une refonte silencieuse d
 4. Vérifier que les tests ORA-19 et le canari Playwright passent de nouveau.
 5. Fermer l'issue.
 
-**Faux-positifs anti-bot connus (confirmés via `canary-diagnostics` le 2026-08-03) :** PAP est bloqué par une page de challenge Cloudflare (`<title>Just a moment...</title>`) et SeLoger par un CAPTCHA DataDome (iframe `geo.captcha-delivery.com`) dès que Playwright headless nu y accède — contrairement à `undetected_chromedriver` (scrapers de production), Playwright n'a pas de patch anti-détection. Un échec du canari sur ces deux sites précisément est donc probablement ce blocage plutôt qu'une refonte ; vérifier l'artefact avant de toucher aux sélecteurs de production. Ce même jour, Orpi, ParuVendu et Vizzit avaient en revanche réellement changé de structure (titre Orpi, tag de carte ParuVendu, classe de carte Vizzit) — sélecteurs corrigés.
+**Faux-positifs anti-bot connus (confirmés via `canary-diagnostics` le 2026-08-03) :** PAP est bloqué par une page de challenge Cloudflare (`<title>Just a moment...</title>`) et SeLoger par un CAPTCHA DataDome (iframe `geo.captcha-delivery.com`) dès que Playwright headless nu y accède — contrairement à `undetected_chromedriver` (scrapers de production), Playwright n'a pas de patch anti-détection. Ce même jour, Orpi, ParuVendu et Vizzit avaient en revanche réellement changé de structure (titre Orpi, tag de carte ParuVendu, classe de carte Vizzit) — sélecteurs corrigés.
+
+`PapSelectorCanaryTest` et `SeLogerSelectorCanaryTest` sont marqués `@unittest.expectedFailure` (le job CI reste vert malgré leur échec permanent, plutôt que de spammer l'issue GitHub chaque nuit). Si l'un des deux se met à passer un jour, pytest le remonte comme un "unexpected success" (échec du job) — signal qu'il vaut la peine d'enquêter plutôt que du bruit à ignorer.
 
 ### 🕵️ Anti-détection des scrapers — limites légales
 
