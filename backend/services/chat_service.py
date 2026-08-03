@@ -8,6 +8,10 @@ class ChatService:
     DEFAULT_MAX_OUTPUT_TOKENS = 800
     DEFAULT_TEMPERATURE = 0.7
     MAX_CONTEXT_LISTINGS = 12
+    # Borne la surface d'injection de prompt : context/message sont fournis
+    # tels quels par le client JSON et interpolés dans le prompt Gemini.
+    MAX_USER_MESSAGE_LENGTH = 2000
+    MAX_CONTEXT_LENGTH = 2000
 
     def __init__(self):
         self.model_name = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL)
@@ -705,7 +709,15 @@ Pour une comparaison, cite les moyennes calculées et le nombre d'annonces avant
 
         return None
 
+    @classmethod
+    def _truncate(cls, text, max_length):
+        if not text:
+            return text
+        return text[:max_length]
+
     def get_chat_result(self, user_message, context_str, dataframe):
+        user_message = self._truncate(user_message, self.MAX_USER_MESSAGE_LENGTH)
+        context_str = self._truncate(context_str, self.MAX_CONTEXT_LENGTH)
         parsed = self.parse_query(user_message, context_str, dataframe)
         quartier_cible = self._extract_quartier(context_str)
         postal_code = parsed.get("postal_code")
