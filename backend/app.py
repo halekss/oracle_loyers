@@ -8,6 +8,7 @@ from flask_limiter.util import get_remote_address
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
+from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
 
 # Initialisation de l'application
@@ -144,17 +145,22 @@ def get_quartier_stats():
     Filtre le dataframe par nom de quartier et par type de bien.
     """
     try:
-        data = get_request_json()
-        quartier_input = data.get('quartier', '').strip()
-        type_filter = data.get('type_local', 'Tout')
+        raw_payload = get_request_json()
+    except Exception:
+        return jsonify({"error": "Payload JSON invalide"}), 400
 
+    try:
+        payload = QuartierStatsRequestSchema(**raw_payload)
+    except (ValidationError, TypeError):
+        return jsonify({"error": "Le nom du quartier est vide"}), 400
+
+    quartier_input = payload.quartier.strip()
+    type_filter = payload.type_local
+
+    try:
         df = data_loader.get_data()
         if df is None or df.empty:
             return jsonify({"error": "Données non disponibles"}), 500
-
-        # 1. Filtrage par Quartier (Recherche textuelle flexible)
-        if not quartier_input:
-            return jsonify({"error": "Le nom du quartier est vide"}), 400
 
         # Nettoyage pour éviter les erreurs sur NaN
         df_clean = df.dropna(subset=['quartier', 'prix', 'surface'])
@@ -243,6 +249,14 @@ def predict():
     except Exception:
         return jsonify({"error": "Payload JSON invalide"}), 400
 
+    try:
+        PredictRequestSchema(**payload)
+    except (ValidationError, TypeError):
+        return jsonify({
+            "error": "Payload invalide",
+            "details": ["Le format des champs envoyés est incorrect."],
+        }), 400
+
     features_df, result = build_feature_row(payload, df, cavaliers_df, list(model.feature_names_in_))
     if features_df is None:
         return jsonify({"error": "Payload invalide", "details": result}), 400
@@ -271,12 +285,15 @@ def chat():
     """Route pour le Chatbot Immotep"""
     try:
         data = get_request_json()
-        # On récupère le message utilisateur et le contexte envoyé par le front
-        user_msg = data.get('message', '')
-        context = data.get('context', '') 
 
-        if not user_msg or not user_msg.strip():
+        try:
+            payload = ChatRequestSchema(**data)
+        except (ValidationError, TypeError):
             return jsonify({"response": "Silence... Tu n'as rien à dire ?"}), 400
+
+        # On récupère le message utilisateur et le contexte envoyé par le front
+        user_msg = payload.message
+        context = payload.context
 
         # On récupère le DataFrame complet
         df = data_loader.get_data()

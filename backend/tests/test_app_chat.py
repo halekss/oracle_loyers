@@ -20,6 +20,17 @@ class ChatRouteTest(unittest.TestCase):
             {"response": "Silence... Tu n'as rien à dire ?"},
         )
 
+    def test_chat_route_rejects_non_string_message_with_400(self):
+        client = app.app.test_client()
+
+        response = client.post("/api/chat", json={"message": ["not", "a", "string"]})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.get_json(),
+            {"response": "Silence... Tu n'as rien à dire ?"},
+        )
+
     def test_chat_route_accepts_text_plain_json_without_preflight(self):
         client = app.app.test_client()
 
