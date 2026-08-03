@@ -165,6 +165,19 @@ Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render 
 
 ---
 
+## 🩺 Observabilité backend (logs structurés, Sentry) — ORA-63
+
+Le backend Flask centralise sa configuration de logging dans `backend/logging_config.py`, importé et appelé en tout premier dans `backend/app.py`.
+
+- **Logs structurés** : tous les logs applicatifs (démarrage, erreurs, avertissements) passent par le module `logging` standard (`logger.info/.warning/.error/.critical`), avec un format cohérent `timestamp [NIVEAU] module: message`. Plus aucun `print()` n'est utilisé pour signaler une erreur applicative dans `app.py` ou `services/*.py` (les `print()` restants, dans `backend/scripts/`, sont des CLI qui affichent une progression humaine et ne relèvent pas de l'observabilité applicative).
+- **Niveau configurable** via la variable d'environnement `LOG_LEVEL` (`DEBUG`, `INFO` par défaut, `WARNING`, `ERROR`, `CRITICAL`). Voir [`.env.example`](./.env.example).
+- **Tracking d'erreurs (Sentry)** : si la variable d'environnement `SENTRY_DSN` est définie, `sentry-sdk` (avec son intégration Flask) est initialisé au démarrage et capture automatiquement les exceptions non gérées ainsi que les réponses 5xx. Si `SENTRY_DSN` est absent (dev local, CI), l'initialisation est un no-op silencieux : rien à configurer pour développer en local.
+- **Alerte sur erreurs critiques** : les erreurs jugées critiques (ex. le provider LLM Gemini indisponible dans `services/chat_service.py`) sont loguées via `logger.critical(...)` avec le tag `[LLM_UNAVAILABLE]`. Lorsque Sentry est configuré, ces logs remontent comme événements dans le dashboard Sentry, qui gère l'alerting (email/Slack/etc.) — pas de système d'alerte custom à maintenir côté backend.
+
+**Configuration requise pour activer Sentry en production :** créer un projet sur [sentry.io](https://sentry.io) (ou une instance self-hosted), copier son DSN et renseigner `SENTRY_DSN` (et éventuellement `SENTRY_ENVIRONMENT`) dans les variables d'environnement du service Render. Configurer ensuite les règles d'alerte côté dashboard Sentry (ex. notification sur toute nouvelle erreur taguée `[LLM_UNAVAILABLE]`, ou sur un volume de 5xx au-delà d'un seuil).
+
+---
+
 ## ⚙️ Les Scripts de Données (ETL)
 
 Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/` — **seule source de vérité** pour ce pipeline (le root `scripts/` ne contient que les 6 scrapers, voir plus bas) — orchestrés par le DAG Airflow `Airflow/dags/oracle_loyers_dag.py` (planifié quotidiennement à 2h) selon deux branches parallèles qui convergent :

@@ -1,6 +1,10 @@
+import logging
 import pandas as pd
 import os
 from services.utils import guess_room_count_smart
+
+logger = logging.getLogger(__name__)
+
 
 class DataLoader:
     def __init__(self, csv_path):
@@ -11,7 +15,7 @@ class DataLoader:
     def load_data(self):
         """Charge le CSV en mémoire et applique un nettoyage de base."""
         if not os.path.exists(self.csv_path):
-            print(f"❌ Erreur : Fichier introuvable {self.csv_path}")
+            logger.error("Fichier de données introuvable : %s", self.csv_path)
             return
 
         try:
@@ -30,10 +34,13 @@ class DataLoader:
                 mask_missing = self.df['type_local'].isna()
                 self.df.loc[mask_missing, 'type_local'] = self.df.loc[mask_missing, 'surface'].apply(guess_room_count_smart)
 
-            print(f"✅ Données chargées : {len(self.df)} annonces.")
-            
+            logger.info("Données chargées : %s annonces.", len(self.df))
+
         except Exception as e:
-            print(f"❌ Erreur lors du chargement des données : {e}")
+            logger.error(
+                "Erreur lors du chargement des données (%s) : %s - %s",
+                self.csv_path, type(e).__name__, e, exc_info=True,
+            )
 
     def get_data(self):
         """Renvoie le DataFrame brut."""

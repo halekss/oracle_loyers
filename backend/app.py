@@ -1,11 +1,13 @@
 import os
 import json
+import logging
 import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flasgger import Swagger
+from logging_config import configure_logging, init_sentry
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
@@ -13,6 +15,13 @@ from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
 from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
+
+# Observabilité (ORA-63) : logging structuré + tracking d'erreurs Sentry,
+# à configurer avant tout le reste (Flask, chargement des données/modèle)
+# pour que les logs de démarrage soient déjà structurés.
+configure_logging()
+init_sentry()
+logger = logging.getLogger(__name__)
 
 # Initialisation de l'application
 app = Flask(__name__)
@@ -52,7 +61,7 @@ def get_server_port():
 
 
 cors_origins = get_cors_origins()
-print(f"🔒 Politique CORS effective : {cors_origins}")
+logger.info("Politique CORS effective : %s", cors_origins)
 CORS(app, origins=cors_origins)  # Autorise les requêtes du Frontend React
 
 # Documentation interactive Swagger/OpenAPI, accessible sur /apidocs (voir
@@ -152,25 +161,31 @@ SNAPSHOTS_DIR = os.path.join(BASE_DIR, 'data', 'snapshots')
 SNAPSHOTS_MANIFEST_PATH = os.path.join(SNAPSHOTS_DIR, 'manifest.csv')
 
 # Chargement des services
-print("Chargement des données...")
+logger.info("Chargement des données...")
 data_loader = DataLoader(DATA_PATH)
 
-print("Chargement des points d'intérêt (cavaliers)...")
+logger.info("Chargement des points d'intérêt (cavaliers)...")
 try:
     cavaliers_df = pd.read_csv(CAVALIERS_PATH)
-except Exception:
-    print("⚠️ Attention : cavaliers_lyon.csv introuvable, features de distance à 0 par défaut.")
+except Exception as exc:
+    logger.warning(
+        "cavaliers_lyon.csv introuvable, features de distance à 0 par défaut : %s - %s",
+        type(exc).__name__, exc,
+    )
     cavaliers_df = None
 
-print("Initialisation d'Immotep (Service Chat)...")
+logger.info("Initialisation d'Immotep (Service Chat)...")
 chat_service = ChatService()
 
 # Chargement du modèle IA (XGBoost)
-print("Chargement du modèle IA...")
+logger.info("Chargement du modèle IA...")
 try:
     model = joblib.load(MODEL_PATH)
-except Exception:
-    print("⚠️ Attention : Modèle price_predictor.pkl introuvable.")
+except Exception as exc:
+    logger.warning(
+        "Modèle price_predictor.pkl introuvable : %s - %s",
+        type(exc).__name__, exc,
+    )
     model = None
 
 # --- ROUTES API ---
@@ -355,7 +370,10 @@ def get_quartier_stats():
         })
 
     except Exception as e:
-        print(f"Erreur Stats Quartier: {e}")
+        logger.error(
+            "Erreur endpoint /api/quartier-stats : %s - %s",
+            type(e).__name__, e, exc_info=True,
+        )
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/quartier-historique', methods=['POST'])
@@ -568,7 +586,10 @@ def chat():
         return jsonify(result_immotep)
 
     except Exception as e:
-        print(f"Erreur Chat: {e}")
+        logger.error(
+            "Erreur endpoint /api/chat : %s - %s",
+            type(e).__name__, e, exc_info=True,
+        )
         return jsonify({"response": "Erreur interne côté serveur. Immotep revient dès que l'API répond correctement."}), 500
 
 if __name__ == '__main__':
