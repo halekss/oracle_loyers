@@ -29,6 +29,10 @@ base_url = site_config['base_url']
 CARD_SELECTORS = ["article.c-overlay", "article[class*='overlay']", "article[class*='card']", "article"]
 TITRE_SELECTORS = [
     "[class*='c-the-ad-of-program__title']",
+    # Refonte observée le 2026-08-03 (canari ORA-21) : le titre n'est plus dans
+    # un élément de classe "title" ni un h2/h3, mais dans un <b> à l'intérieur
+    # du bloc infos de la carte.
+    "[class*='estate-thumb__infos__estate'] b",
     "[class*='title']",
     "h2", "h3",
 ]

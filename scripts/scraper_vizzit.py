@@ -25,14 +25,22 @@ OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', f"annonces_{site
 SEARCH_URL = site_config['base_url']
 
 CARD_SELECTORS = [
+    # Refonte observée le 2026-08-03 (canari ORA-21) : nouvelle classe de carte.
+    "div.announce-card",
     "div.item__content-area",
     "div[class*='item__content']",
     "article[class*='item']",
     "div[class*='property-card']",
 ]
 LIEN_SELECTORS = ["a.item__link", "a[class*='item__link']", "a[class*='property-link']", "a"]
-PRIX_SELECTORS = ["div.display", "div[class*='display']", "[class*='price']", "[class*='prix']"]
-LIEU_SELECTORS = ["p.item__location", "p[class*='location']", "[class*='location']", "[class*='lieu']"]
+PRIX_SELECTORS = ["strong.info-price", "div.display", "div[class*='display']", "[class*='price']", "[class*='prix']"]
+LIEU_SELECTORS = [
+    "div.announce-localisation",
+    "p.item__location",
+    "p[class*='location']",
+    "[class*='location']",
+    "[class*='lieu']",
+]
 DETAIL_SELECTORS = ["span.detail__item", "span[class*='detail']", "[class*='feature']"]
 DESC_SELECTORS = ["p.description__text", "p[class*='description']", "div[class*='description']", "[class*='desc']"]
 

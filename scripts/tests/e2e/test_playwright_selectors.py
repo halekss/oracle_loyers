@@ -257,9 +257,9 @@ class ParuVenduSelectorCanaryTest(unittest.TestCase):
             self,
             site_name="ParuVendu",
             url=scraper_paruvendu.base_url,
-            card_selectors=["article.blocAnnonce"],
-            title_selectors=["a.popinphoto_liste_titre"],
-            price_selectors=["div.popinphoto_liste_prix"],
+            card_selectors=["div.blocAnnonce", "article.blocAnnonce"],
+            title_selectors=["a.popinphoto_liste_titre", "h3"],
+            price_selectors=["div.popinphoto_liste_prix", "div.encoded-lnk"],
         )
 
 
