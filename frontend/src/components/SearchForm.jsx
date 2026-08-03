@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 
 export default function SearchForm({ onScan, isLoading }) {
   const [input, setInput] = useState('');
+  const [surface, setSurface] = useState('');
   const [currentFilter, setCurrentFilter] = useState('Tout');
 
   // Soumission du formulaire (Bouton SCAN ou Entrée)
   const handleSubmit = (e) => {
     e.preventDefault();
     if (input.trim()) {
-      onScan(input, currentFilter);
+      onScan(input, currentFilter, surface);
     }
   };
 
@@ -17,7 +18,7 @@ export default function SearchForm({ onScan, isLoading }) {
     setCurrentFilter(filterId);
     // Si l'utilisateur a déjà tapé un quartier, on relance le scan immédiatement
     if (input.trim()) {
-      onScan(input, filterId);
+      onScan(input, filterId, surface);
     }
   };
 
@@ -33,6 +34,15 @@ export default function SearchForm({ onScan, isLoading }) {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Entrez un quartier (ex: Ainay)..."
           className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 px-4 py-3 rounded-xl focus:outline-none focus:border-purple-500 transition-colors text-sm placeholder-slate-500"
+        />
+        <input
+          type="number"
+          min="1"
+          value={surface}
+          onChange={(e) => setSurface(e.target.value)}
+          placeholder="m²"
+          aria-label="Surface en m² (pour l'estimation IA)"
+          className="w-20 bg-slate-900 border border-slate-700 text-slate-200 px-3 py-3 rounded-xl focus:outline-none focus:border-purple-500 transition-colors text-sm placeholder-slate-500"
         />
         <button
           type="submit"

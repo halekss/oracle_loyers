@@ -93,6 +93,23 @@ export const api = {
     }
   },
 
+  // Prédiction ML (XGBoost) — /api/predict
+  predict: async ({ surface, quartier, type_local, type = undefined }) => {
+    try {
+      const payload = { surface, quartier, type_local };
+      if (type) payload.type = type;
+
+      const response = await fetchWithClassification(`${API_URL}/predict`, {
+        ...apiFetchOptions(payload),
+      });
+
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Erreur Predict:", error);
+      throw error;
+    }
+  },
+
   // Chatbot Immotep
   sendChatMessage: async (message, context = null) => {
     try {

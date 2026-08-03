@@ -4,11 +4,18 @@ export default function ResultCard({ data, loading }) {
   
   const safeData = data || {};
   const stats = safeData.stats || {};
-  
+
   const estimatedPrice = safeData.estimated_price || 0;
   const m2PriceRaw = stats.prix_m2 || 0;
+  const confiance = safeData.confiance;
 
   const formatPrice = (p) => p ? Math.round(p).toLocaleString('fr-FR') : "--";
+
+  const confidenceStyles = {
+    'Élevée': 'bg-green-900/40 text-green-400 border-green-700/50',
+    'Moyenne': 'bg-amber-900/40 text-amber-400 border-amber-700/50',
+    'Faible': 'bg-red-900/40 text-red-400 border-red-700/50',
+  };
 
   if (loading) {
     return (
@@ -41,6 +48,11 @@ export default function ResultCard({ data, loading }) {
                     <span className="text-lg text-slate-500">€</span>
                 </div>
             </div>
+            {confiance && (
+              <span className={`text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border ${confidenceStyles[confiance] || 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                Confiance IA : {confiance}
+              </span>
+            )}
           </div>
         </div>
 
