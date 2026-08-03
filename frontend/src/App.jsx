@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import SearchForm from './components/SearchForm';
 import ResultCard from './components/ResultCard';
+import PriceHistory from './components/PriceHistory';
 import MapComponent from './components/MapComponent';
 import ChatOracle from './components/ChatOracle';
 import { api, describeApiError } from './services/api';
@@ -28,6 +29,7 @@ function useIsDesktop() {
 
 function App() {
   const [result, setResult] = useState(null);
+  const [priceHistory, setPriceHistory] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [chatContext, setChatContext] = useState(null);
@@ -40,6 +42,7 @@ function App() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setPriceHistory(null);
 
     try {
       const data = await api.getQuartierStats(quartier, typeLocal);
@@ -90,6 +93,14 @@ function App() {
       setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
       if (data.center?.lat && data.center?.lng) {
         setMapCenter([data.center.lat, data.center.lng, 15]);
+      }
+
+      // Non bloquant : un échec ici ne doit pas gâcher un scan par ailleurs réussi.
+      try {
+        const historyData = await api.getQuartierHistorique(data.quartier_detecte, typeLocal);
+        setPriceHistory(historyData);
+      } catch (historyErr) {
+        console.error("Historique des prix indisponible :", historyErr);
       }
     } catch (err) {
       console.error(err);
@@ -147,6 +158,13 @@ function App() {
               </div>
             )}
           </div>
+
+          {/* Historique du prix moyen/m² (ORA-72) */}
+          <PriceHistory
+            status={priceHistory?.status}
+            message={priceHistory?.message}
+            historique={priceHistory?.historique}
+          />
 
           {/* Chat */}
           <div className="flex-1 min-h-0 relative">
