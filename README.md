@@ -184,6 +184,16 @@ data_fusion.py ─────────────────────�
 
 > Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
 
+### 🗺️ Génération de la carte
+
+Un seul pipeline fait foi : **`backend/scripts/generate_map.py`**. À partir de `master_immo_final.csv`, `cavaliers_lyon.csv` et `metro_lyon.json`, il génère la carte Folium interactive `frontend/public/data/map_pings_lyon_calques.html`, réellement servie par `MapComponent.jsx` (iframe). Comme pour le reste des données du projet, le fichier généré est **versionné dans git** ; régénérez-le après toute mise à jour des données sources :
+
+```bash
+python backend/scripts/generate_map.py
+```
+
+(L'ancien second pipeline concurrent — `backend/services/map_generator.py` → `backend/static/map_lyon.html`, orphelin, sans route ni DAG l'appelant — a été supprimé ; voir ORA-50.)
+
 ### 🧪 Tests frontend (Vitest + E2E Playwright)
 
 * **`npm test`** (`frontend/`) — Vitest (environment jsdom, cohérent avec Vite) : tests unitaires (`services/api.js`, config Vite) et tests de composants React (`ChatOracle`, `SearchForm`, `MapComponent` — rendu, interactions clés, gestion d'erreur). Exécuté en CI à chaque push/PR.
@@ -270,11 +280,10 @@ oracle-des-loyers/
 │   │
 │   ├── services/              # Modules métier actifs
 │   │   ├── chat_service.py    # Chatbot Gemini + RAG (seul chemin LLM actif)
-│   │   ├── data_loader.py, map_generator.py, utils.py
+│   │   ├── data_loader.py, predictor.py, utils.py
 │   │
 │   ├── core/                  # Constantes partagées
-│   ├── tests/                 # Suite pytest (chat, config runtime)
-│   └── static/                # Fichiers servis publiquement (cartes HTML)
+│   └── tests/                 # Suite pytest (chat, config runtime, ETL, modèle...)
 │
 └── frontend/                  # Interface React
     ├── Dockerfile
