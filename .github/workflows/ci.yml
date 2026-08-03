@@ -24,6 +24,27 @@ jobs:
 
       - run: python -m pytest tests/ -v
 
+  scrapers:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scripts/requirements.txt
+
+      # setuptools fournit le shim distutils dont dépend undetected-chromedriver==3.5.5,
+      # supprimé de la stdlib depuis Python 3.12.
+      - run: pip install setuptools
+      - run: pip install -r requirements.txt pytest
+
+      - run: python -m pytest tests/ -v
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
