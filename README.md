@@ -177,7 +177,8 @@ data_fusion.py ─────────────────────�
 5.  **`train_model.py`**
     * Entraîne le modèle XGBoost sur `master_immo_final.csv`.
     * Génère le fichier modèle : `backend/models/price_predictor.pkl`, **versionné dans git** (comme `master_immo_final.csv`) pour qu'un environnement fraîchement déployé dispose d'un modèle fonctionnel sans étape manuelle. L'entraînement est déterministe (`random_state=42`) ; relancez `train_model.py` et committez le `.pkl` après toute mise à jour de `master_immo_final.csv`.
-    * Via `data_versioning.py`, archive aussi un snapshot content-addressé des données utilisées et écrit `price_predictor.pkl.meta.json` (référence explicite au snapshot + métriques MAE/R²) — voir "Versioning des snapshots de données" ci-dessous.
+    * Via `data_versioning.py`, archive aussi un snapshot content-addressé des données utilisées et écrit `price_predictor.pkl.meta.json` (référence explicite au snapshot + métriques MAE/R² du run courant) — voir "Versioning des snapshots de données" ci-dessous.
+    * Chaque run ajoute en plus une ligne (`trained_at`, `mae`, `r2`, `dataset_size`, `n_features`) à `backend/models/training_metrics.jsonl`, un historique continu des métriques permettant de comparer plusieurs runs/versions du modèle dans le temps sans avoir à parcourir l'historique git.
 
 > Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
 

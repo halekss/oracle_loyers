@@ -1,6 +1,8 @@
+import json
 import pandas as pd
 import numpy as np
 import os
+from datetime import datetime, timezone
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
@@ -19,6 +21,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 data_path = os.path.join(script_dir, '..', 'data', 'master_immo_final.csv')
 models_dir = os.path.join(script_dir, '..', 'models')
 model_save_path = os.path.join(models_dir, 'price_predictor.pkl')
+metrics_log_path = os.path.join(models_dir, 'training_metrics.jsonl')
 
 os.makedirs(models_dir, exist_ok=True)
 
@@ -84,6 +87,18 @@ print(f"🏆 RÉSULTATS XGBOOST (Contextualisé)")
 print("="*40)
 print(f"💰 Marge d'erreur moyenne : ± {mae:.2f} €")
 print(f"📈 Précision (R²)       : {r2:.2f} / 1.0")
+
+# --- 7bis. PERSISTANCE DES MÉTRIQUES (historique comparable d'un run à l'autre) ---
+metrics_entry = {
+    "trained_at": datetime.now(timezone.utc).isoformat(),
+    "mae": round(float(mae), 2),
+    "r2": round(float(r2), 4),
+    "dataset_size": int(X.shape[0]),
+    "n_features": int(X.shape[1]),
+}
+with open(metrics_log_path, 'a', encoding='utf-8') as f:
+    f.write(json.dumps(metrics_entry, ensure_ascii=False) + "\n")
+print(f"📈 Métriques ajoutées à l'historique : {metrics_log_path}")
 
 # --- 8. IMPORTANCE DES CRITÈRES ---
 importances = pd.DataFrame({
