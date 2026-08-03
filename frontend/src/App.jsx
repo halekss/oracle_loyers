@@ -3,7 +3,7 @@ import SearchForm from './components/SearchForm';
 import ResultCard from './components/ResultCard';
 import MapComponent from './components/MapComponent';
 import ChatOracle from './components/ChatOracle';
-import { api } from './services/api';
+import { api, describeApiError } from './services/api';
 
 // Correspond au breakpoint `md` de Tailwind : au-delà, les deux panneaux
 // (carte + oracle) restent visibles simultanément, donc la carte doit
@@ -61,7 +61,7 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setError("Erreur lors de l'analyse du secteur.");
+      setError(describeApiError(err));
     } finally {
       setLoading(false);
     }
