@@ -8,6 +8,9 @@ import os
 import sys
 
 from csv_atomic_writer import atomic_csv_writer
+from scraper_utils import get_scraper_logger
+
+logger = get_scraper_logger("vizzit")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_vizzit.csv')
@@ -51,10 +54,11 @@ def get_driver():
     return uc.Chrome(options=options)
 
 if __name__ == '__main__':
-    print("🚀 Lancement du scraper Vizzit Automatique...")
+    logger.info("Lancement du scraper Vizzit Automatique...")
 
     driver = get_driver()
     wait = WebDriverWait(driver, 15)
+    erreurs = 0
 
     with atomic_csv_writer(OUTPUT_PATH, ['Lieu', 'Prix', 'Details', 'Description', 'Lien']) as writer:
         page_num = 1
@@ -62,22 +66,22 @@ if __name__ == '__main__':
         continuer = True
 
         while continuer:
-            print(f"\n--- 📄 Analyse de la Page {page_num} ---")
+            logger.info("Analyse de la page %s", page_num)
             driver.get(SEARCH_URL.format(page_num))
 
             if page_num == 1:
-                print("⏳ En attente de la validation des cookies sur Vizzit...")
+                logger.info("En attente de la validation des cookies sur Vizzit...")
                 card_found = False
                 for sel in CARD_SELECTORS:
                     try:
                         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, sel)))
-                        print(f"✅ Accès détecté ({sel})")
+                        logger.info("Accès détecté (%s)", sel)
                         card_found = True
                         break
                     except Exception:
                         continue
                 if not card_found:
-                    print("❌ Aucune carte détectée.")
+                    logger.error("Aucune carte détectée.")
                     break
 
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -90,7 +94,7 @@ if __name__ == '__main__':
                     break
 
             if not blocs:
-                print("🛑 Fin des résultats.")
+                logger.warning("Fin des résultats à la page %s.", page_num)
                 break
 
             annonces_a_visiter = []
@@ -108,7 +112,9 @@ if __name__ == '__main__':
                             break
                     details = " - ".join(d.text.strip() for d in details_elems if d.text.strip())
                     annonces_a_visiter.append({'lieu': lieu, 'prix': prix, 'details': details, 'lien': lien})
-                except Exception:
+                except Exception as exc:
+                    erreurs += 1
+                    logger.warning("Erreur lors du parsing d'un bloc d'annonce : %s", exc)
                     continue
 
             compteur_page = 0
@@ -129,14 +135,16 @@ if __name__ == '__main__':
                     writer.writerow([info['lieu'], info['prix'], info['details'], description, info['lien']])
                     liens_vus.add(info['lien'])
                     compteur_page += 1
-                    print(f"🏠 {info['lieu']} récupéré.")
+                    logger.info("Annonce récupérée : %s", info['lieu'])
                     time.sleep(random.uniform(1, 2))
 
-                except Exception:
+                except Exception as exc:
+                    erreurs += 1
+                    logger.warning("Erreur lors de la récupération d'une annonce : %s", exc)
                     driver.get(SEARCH_URL.format(page_num))
                     continue
 
-            print(f"📊 Page {page_num} terminée : {compteur_page} annonces sauvegardées.")
+            logger.info("Page %s terminée : %s annonces sauvegardées.", page_num, compteur_page)
 
             if compteur_page == 0:
                 continuer = False
@@ -146,7 +154,10 @@ if __name__ == '__main__':
     driver.quit()
 
     if len(liens_vus) == 0:
-        print(f"❌ ERREUR : 0 annonce trouvée pour Vizzit. Le site a peut-être changé de structure.")
+        logger.error("0 annonce trouvée pour Vizzit. Le site a peut-être changé de structure.")
         sys.exit(1)
 
-    print(f"\n✨ Scraping Vizzit terminé ! {len(liens_vus)} annonces collectées dans : {OUTPUT_PATH}")
+    logger.info(
+        "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
+        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+    )

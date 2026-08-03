@@ -1,11 +1,14 @@
+import logging
 import os
 import sys
+import tempfile
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from scraper_utils import find_first, retry_with_backoff
+import scraper_utils
+from scraper_utils import find_first, get_scraper_logger, retry_with_backoff
 
 
 class FakeElement:
@@ -70,6 +73,43 @@ class RetryWithBackoffTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             always_fails()
+
+
+class GetScraperLoggerTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.patcher = patch.object(scraper_utils, "LOG_DIR", self.tmp_dir.name)
+        self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+        self.tmp_dir.cleanup()
+
+    def _reset_logger(self, name):
+        logger = logging.getLogger(f"scraper.{name}")
+        logger.handlers.clear()
+
+    def test_configures_console_and_file_handlers(self):
+        self._reset_logger("test_site")
+
+        logger = get_scraper_logger("test_site")
+        logger.info("run terminé : 10 trouvées, 3 nouvelles, 0 erreurs")
+
+        self.assertEqual(len(logger.handlers), 2)
+        log_path = os.path.join(self.tmp_dir.name, "test_site.log")
+        self.assertTrue(os.path.exists(log_path))
+        with open(log_path, encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("run terminé : 10 trouvées, 3 nouvelles, 0 erreurs", content)
+
+    def test_is_idempotent_across_repeated_calls(self):
+        self._reset_logger("test_site_2")
+
+        logger1 = get_scraper_logger("test_site_2")
+        logger2 = get_scraper_logger("test_site_2")
+
+        self.assertIs(logger1, logger2)
+        self.assertEqual(len(logger1.handlers), 2)
 
 
 if __name__ == "__main__":

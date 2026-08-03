@@ -26,3 +26,6 @@ Airflow/logs/
 airflow/logs/
 
 Airflow/logs/
+
+# Logs des scrapers (résumés persistés par run, voir ORA-13)
+scripts/logs/

@@ -8,6 +8,9 @@ import os
 import sys
 
 from csv_atomic_writer import atomic_csv_writer
+from scraper_utils import get_scraper_logger
+
+logger = get_scraper_logger("pap")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_pap.csv')
@@ -46,16 +49,17 @@ def scroll_to_bottom(driver):
         if new_height == last_height:
             break
         last_height = new_height
-        print("   ⬇️ Suite chargée...")
+        logger.info("Suite chargée...")
 
 if __name__ == '__main__':
-    print("🥷 Lancement du mode Furtif pour PAP...")
+    logger.info("Lancement du mode Furtif pour PAP...")
 
     options = uc.ChromeOptions()
     driver = uc.Chrome(options=options)
     wait = WebDriverWait(driver, 60)
 
     liens_vus = set()
+    erreurs = 0
 
     with atomic_csv_writer(OUTPUT_PATH, ['Lieu', 'Prix', 'Détails', 'Lien']) as writer:
         page_num = 1
@@ -63,27 +67,27 @@ if __name__ == '__main__':
 
         while continuer:
             url = BASE_URL.format(page_num)
-            print(f"\n--- 📄 Analyse de la Page {page_num} ---")
+            logger.info("Analyse de la page %s", page_num)
             driver.get(url)
 
             if page_num == 1:
-                print("⏳ Attente automatique du chargement des annonces...")
+                logger.info("Attente automatique du chargement des annonces...")
                 card_found = False
                 for sel in CARD_SELECTORS:
                     try:
                         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, sel)))
-                        print(f"✅ Annonces détectées ({sel})")
+                        logger.info("Annonces détectées (%s)", sel)
                         card_found = True
                         break
                     except Exception:
                         continue
                 if not card_found:
-                    print("❌ Impossible de détecter les annonces. Structure inconnue.")
+                    logger.error("Impossible de détecter les annonces. Structure inconnue.")
                     break
 
-            print("🔄 Défilement automatique...")
+            logger.info("Défilement automatique...")
             scroll_to_bottom(driver)
-            print("✅ Page entièrement chargée.")
+            logger.info("Page entièrement chargée.")
             time.sleep(2)
 
             annonces = []
@@ -93,10 +97,10 @@ if __name__ == '__main__':
                     break
 
             if not annonces:
-                print("🛑 Aucune annonce trouvée.")
+                logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
                 break
 
-            print(f"📊 {len(annonces)} annonces détectées.")
+            logger.info("%s annonces détectées.", len(annonces))
             compteur = 0
 
             for annonce in annonces:
@@ -116,18 +120,20 @@ if __name__ == '__main__':
                     if lien in liens_vus:
                         continue
 
-                    print(f"🏠 {lieu} | {details} -- 💰 {prix}")
+                    logger.info("Annonce trouvée : %s | %s -- %s", lieu, details, prix)
                     writer.writerow([lieu, prix, details, lien])
                     liens_vus.add(lien)
                     compteur += 1
 
-                except Exception:
+                except Exception as exc:
+                    erreurs += 1
+                    logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
                     continue
 
-            print(f"✅ Page {page_num} terminée : {compteur} annonces ajoutées.")
+            logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur)
 
             if compteur == 0:
-                print("🏁 Plus de nouvelles annonces.")
+                logger.info("Plus de nouvelles annonces.")
                 continuer = False
             else:
                 page_num += 1
@@ -136,7 +142,10 @@ if __name__ == '__main__':
     driver.quit()
 
     if len(liens_vus) == 0:
-        print(f"❌ ERREUR : 0 annonce trouvée pour PAP. Le site a peut-être changé de structure.")
+        logger.error("0 annonce trouvée pour PAP. Le site a peut-être changé de structure.")
         sys.exit(1)
 
-    print(f"\n✨ Terminé ! {len(liens_vus)} annonces sauvegardées dans {OUTPUT_PATH}")
+    logger.info(
+        "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
+        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+    )

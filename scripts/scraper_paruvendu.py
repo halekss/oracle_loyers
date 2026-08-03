@@ -6,6 +6,9 @@ import os
 import sys
 
 from csv_atomic_writer import atomic_csv_writer
+from scraper_utils import get_scraper_logger
+
+logger = get_scraper_logger("paruvendu")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.join(script_dir, '..', 'backend', 'data', 'annonces_lyon_paruvendu.csv')
@@ -47,24 +50,25 @@ def find_bs4(soup_elem, selectors):
     return None
 
 if __name__ == '__main__':
-    print("🦁 Lancement du Scraper ParuVendu (Mode Rapide)...")
+    logger.info("Lancement du Scraper ParuVendu (Mode Rapide)...")
 
     liens_vus = set()
+    erreurs = 0
     page_num = 1
     continuer = True
 
     with atomic_csv_writer(OUTPUT_PATH, ['Titre', 'Prix', 'Lien']) as writer:
         while continuer:
             url_page = base_url if page_num == 1 else f"{base_url}&p={page_num}"
-            print(f"\n--- 📄 Analyse de la Page {page_num} ---")
+            logger.info("Analyse de la page %s", page_num)
 
             try:
                 response = requests.get(url_page, headers=headers, timeout=15)
                 if response.status_code != 200:
-                    print(f"🛑 Erreur de réponse : {response.status_code}")
+                    logger.error("Erreur de réponse HTTP : %s", response.status_code)
                     break
             except Exception as e:
-                print(f"❌ Erreur connexion : {e}")
+                logger.error("Erreur connexion : %s", e)
                 break
 
             soup = BeautifulSoup(response.text, "html.parser")
@@ -77,7 +81,7 @@ if __name__ == '__main__':
                     break
 
             if not annonces:
-                print("❌ Aucune annonce trouvée (fin des résultats).")
+                logger.warning("Aucune annonce trouvée sur la page %s (fin des résultats).", page_num)
                 break
 
             compteur_page = 0
@@ -100,22 +104,27 @@ if __name__ == '__main__':
                     writer.writerow([titre, prix, lien])
                     liens_vus.add(lien)
                     compteur_page += 1
-                    print(f"🏠 {titre} -- 💰 {prix}")
+                    logger.info("Annonce trouvée : %s -- %s", titre, prix)
 
-                except Exception:
+                except Exception as exc:
+                    erreurs += 1
+                    logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
                     continue
 
-            print(f"✅ Page {page_num} terminée : {compteur_page} annonces ajoutées.")
+            logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_page)
 
             if compteur_page == 0:
-                print("🏁 Plus de nouvelles annonces disponibles.")
+                logger.info("Plus de nouvelles annonces disponibles.")
                 continuer = False
             else:
                 page_num += 1
                 time.sleep(random.uniform(1.5, 3))
 
     if len(liens_vus) == 0:
-        print(f"❌ ERREUR : 0 annonce trouvée pour ParuVendu. Le site a peut-être changé de structure.")
+        logger.error("0 annonce trouvée pour ParuVendu. Le site a peut-être changé de structure.")
         sys.exit(1)
 
-    print(f"\n✨ Terminé ! Total : {len(liens_vus)} annonces sauvegardées dans {OUTPUT_PATH}")
+    logger.info(
+        "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
+        len(liens_vus), len(liens_vus), erreurs, OUTPUT_PATH
+    )
