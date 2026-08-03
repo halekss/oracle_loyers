@@ -177,6 +177,7 @@ data_fusion.py ─────────────────────�
 5.  **`train_model.py`**
     * Entraîne le modèle XGBoost sur `master_immo_final.csv`.
     * Génère le fichier modèle : `backend/models/price_predictor.pkl`, **versionné dans git** (comme `master_immo_final.csv`) pour qu'un environnement fraîchement déployé dispose d'un modèle fonctionnel sans étape manuelle. L'entraînement est déterministe (`random_state=42`) ; relancez `train_model.py` et committez le `.pkl` après toute mise à jour de `master_immo_final.csv`.
+    * Chaque run ajoute une ligne (`trained_at`, `mae`, `r2`, `dataset_size`, `n_features`) à `backend/models/training_metrics.jsonl`, l'historique des métriques d'entraînement permettant de comparer plusieurs versions du modèle dans le temps.
 
 > Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline.
 
