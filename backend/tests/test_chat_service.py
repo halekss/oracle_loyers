@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 import pandas as pd
+from google.genai import errors as genai_errors
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -369,6 +370,86 @@ class ChatServiceTest(unittest.TestCase):
             response = service.get_response("Bonjour", "", pd.DataFrame())
 
         self.assertIn("trop de temps", response)
+
+    def test_returns_quota_message_when_sdk_raises_typed_resource_exhausted_error(self):
+        class QuotaModels(FakeModels):
+            def generate_content(self, **kwargs):
+                raise genai_errors.ClientError(
+                    429,
+                    {
+                        "error": {
+                            "code": 429,
+                            "message": "Resource has been exhausted (e.g. check quota).",
+                            "status": "RESOURCE_EXHAUSTED",
+                        }
+                    },
+                )
+
+        class QuotaClient(FakeClient):
+            def __init__(self, api_key):
+                self.api_key = api_key
+                self.models = QuotaModels()
+                FakeClient.instances.append(self)
+
+        modules = self._fake_google_modules()
+        modules["google.genai"].Client = QuotaClient
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True), patch.dict(sys.modules, modules):
+            service = ChatService()
+            response = service.get_response("Bonjour", "", pd.DataFrame())
+
+        self.assertIn("quota IA", response)
+
+    def test_returns_generic_message_when_sdk_raises_typed_error_without_quota_code(self):
+        class ServerErrorModels(FakeModels):
+            def generate_content(self, **kwargs):
+                raise genai_errors.ServerError(
+                    500,
+                    {
+                        "error": {
+                            "code": 500,
+                            "message": "Internal error encountered.",
+                            "status": "INTERNAL",
+                        }
+                    },
+                )
+
+        class ServerErrorClient(FakeClient):
+            def __init__(self, api_key):
+                self.api_key = api_key
+                self.models = ServerErrorModels()
+                FakeClient.instances.append(self)
+
+        modules = self._fake_google_modules()
+        modules["google.genai"].Client = ServerErrorClient
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True), patch.dict(sys.modules, modules):
+            service = ChatService()
+            response = service.get_response("Bonjour", "", pd.DataFrame())
+
+        self.assertNotIn("quota IA", response)
+        self.assertIn("indisponible", response)
+
+    def test_returns_generic_message_for_non_sdk_exceptions(self):
+        class BoomModels(FakeModels):
+            def generate_content(self, **kwargs):
+                raise ValueError("quota") # message contient "quota" mais n'est pas une erreur typée du SDK
+
+        class BoomClient(FakeClient):
+            def __init__(self, api_key):
+                self.api_key = api_key
+                self.models = BoomModels()
+                FakeClient.instances.append(self)
+
+        modules = self._fake_google_modules()
+        modules["google.genai"].Client = BoomClient
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True), patch.dict(sys.modules, modules):
+            service = ChatService()
+            response = service.get_response("Bonjour", "", pd.DataFrame())
+
+        self.assertNotIn("quota IA", response)
+        self.assertIn("indisponible", response)
 
 
 if __name__ == "__main__":
