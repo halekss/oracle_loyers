@@ -195,7 +195,8 @@ oracle-des-loyers/
 ├── scripts/                   # Scrapers (exécution manuelle, hors DAG Airflow)
 │   ├── scraper_century_21.py, scraper_orpi.py, scraper_pap.py,
 │   │   scraper_paruvendu.py, scraper_seloger.py, scraper_vizzit.py
-│   └── api_overpass.py, api_data_gouv.py  # ⚠️ dupliqués avec backend/scripts/, voir Backlog
+│   ├── scraper_utils.py, csv_atomic_writer.py, scraping_config.json  # Communs aux 6 scrapers
+│   └── api_overpass.py  # ⚠️ dupliqué avec backend/scripts/, voir Backlog (ORA-7)
 │
 ├── backend/                   # API Flask & Logique métier
 │   ├── Dockerfile
