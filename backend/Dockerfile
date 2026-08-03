@@ -15,5 +15,10 @@ COPY . .
 
 EXPOSE 5000
 
+# Healthcheck natif (fonctionne aussi hors docker-compose, ex. déploiement
+# standalone) : lit PORT dynamiquement, comme get_server_port() dans app.py.
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 --start-period=20s \
+  CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"5000\")}/api/health', timeout=3)"
+
 # 3. Lancement du serveur (Flask sur le port 5000)
 CMD ["python", "app.py"]
