@@ -100,6 +100,7 @@ def get_request_json():
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'master_immo_final.csv')
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'price_predictor.pkl')
+MODEL_META_PATH = f"{MODEL_PATH}.meta.json"
 CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_lyon.csv')
 
 # Chargement des services
@@ -125,6 +126,28 @@ except Exception:
     model = None
 
 # --- ROUTES API ---
+
+@app.route('/api/health', methods=['GET'])
+@limiter.exempt
+def health():
+    """Expose la version du modèle de prédiction actuellement chargé (ORA-31)."""
+    model_info = {"model_version": None, "trained_at": None, "metrics": None}
+    try:
+        with open(MODEL_META_PATH, encoding='utf-8') as f:
+            meta = json.load(f)
+        model_info = {
+            "model_version": meta.get("model_version"),
+            "trained_at": meta.get("trained_at"),
+            "metrics": meta.get("metrics"),
+        }
+    except Exception:
+        pass
+
+    return jsonify({
+        "status": "ok" if model is not None else "degraded",
+        "model_loaded": model is not None,
+        "model": model_info,
+    })
 
 @app.route('/api/listings', methods=['GET'])
 def get_listings():

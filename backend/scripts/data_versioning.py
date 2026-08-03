@@ -48,10 +48,21 @@ def snapshot_dataset(csv_path, snapshots_dir):
     return file_hash
 
 
-def record_model_metadata(model_path, *, data_snapshot_sha256, data_snapshot_file, metrics):
+def record_model_metadata(
+    model_path,
+    *,
+    data_snapshot_sha256,
+    data_snapshot_file,
+    metrics,
+    model_version=None,
+    hyperparameters=None,
+):
     """Écrit `<model_path>.meta.json`, référençant explicitement la version des données
     utilisée pour entraîner ce modèle (ORA-28) ainsi que ses métriques, pour pouvoir
     reproduire un ancien modèle à partir de son snapshot de données.
+
+    `model_version` (hash du binaire du modèle) et `hyperparameters` sont optionnels
+    (ORA-31) : un appelant qui ne les fournit pas obtient le même comportement qu'avant.
     """
     meta_path = f"{model_path}.meta.json"
     metadata = {
@@ -60,6 +71,32 @@ def record_model_metadata(model_path, *, data_snapshot_sha256, data_snapshot_fil
         'data_snapshot_file': data_snapshot_file,
         'metrics': metrics,
     }
+    if model_version is not None:
+        metadata['model_version'] = model_version
+    if hyperparameters is not None:
+        metadata['hyperparameters'] = hyperparameters
     with open(meta_path, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
     return meta_path
+
+
+def archive_model_version(model_path, model_bytes, model_version, versions_dir=None):
+    """Conserve une copie du modèle sous un nom versionné (hash du binaire), pour
+    pouvoir revenir à une version antérieure sans réentraîner (ORA-31, voir
+    rollback_model.py). N'écrase pas une version déjà archivée (contenu identique
+    => hash identique => fichier déjà présent).
+
+    Renvoie le chemin du fichier versionné.
+    """
+    if versions_dir is None:
+        versions_dir = os.path.join(os.path.dirname(model_path), 'versions')
+    os.makedirs(versions_dir, exist_ok=True)
+
+    name, ext = os.path.splitext(os.path.basename(model_path))
+    versioned_path = os.path.join(versions_dir, f"{name}_{model_version}{ext}")
+
+    if not os.path.exists(versioned_path):
+        with open(versioned_path, 'wb') as f:
+            f.write(model_bytes)
+
+    return versioned_path
