@@ -5,6 +5,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
+from services.predictor import build_feature_row, estimate_confidence
 import joblib
 
 # Initialisation de l'application
@@ -64,10 +65,18 @@ def get_request_json():
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'master_immo_final.csv')
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'price_predictor.pkl')
+CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_lyon.csv')
 
 # Chargement des services
 print("Chargement des données...")
 data_loader = DataLoader(DATA_PATH)
+
+print("Chargement des points d'intérêt (cavaliers)...")
+try:
+    cavaliers_df = pd.read_csv(CAVALIERS_PATH)
+except Exception:
+    print("⚠️ Attention : cavaliers_lyon.csv introuvable, features de distance à 0 par défaut.")
+    cavaliers_df = None
 
 print("Initialisation d'Immotep (Service Chat)...")
 chat_service = ChatService()
@@ -187,16 +196,40 @@ def get_quartier_stats():
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
-    """Prédiction via Machine Learning (XGBoost) - Placeholder fonctionnel"""
+    """Prédiction de prix via le modèle Machine Learning (XGBoost) chargé en mémoire."""
+    if model is None:
+        return jsonify({"error": "Modèle de prédiction indisponible sur ce serveur"}), 500
+
+    df = data_loader.get_data()
+    if df is None or df.empty:
+        return jsonify({"error": "Données de référence indisponibles"}), 500
+
     try:
-        # Ici on utilise un mock pour l'instant car ton utils.py dépend de ça
-        return jsonify({
-            "estimated_price": 0, 
-            "price_m2": 0, 
-            "confiance": "Non disponible"
-        })
+        payload = get_request_json()
+    except Exception:
+        return jsonify({"error": "Payload JSON invalide"}), 400
+
+    features_df, result = build_feature_row(payload, df, cavaliers_df, list(model.feature_names_in_))
+    if features_df is None:
+        return jsonify({"error": "Payload invalide", "details": result}), 400
+
+    try:
+        estimated_price = float(model.predict(features_df)[0])
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Erreur lors de la prédiction : {e}"}), 500
+
+    surface = result["surface"]
+    price_m2 = estimated_price / surface if surface else 0.0
+    confidence, comparables = estimate_confidence(df, result["quartier"], result["type_local"])
+
+    return jsonify({
+        "estimated_price": round(estimated_price, 0),
+        "price_m2": round(price_m2, 0),
+        "confiance": confidence,
+        "comparables": comparables,
+        "quartier_detecte": result["quartier"],
+        "type_local_detecte": result["type_local"],
+    })
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
