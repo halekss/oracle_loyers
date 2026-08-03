@@ -9,7 +9,15 @@ import joblib
 
 # Initialisation de l'application
 app = Flask(__name__)
-DEFAULT_CORS_ORIGINS = ['https://oracle-loyers.onrender.com']
+# Origines de confiance toujours autorisées, même sans CORS_ORIGINS : le
+# déploiement de démo et les serveurs de dev locaux (Vite). Pas de fallback
+# sur '*' pour éviter qu'un CORS_ORIGINS oublié n'ouvre l'API à n'importe
+# quelle origine.
+DEFAULT_CORS_ORIGINS = [
+    'https://oracle-loyers.onrender.com',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
 
 
 def normalize_origin(origin):
@@ -18,8 +26,6 @@ def normalize_origin(origin):
 
 def get_cors_origins():
     origins = os.environ.get('CORS_ORIGINS', '').strip()
-    if not origins:
-        return '*'
 
     allowed_origins = []
     for origin in origins.split(','):
@@ -38,7 +44,9 @@ def get_server_port():
     return int(os.environ.get('PORT', '5000'))
 
 
-CORS(app, origins=get_cors_origins())  # Autorise les requêtes du Frontend React
+cors_origins = get_cors_origins()
+print(f"🔒 Politique CORS effective : {cors_origins}")
+CORS(app, origins=cors_origins)  # Autorise les requêtes du Frontend React
 
 
 def get_request_json():
