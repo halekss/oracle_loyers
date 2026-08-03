@@ -3,6 +3,8 @@ import pandas as pd
 import time
 import os
 
+from scraper_utils import retry_with_backoff
+
 # 1. Vos données manuelles
 lieux_a_ajouter = [
     {"adresse": "17 Rue Docteur Bouchut", "nom": "Passage du Désir"},
@@ -14,11 +16,16 @@ lieux_a_ajouter = [
 
 FILENAME = "cavaliers_lyon.csv"  # Le nom de votre fichier existant
 
+@retry_with_backoff(max_retries=3, backoff_seconds=2, exceptions=(requests.exceptions.RequestException,))
+def _fetch_geocodage(url, params):
+    return requests.get(url, params=params, timeout=15)
+
+
 def geocode_adresse(adresse, ville="Lyon"):
     url = "https://api-adresse.data.gouv.fr/search/"
     params = {"q": f"{adresse} {ville}", "limit": 1}
     try:
-        r = requests.get(url, params=params)
+        r = _fetch_geocodage(url, params)
         if r.status_code == 200 and r.json()['features']:
             coords = r.json()['features'][0]['geometry']['coordinates']
             return coords[1], coords[0] # (Lat, Lon)
