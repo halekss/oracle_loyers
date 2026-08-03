@@ -5,6 +5,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flasgger import Swagger
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
@@ -51,6 +52,36 @@ def get_server_port():
 cors_origins = get_cors_origins()
 print(f"🔒 Politique CORS effective : {cors_origins}")
 CORS(app, origins=cors_origins)  # Autorise les requêtes du Frontend React
+
+# Documentation interactive Swagger/OpenAPI, accessible sur /apidocs (voir
+# aussi API_CONTRACT.md à la racine du dépôt pour le contrat détaillé).
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": "apispec",
+            "route": "/apispec.json",
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda tag: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/apidocs/",
+}
+swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "Oracle des Loyers — API",
+        "description": (
+            "Documentation interactive des routes exposées par le backend Flask. "
+            "Voir API_CONTRACT.md à la racine du dépôt pour le contrat détaillé "
+            "(codes d'erreur, exemples complets)."
+        ),
+        "version": "1.0.0",
+    },
+}
+swagger = Swagger(app, config=swagger_config, template=swagger_template)
 
 
 def get_default_rate_limits():
@@ -151,7 +182,30 @@ def health():
 
 @app.route('/api/listings', methods=['GET'])
 def get_listings():
-    """Renvoie les données pour la carte (limité pour la performance)"""
+    """
+    Renvoie les annonces utilisées pour l'affichage sur la carte.
+    ---
+    tags:
+      - Annonces
+    responses:
+      200:
+        description: Liste des annonces (colonnes réduites, NaN remplacés par '')
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              latitude:
+                type: number
+              longitude:
+                type: number
+              prix:
+                type: number
+              type_local:
+                type: string
+              quartier:
+                type: string
+    """
     df = data_loader.get_data()
     if df is None:
         return jsonify([])
@@ -163,9 +217,38 @@ def get_listings():
 @app.route('/api/quartier-stats', methods=['POST'])
 def get_quartier_stats():
     """
-    SCAN DE QUARTIER (Données Réelles CSV).
-    Ne fait PAS appel au Machine Learning.
-    Filtre le dataframe par nom de quartier et par type de bien.
+    Statistiques réelles (prix moyen, prix/m², nombre de biens) pour un quartier.
+    Scan de quartier basé uniquement sur le CSV de données réelles : ne fait
+    PAS appel au modèle de Machine Learning.
+    ---
+    tags:
+      - Quartier
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - quartier
+          properties:
+            quartier:
+              type: string
+              example: Gerland
+            type_local:
+              type: string
+              example: T2
+              default: Tout
+    responses:
+      200:
+        description: >
+          Statistiques du quartier (found=true, avec count/prix_moyen/
+          prix_m2_moyen/center), ou found=false avec un message si aucun bien
+          ne correspond au quartier demandé.
+      400:
+        description: Le nom du quartier est manquant ou vide
+      500:
+        description: Données non disponibles ou erreur de traitement
     """
     try:
         raw_payload = get_request_json()
@@ -259,7 +342,50 @@ def get_quartier_stats():
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
-    """Prédiction de prix via le modèle Machine Learning (XGBoost) chargé en mémoire."""
+    """
+    Prédiction de prix via le modèle Machine Learning (XGBoost) chargé en mémoire.
+    ---
+    tags:
+      - Prédiction
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - surface
+            - quartier
+            - type_local
+          properties:
+            surface:
+              type: number
+              example: 45
+            quartier:
+              type: string
+              example: Gerland
+            type_local:
+              type: string
+              example: T2
+            type:
+              type: string
+              example: Appartement
+            latitude:
+              type: number
+            longitude:
+              type: number
+            code_postal:
+              type: number
+    responses:
+      200:
+        description: >
+          Estimation chiffrée (estimated_price, price_m2, confiance,
+          comparables, quartier_detecte, type_local_detecte)
+      400:
+        description: Payload invalide (champs manquants ou mal typés)
+      500:
+        description: Modèle ou données de référence indisponibles
+    """
     if model is None:
         return jsonify({"error": "Modèle de prédiction indisponible sur ce serveur"}), 500
 
@@ -305,7 +431,38 @@ def predict():
 @app.route('/api/chat', methods=['POST'])
 @limiter.limit(get_chat_rate_limit)
 def chat():
-    """Route pour le Chatbot Immotep"""
+    """
+    Chatbot Immotep : réponse groundée sur les données réelles, ou via Gemini.
+    ---
+    tags:
+      - Chat
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - message
+          properties:
+            message:
+              type: string
+              example: Que vaut un T2 à Gerland ?
+            context:
+              type: string
+              example: "Quartier: Gerland, Type: T2"
+    responses:
+      200:
+        description: >
+          Réponse du chatbot, incluant selon le cas intent/parsed/
+          recommendations/comparisons/map_focus
+      400:
+        description: Message vide ou payload invalide
+      429:
+        description: Limite de requêtes dépassée (RATE_LIMIT_CHAT)
+      500:
+        description: Erreur interne côté serveur
+    """
     try:
         data = get_request_json()
 
