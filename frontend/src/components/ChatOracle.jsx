@@ -87,9 +87,9 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
       {/* --- ZONE DE MESSAGES (Scrollable) --- */}
       <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
         {messages.map((msg, idx) => (
-          <div key={idx} className={`flex w-full ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            
-            <div 
+          <div key={idx} data-testid="chat-message" data-sender={msg.sender} className={`flex w-full ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+
+            <div
               className={`max-w-[88%] md:max-w-[82%] px-4 py-3 rounded-xl text-sm leading-relaxed shadow-md backdrop-blur-sm ${
                 msg.sender === 'user' 
                   ? 'bg-indigo-600 text-white rounded-br-sm' 
