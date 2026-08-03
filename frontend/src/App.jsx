@@ -51,12 +51,22 @@ function App() {
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
 
         {/* COLONNE GAUCHE — Carte (60% desktop, plein écran mobile) */}
-        <div className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-slate-800`}>
+        <div
+          id="panel-carte"
+          role="tabpanel"
+          aria-labelledby="tab-carte"
+          className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-slate-800`}
+        >
           <MapComponent center={mapCenter} />
         </div>
 
         {/* COLONNE DROITE — Oracle (40% desktop, plein écran mobile) */}
-        <div className={`${activeTab === 'oracle' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[40%] h-full bg-slate-900/95 backdrop-blur-md relative z-10`}>
+        <div
+          id="panel-oracle"
+          role="tabpanel"
+          aria-labelledby="tab-oracle"
+          className={`${activeTab === 'oracle' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[40%] h-full bg-slate-900/95 backdrop-blur-md relative z-10`}
+        >
 
           {/* En-tête / Recherche */}
           <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-950/50 z-20">
@@ -99,8 +109,23 @@ function App() {
       </div>
 
       {/* Barre d'onglets — mobile uniquement */}
-      <nav className="md:hidden flex-none h-14 bg-slate-950 border-t border-slate-800 flex items-stretch z-50">
+      <nav
+        role="tablist"
+        aria-label="Navigation principale"
+        className="md:hidden flex-none h-14 bg-slate-950 border-t border-slate-800 flex items-stretch z-50"
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            setActiveTab((prev) => (prev === 'carte' ? 'oracle' : 'carte'));
+          }
+        }}
+      >
         <button
+          role="tab"
+          id="tab-carte"
+          aria-selected={activeTab === 'carte'}
+          aria-controls="panel-carte"
+          tabIndex={activeTab === 'carte' ? 0 : -1}
           onClick={() => setActiveTab('carte')}
           className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${
             activeTab === 'carte' ? 'text-purple-400' : 'text-slate-500'
@@ -115,6 +140,11 @@ function App() {
         </button>
 
         <button
+          role="tab"
+          id="tab-oracle"
+          aria-selected={activeTab === 'oracle'}
+          aria-controls="panel-oracle"
+          tabIndex={activeTab === 'oracle' ? 0 : -1}
           onClick={() => setActiveTab('oracle')}
           className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${
             activeTab === 'oracle' ? 'text-purple-400' : 'text-slate-500'
