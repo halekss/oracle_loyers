@@ -23,6 +23,11 @@ OUTPUT_FINAL_CSV = os.path.join(data_dir, "master_immo_final.csv")
 
 # Paramètres globaux
 RADIUS_METERS = 500
+# Seed fixe du jitter géographique : garantit qu'à données brutes égales,
+# deux exécutions du pipeline produisent des coordonnées identiques (donc
+# des features de distance et un modèle identiques). Ne pas changer sans
+# ré-entraîner et recommitter price_predictor.pkl.
+GEOCODING_JITTER_SEED = 42
 POLYGONS_MAP = {} # Stockage des formes géographiques
 FALLBACK_ZONES = {
     "69001": {"lat": 45.7705, "lon": 4.8306, "radius": 0.005},
@@ -91,6 +96,7 @@ def clean_zipcode(val):
 
 def step_geocoding(df):
     print("\n📍 ETAPE 1 : Géocodage & Jitter...")
+    random.seed(GEOCODING_JITTER_SEED)
     build_shapes_from_cavaliers()
     
     df['code_postal'] = df['code_postal'].fillna(69000).apply(clean_zipcode)
