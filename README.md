@@ -277,6 +277,8 @@ Les 6 scrapers tirent à chaque run un User-Agent réaliste au hasard dans un po
 
 **Affichage des annonces — photo hébergée vs lien (ORA-93, epic ORA-80) :** vérifié dans les en-têtes CSV de sortie des 6 scrapers (`atomic_csv_writer(OUTPUT_PATH, [...])` dans chaque `scraper_*.py`) : aucune colonne photo/image n'est collectée ni stockée, sur aucun des 6 sites. Chaque annonce n'expose que des champs texte (titre, prix, lieu, détails) et un lien `Lien` vers l'annonce originale. L'application n'héberge donc aucune photo scrapée — elle renvoie vers la source, à la manière d'un agrégateur/moteur de recherche. Ceci limite significativement le risque de reproduction non autorisée de contenu protégé (photos) par rapport à un hébergement direct.
 
+**Décision explicite (ORA-94, epic ORA-80) :** ce constat est formalisé en décision produit dans [`LEGAL_DECISIONS.md`](./LEGAL_DECISIONS.md) — l'application ne doit jamais héberger de photo d'annonce scrapée (ni capture d'écran du site source en guise de thumbnail), uniquement un lien de redirection vers l'annonce d'origine. Implication directe pour les tickets frontend ORA-87/ORA-88/ORA-89 : pas de balise `<img>` pointant vers une photo scrapée dans les composants d'affichage des annonces.
+
 ### 📦 Versioning des snapshots de données
 
 Chaque exécution de `train_model.py` archive un instantané de `master_immo_final.csv` via `backend/scripts/data_versioning.py` (équivalent léger à DVC, sans dépendance ni stockage distant à configurer) :
