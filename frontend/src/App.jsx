@@ -1,9 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import SearchForm from './components/SearchForm';
 import ResultCard from './components/ResultCard';
 import MapComponent from './components/MapComponent';
 import ChatOracle from './components/ChatOracle';
 import { api } from './services/api';
+
+// Correspond au breakpoint `md` de Tailwind : au-delà, les deux panneaux
+// (carte + oracle) restent visibles simultanément, donc la carte doit
+// toujours être montée. En dessous, elle ne doit se monter que si son
+// onglet mobile est actif, pour éviter de charger l'iframe (4 Mo) inutilement.
+const DESKTOP_MEDIA_QUERY = '(min-width: 768px)';
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => window.matchMedia(DESKTOP_MEDIA_QUERY).matches
+  );
+
+  useEffect(() => {
+    const mql = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const handleChange = (e) => setIsDesktop(e.matches);
+    mql.addEventListener('change', handleChange);
+    return () => mql.removeEventListener('change', handleChange);
+  }, []);
+
+  return isDesktop;
+}
 
 function App() {
   const [result, setResult] = useState(null);
@@ -12,6 +33,8 @@ function App() {
   const [chatContext, setChatContext] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
   const [activeTab, setActiveTab] = useState('oracle');
+  const isDesktop = useIsDesktop();
+  const shouldMountMap = isDesktop || activeTab === 'carte';
 
   const handleScan = async (quartier, typeLocal) => {
     setLoading(true);
@@ -57,7 +80,7 @@ function App() {
           aria-labelledby="tab-carte"
           className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-slate-800`}
         >
-          <MapComponent center={mapCenter} />
+          {shouldMountMap && <MapComponent center={mapCenter} />}
         </div>
 
         {/* COLONNE DROITE — Oracle (40% desktop, plein écran mobile) */}
