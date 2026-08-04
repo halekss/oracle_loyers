@@ -68,49 +68,6 @@ curl http://localhost:5000/api/listings
 
 ---
 
-## `GET /api/listings/<listing_id>/views`
-
-Renvoie le nombre de vues enregistrées pour une annonce (ORA-92). `listing_id` correspond à `id_annonce` dans `master_immo_final.csv`.
-
-- **Payload d'entrée** : aucun.
-- **Réponse `200`** :
-
-```json
-{ "id": "42", "views": 3 }
-```
-
-Une annonce jamais vue renvoie `"views": 0` (pas d'erreur `404`).
-
-Exemple :
-
-```bash
-curl http://localhost:5000/api/listings/42/views
-```
-
----
-
-## `POST /api/listings/<listing_id>/views`
-
-Incrémente le compteur de vues d'une annonce (ORA-92). Déclenché par le clic sur un marker de la carte statique (`backend/scripts/generate_map.py`) juste avant la redirection vers l'annonce source.
-
-- **Payload d'entrée** : aucun.
-- **Réponse `201`** :
-
-```json
-{ "id": "42", "views": 4 }
-```
-
-- **Codes d'erreur** :
-  - `429` si la limite dédiée à cette route est dépassée (`RATE_LIMIT_LISTING_VIEW`, défaut `30 per minute` par IP — protège le compteur contre une inflation artificielle) : `{ "error": "Trop de requêtes. Réessayez dans quelques instants." }`
-
-Exemple :
-
-```bash
-curl -X POST http://localhost:5000/api/listings/42/views
-```
-
----
-
 ## `POST /api/quartier-stats`
 
 Calcule des statistiques réelles (prix moyen, prix/m², nombre de biens) à partir du CSV de données, pour un quartier et un type de bien donnés. **N'appelle pas le modèle de Machine Learning.**

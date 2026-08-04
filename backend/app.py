@@ -11,7 +11,6 @@ from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
-from services.view_counter import ViewCounterService
 from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
 
@@ -114,15 +113,6 @@ def get_chat_rate_limit():
     return os.environ.get('RATE_LIMIT_CHAT', '15 per hour')
 
 
-def get_listing_view_rate_limit():
-    """
-    Limite dédiée à l'incrément de vues par annonce : évite qu'un client
-    unique ne gonfle artificiellement un compteur. Configurable via
-    RATE_LIMIT_LISTING_VIEW.
-    """
-    return os.environ.get('RATE_LIMIT_LISTING_VIEW', '30 per minute')
-
-
 @app.errorhandler(429)
 def handle_rate_limit_exceeded(error):
     return jsonify({"error": "Trop de requêtes. Réessayez dans quelques instants."}), 429
@@ -151,7 +141,6 @@ SNAPSHOTS_MANIFEST_PATH = os.path.join(SNAPSHOTS_DIR, 'manifest.csv')
 # Chargement des services
 print("Chargement des données...")
 data_loader = DataLoader(DATA_PATH)
-view_counter = ViewCounterService(os.path.join(BASE_DIR, 'data', 'listing_views.json'))
 
 print("Chargement des points d'intérêt (cavaliers)...")
 try:
@@ -228,43 +217,6 @@ def get_listings():
     # On renvoie les colonnes nécessaires uniquement et on gère les NaN
     data = df[['latitude', 'longitude', 'prix', 'type_local', 'quartier']].fillna('').to_dict(orient='records')
     return jsonify(data)
-
-@app.route('/api/listings/<listing_id>/views', methods=['GET'])
-def get_listing_views(listing_id):
-    """
-    Renvoie le nombre de vues enregistrées pour une annonce.
-    ---
-    tags:
-      - Annonces
-    parameters:
-      - name: listing_id
-        in: path
-        type: string
-        required: true
-    responses:
-      200:
-        description: Compteur de vues courant de l'annonce
-    """
-    return jsonify({"id": listing_id, "views": view_counter.get_count(listing_id)})
-
-@app.route('/api/listings/<listing_id>/views', methods=['POST'])
-@limiter.limit(get_listing_view_rate_limit)
-def record_listing_view(listing_id):
-    """
-    Incrémente le compteur de vues d'une annonce (ex: au clic vers l'annonce source).
-    ---
-    tags:
-      - Annonces
-    parameters:
-      - name: listing_id
-        in: path
-        type: string
-        required: true
-    responses:
-      201:
-        description: Nouveau compteur de vues de l'annonce
-    """
-    return jsonify({"id": listing_id, "views": view_counter.increment(listing_id)}), 201
 
 @app.route('/api/quartier-stats', methods=['POST'])
 def get_quartier_stats():

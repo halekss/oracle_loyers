@@ -4,28 +4,24 @@ import os
 import random
 import json
 import html
-import sys
-from urllib.parse import quote
+import logging
+from datetime import datetime, timezone
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("generate_map")
 
 # --- 1. CONFIGURATION ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.dirname(SCRIPT_DIR)
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
-
-from services.view_counter import ViewCounterService
-
 DATA_DIR = os.path.join(BACKEND_DIR, 'data')
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 FRONTEND_DATA_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'public', 'data')
 OUTPUT_HTML = os.path.join(FRONTEND_DATA_DIR, 'map_pings_lyon_calques.html')
+METADATA_JSON = os.path.join(FRONTEND_DATA_DIR, 'map_metadata.json')
 
 IMMO_CSV = os.path.join(DATA_DIR, 'master_immo_final.csv')
 POI_CSV = os.path.join(DATA_DIR, 'cavaliers_lyon.csv')
 METRO_JSON = os.path.join(DATA_DIR, 'metro_lyon.json')
-VIEW_COUNTS_PATH = os.path.join(DATA_DIR, 'listing_views.json')
-
-DEFAULT_API_BASE_URL = 'http://localhost:5000/api'
 
 # --- 2. DATA & COULEURS ---
 COLORS = {
@@ -39,8 +35,6 @@ METRO_COLORS = {
     'C': '#f78e1e', 'D': '#009e49',
     'F1': '#888888', 'F2': '#888888'
 }
-
-IMAGE_COLUMNS = ('image', 'image_url', 'photo', 'photo_url', 'thumbnail')
 
 
 def sanitize_listing_url(url):
@@ -56,123 +50,120 @@ def sanitize_listing_url(url):
     return None
 
 
-def resolve_listing_visual(row, listing_url):
-    """Priorise une photo légitime si les données en fournissent une, sinon retombe sur le lien source."""
-    getter = row.get if hasattr(row, 'get') else lambda key, default=None: default
-    for column in IMAGE_COLUMNS:
-        photo_url = sanitize_listing_url(getter(column))
-        if photo_url:
-            return {"kind": "photo", "url": photo_url}
-    if listing_url:
-        return {"kind": "link", "url": listing_url}
-    return {"kind": "none", "url": None}
+def build_immo_popup_html(type_local, prix, quartier, listing_url=None):
+    """Contenu du popup affiché au survol d'un marker d'annonce (ORA-90).
 
-
-def build_immo_popup_html(type_local, prix, quartier, visual, views=None):
+    N'affiche jamais d'image tirée de l'annonce scrapée : décision légale/éthique
+    actée dans LEGAL_DECISIONS.md (ORA-94) — seul un lien de redirection vers la
+    source est autorisé, aucune reproduction de photo ou de capture d'écran.
+    """
     safe_type = html.escape(str(type_local))
     safe_prix = html.escape(str(prix))
     safe_quartier = html.escape(str(quartier))
 
-    photo_html = ""
     link_html = ""
-    if visual and visual.get("kind") == "photo":
-        safe_photo_url = html.escape(visual["url"], quote=True)
-        photo_html = (
-            f"<img src='{safe_photo_url}' alt='{safe_type}' "
-            "style='width:100%; max-height:120px; object-fit:cover; border-radius:8px; margin-bottom:6px;' />"
-        )
-    elif visual and visual.get("kind") == "link":
-        safe_link_url = html.escape(visual["url"], quote=True)
+    if listing_url:
+        safe_link_url = html.escape(listing_url, quote=True)
         link_html = (
             f"<a href='{safe_link_url}' target='_blank' rel='noopener noreferrer' "
             "style='display:block; font-size:12px; color:#22c55e; margin-top:4px;'>Voir l'annonce &#8599;</a>"
         )
 
-    views_html = ""
-    if views is not None:
-        views_html = f"<div style='color:#64748b; font-size:11px; margin-top:4px;'>{int(views)} vue(s)</div>"
-
     return f"""
     <div style='font-family:sans-serif; min-width:140px;'>
-        {photo_html}
         <h4 style='margin:0 0 5px 0; color:#22c55e; border-bottom:1px solid #334155; padding-bottom:3px;'>{safe_type}</h4>
         <div style='font-size:15px; font-weight:bold; margin-bottom:5px;'>{safe_prix} €</div>
         <div style='color:#94a3b8; font-size:12px;'>{safe_quartier}</div>
-        {views_html}
         {link_html}
     </div>
     """
 
 
-def build_marker_click_script(marker_var, listing_id, redirect_url, api_base_url):
-    """Lie un clic sur le marker à un incrément de vues (best-effort) puis à l'ouverture de l'annonce source."""
+def build_marker_click_script(marker_var, redirect_url):
+    """Lie le clic sur un marker à l'ouverture de l'annonce source (ORA-90).
+
+    `redirect_url` est resanitisé et échappé via json.dumps avant interpolation
+    JS : c'est une donnée scrapée externe, jamais fiable telle quelle.
+    """
     safe_redirect_url = sanitize_listing_url(redirect_url)
     if not safe_redirect_url:
         return ""
 
     redirect_js = json.dumps(safe_redirect_url)
-
-    fetch_line = ""
-    if listing_id is not None:
-        view_endpoint = f"{api_base_url.rstrip('/')}/listings/{quote(str(listing_id), safe='')}/views"
-        endpoint_js = json.dumps(view_endpoint)
-        fetch_line = (
-            f"    try {{ fetch({endpoint_js}, {{method: 'POST'}}).catch(function(){{}}); }} catch (e) {{}}\n"
-        )
-
     return (
         f"if (typeof {marker_var} !== 'undefined') {{\n"
         f"  {marker_var}.on('click', function() {{\n"
-        f"{fetch_line}"
         f"    window.open({redirect_js}, '_blank', 'noopener,noreferrer');\n"
         "  });\n"
         "}"
     )
 
 
-def load_immo_dataframe(csv_path):
+def write_map_metadata(metadata_path, output_html=None, extra=None):
+    """Écrit un petit fichier JSON de métadonnées à côté de la carte générée,
+    pour exposer un contrôle de fraîcheur (date de dernière génération) visible
+    sans avoir à ouvrir la carte elle-même (ORA-54).
+
+    `metadata_path` : chemin du fichier JSON à écrire (ex: .../map_metadata.json)
+    `output_html`   : chemin de la carte HTML associée (optionnel, informatif)
+    `extra`         : dict de champs additionnels à fusionner dans les métadonnées
+
+    Renvoie le dict de métadonnées écrit.
+    """
+    os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+
+    generated_at = datetime.now(timezone.utc).isoformat()
+    metadata = {"generated_at": generated_at}
+    if output_html is not None:
+        metadata["map_file"] = os.path.basename(output_html)
+    if extra:
+        metadata.update(extra)
+
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+    logger.info("Métadonnées de la carte écrites dans %s (generated_at=%s)", metadata_path, generated_at)
+    return metadata
+
+
+def main():
+    # --- 3. CHARGEMENT DONNEES ---
+    # A. Immo
     try:
-        if os.path.exists(csv_path):
-            df_immo = pd.read_csv(csv_path, sep=None, engine='python')
+        if os.path.exists(IMMO_CSV):
+            df_immo = pd.read_csv(IMMO_CSV, sep=None, engine='python')
             df_immo.columns = df_immo.columns.str.strip().str.lower()
             for col in ['latitude', 'longitude']:
-                if col in df_immo.columns:
-                    df_immo[col] = pd.to_numeric(df_immo[col], errors='coerce')
-            return df_immo
-        return pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
+                if col in df_immo.columns: df_immo[col] = pd.to_numeric(df_immo[col], errors='coerce')
+        else: df_immo = pd.DataFrame()
+    except: df_immo = pd.DataFrame()
 
-
-def load_poi_dataframe(csv_path):
+    # B. Cavaliers
     df_poi = pd.DataFrame()
     try:
-        if os.path.exists(csv_path):
-            df_poi = pd.read_csv(csv_path, sep=None, engine='python')
+        if os.path.exists(POI_CSV):
+            df_poi = pd.read_csv(POI_CSV, sep=None, engine='python')
             df_poi.columns = df_poi.columns.str.strip().str.lower()
-            if 'categorie_cavalier' in df_poi.columns:
-                df_poi['type'] = df_poi['categorie_cavalier']
-            elif 'type_osm' in df_poi.columns:
-                df_poi['type'] = df_poi['type_osm']
-            if 'nom_lieu' in df_poi.columns:
-                df_poi['nom'] = df_poi['nom_lieu']
+            if 'categorie_cavalier' in df_poi.columns: df_poi['type'] = df_poi['categorie_cavalier']
+            elif 'type_osm' in df_poi.columns: df_poi['type'] = df_poi['type_osm']
+            if 'nom_lieu' in df_poi.columns: df_poi['nom'] = df_poi['nom_lieu']
             for col in ['latitude', 'longitude']:
                 if col in df_poi.columns:
                     df_poi[col] = df_poi[col].astype(str).str.replace(',', '.', regex=False)
                     df_poi[col] = pd.to_numeric(df_poi[col], errors='coerce')
-    except Exception:
-        pass
-    return df_poi
+    except: pass
 
-
-def build_map(df_immo, df_poi, view_counter, api_base_url):
+    # --- 4. CARTE ---
+    print("🛑 GENERATION CARTE (METRO LIGNES AUTO)...")
     m = folium.Map(location=[45.7640, 4.8357], zoom_start=13, tiles='CartoDB dark_matter', zoom_control=False)
 
+    # --- CREATION DES GROUPES ---
     fg_studio = folium.FeatureGroup(name='Immo Studio/T1', show=True)
     fg_t2 = folium.FeatureGroup(name='Immo T2', show=True)
     fg_t3 = folium.FeatureGroup(name='Immo T3', show=True)
     fg_t4 = folium.FeatureGroup(name='Immo Grand (T4+)', show=True)
 
+    # Groupe Métro Unifié
     fg_metro = folium.FeatureGroup(name='Metro', show=True)
 
     fg_vice = folium.FeatureGroup(name='Vice', show=True)
@@ -182,7 +173,7 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
 
     click_scripts = []
 
-    # --- GENERATION POINTS IMMO ---
+    # --- 5. GENERATION POINTS IMMO ---
     for _, row in df_immo.iterrows():
         if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')):
             lat = row['latitude'] + random.uniform(-0.0001, 0.0001)
@@ -190,22 +181,15 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
 
             type_local = str(row.get('type_local', '')).strip()
             prix = str(row.get('prix', '?')).replace('.0', '')
-            listing_id = row.get('id_annonce')
             listing_url = sanitize_listing_url(row.get('url'))
-            visual = resolve_listing_visual(row, listing_url)
-            views = view_counter.get_count(listing_id) if listing_id is not None else None
 
-            txt_popup = build_immo_popup_html(type_local, prix, row.get('quartier', 'Lyon'), visual, views=views)
+            txt_popup = build_immo_popup_html(type_local, prix, row.get('quartier', 'Lyon'), listing_url)
 
             target_group = None
-            if type_local == 'Studio/T1':
-                target_group = fg_studio
-            elif type_local == 'T2':
-                target_group = fg_t2
-            elif type_local == 'T3':
-                target_group = fg_t3
-            elif type_local == 'Grand (T4+)':
-                target_group = fg_t4
+            if type_local == 'Studio/T1': target_group = fg_studio
+            elif type_local == 'T2': target_group = fg_t2
+            elif type_local == 'T3': target_group = fg_t3
+            elif type_local == 'Grand (T4+)': target_group = fg_t4
 
             if target_group:
                 marker = folium.CircleMarker(
@@ -214,20 +198,24 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
                 )
                 marker.add_to(target_group)
 
-                script = build_marker_click_script(marker.get_name(), listing_id, listing_url, api_base_url)
+                script = build_marker_click_script(marker.get_name(), listing_url)
                 if script:
                     click_scripts.append(script)
 
-    # --- GESTION DU METRO VIA JSON (LIGNES + STATIONS) ---
+    # --- 6. GESTION DU MÉTRO VIA JSON (LIGNES + STATIONS) ---
     if os.path.exists(METRO_JSON):
         try:
             with open(METRO_JSON, 'r', encoding='utf-8') as f:
                 metro_data = json.load(f)
 
+            # Dictionnaire pour stocker les coordonnées par ligne (ex: {'A': [[lat,lon], [lat,lon]...]})
             stations_by_line = {}
+
+            # 1. DESSINER LES STATIONS (ICONES) ET MEMORISER LES POSITIONS
             count_stations = 0
             for feature in metro_data['features']:
                 if feature['geometry']['type'] == 'Point':
+                    # Données
                     props = feature['properties']
                     coords = feature['geometry']['coordinates']
                     lon, lat = coords[0], coords[1]
@@ -235,13 +223,16 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
                     nom_station = props.get('nom', 'Station')
                     ligne = props.get('ligne', '?')
 
+                    # Sauvegarde pour le tracé de la ligne
                     if ligne not in stations_by_line:
                         stations_by_line[ligne] = []
                     stations_by_line[ligne].append([lat, lon])
 
+                    # Style
                     color = METRO_COLORS.get(ligne, '#888888')
                     popup_txt = f"<b>Station {nom_station}</b><br>Ligne {ligne}"
 
+                    # Icone HTML
                     icon_html = f"""
                     <div style="
                         width: 24px; height: 24px;
@@ -266,6 +257,8 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
                     ).add_to(fg_metro)
                     count_stations += 1
 
+            # 2. DESSINER LES LIGNES EN RELIANT LES POINTS
+            # Si le fichier JSON est bien ordonné, cela reliera les stations dans l'ordre
             for ligne, coords in stations_by_line.items():
                 if len(coords) > 1:
                     folium.PolyLine(
@@ -273,7 +266,7 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
                         color=METRO_COLORS.get(ligne, '#888888'),
                         weight=4,
                         opacity=0.6,
-                        smooth_factor=1.5
+                        smooth_factor=1.5 # Adoucit un peu les angles
                     ).add_to(fg_metro)
 
             print(f"🚇 Métro chargé : {len(stations_by_line)} lignes tracées, {count_stations} stations.")
@@ -281,13 +274,8 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
         except Exception as e:
             print(f"⚠️ Erreur lors du traitement de metro_lyon.json : {e}")
 
-    # --- CAVALIERS ---
-    mapping_simple = {
-        'vice': (fg_vice, COLORS['Vice']),
-        'gentrification': (fg_gentri, COLORS['Gentrification']),
-        'nuisance': (fg_nuisance, COLORS['Nuisance']),
-        'superstition': (fg_superstition, COLORS['Superstition']),
-    }
+    # --- 7. CAVALIERS ---
+    mapping_simple = {'vice': (fg_vice, COLORS['Vice']), 'gentrification': (fg_gentri, COLORS['Gentrification']), 'nuisance': (fg_nuisance, COLORS['Nuisance']), 'superstition': (fg_superstition, COLORS['Superstition'])}
     if 'type' in df_poi.columns:
         for _, row in df_poi.iterrows():
             raw_type = str(row.get('type', '')).lower().strip()
@@ -299,6 +287,7 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
             if target_config and pd.notnull(row.get('latitude')):
                 group, color_hex = target_config
 
+                # Nettoyage Type (ex: "Vice - Bar" -> "Bar")
                 if ' - ' in raw_type:
                     clean_type = raw_type.split(' - ')[-1].title()
                 else:
@@ -316,74 +305,59 @@ def build_map(df_immo, df_poi, view_counter, api_base_url):
                     popup=folium.Popup(txt_popup, max_width=200, className='oracle-popup')
                 ).add_to(group)
 
+    # --- 8. RENDU ---
     fg_studio.add_to(m)
     fg_t2.add_to(m)
     fg_t3.add_to(m)
     fg_t4.add_to(m)
-    fg_metro.add_to(m)
+    fg_metro.add_to(m) # Groupe Unique
     fg_vice.add_to(m)
     fg_gentri.add_to(m)
     fg_nuisance.add_to(m)
     fg_superstition.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
 
-    return m, click_scripts
-
-
-def render_html(m, click_scripts):
     html_out = m.get_root().render()
 
+    # --- 9. HACK CSS/JS (POPUPS, CONTROLE CALQUES, CLIC -> REDIRECTION) ---
     click_scripts_js = "\n".join(click_scripts)
-
     hack = f"""
-<style>
-    .leaflet-control-layers {{ display: none !important; }}
+    <style>
+        .leaflet-control-layers {{ display: none !important; }}
 
-    /* STYLE POPUP DARK */
-    .leaflet-popup-content-wrapper, .leaflet-popup-tip,
-    .leaflet-tooltip.oracle-popup {{
-        background-color: #0f172a !important;
-        color: #f8fafc !important;
-        border: 1px solid #334155 !important;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
-        border-radius: 12px !important;
-    }}
-    .leaflet-popup-close-button {{ color: #94a3b8 !important; }}
-    .leaflet-popup-close-button:hover {{ color: #f8fafc !important; }}
-    .leaflet-interactive {{ cursor: pointer !important; }}
-</style>
+        /* STYLE POPUP DARK */
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip,
+        .leaflet-tooltip.oracle-popup {{
+            background-color: #0f172a !important;
+            color: #f8fafc !important;
+            border: 1px solid #334155 !important;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+            border-radius: 12px !important;
+        }}
+        .leaflet-popup-close-button {{ color: #94a3b8 !important; }}
+        .leaflet-popup-close-button:hover {{ color: #f8fafc !important; }}
+        .leaflet-interactive {{ cursor: pointer !important; }}
+    </style>
 
-<script>
-window.addEventListener("message", function(e) {{
-    if(e.data.type==='TOGGLE_LAYER'){{
-        var labels=document.getElementsByTagName('label');
-        for(var i=0;i<labels.length;i++){{
-            var labelText = labels[i].textContent.trim();
-            if(labelText === e.data.name || labelText.includes(e.data.name)){{
-               var box=labels[i].querySelector('input');
-               if(box && box.checked!==e.data.show) box.click();
+    <script>
+    window.addEventListener("message", function(e) {{
+        if(e.data.type==='TOGGLE_LAYER'){{
+            var labels=document.getElementsByTagName('label');
+            for(var i=0;i<labels.length;i++){{
+                var labelText = labels[i].textContent.trim();
+                if(labelText === e.data.name || labelText.includes(e.data.name)){{
+                   var box=labels[i].querySelector('input');
+                   if(box && box.checked!==e.data.show) box.click();
+                }}
             }}
         }}
-    }}
-}});
-{click_scripts_js}
-</script>
-</body>
-"""
+    }});
+    {click_scripts_js}
+    </script>
+    </body>
+    """
 
-    return html_out.replace('</body>', hack)
-
-
-def main():
-    print("🛑 GENERATION CARTE (METRO LIGNES AUTO)...")
-
-    df_immo = load_immo_dataframe(IMMO_CSV)
-    df_poi = load_poi_dataframe(POI_CSV)
-    view_counter = ViewCounterService(VIEW_COUNTS_PATH)
-    api_base_url = os.environ.get('VITE_API_URL', DEFAULT_API_BASE_URL)
-
-    m, click_scripts = build_map(df_immo, df_poi, view_counter, api_base_url)
-    html_out = render_html(m, click_scripts)
+    html_out = html_out.replace('</body>', hack)
 
     if not os.path.exists(FRONTEND_DATA_DIR):
         os.makedirs(FRONTEND_DATA_DIR)
@@ -392,6 +366,11 @@ def main():
         f.write(html_out)
 
     print(f"🎉 TERMINÉ : {OUTPUT_HTML} (Métro : Lignes reliées automatiquement)")
+
+    # --- 10. CONTRÔLE DE FRAÎCHEUR (ORA-54) ---
+    # Écrit map_metadata.json à côté de la carte, avec la date de génération,
+    # pour détecter facilement une carte périmée si le pipeline de données change.
+    write_map_metadata(METADATA_JSON, output_html=OUTPUT_HTML)
 
 
 if __name__ == "__main__":

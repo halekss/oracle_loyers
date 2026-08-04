@@ -1,10 +1,75 @@
+import json
 import os
 import sys
+import tempfile
 import unittest
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from scripts import generate_map
+
+
+class WriteMapMetadataTest(unittest.TestCase):
+    """Vérifie le contrôle de fraîcheur de la carte statique (ORA-54) :
+    `write_map_metadata` doit écrire un JSON avec un timestamp ISO valide,
+    sans nécessiter une régénération complète de la carte (pas de données lourdes)."""
+
+    def test_writes_metadata_file_with_valid_iso_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            metadata_path = os.path.join(tmp_dir, "map_metadata.json")
+
+            before = datetime.now(timezone.utc)
+            result = generate_map.write_map_metadata(metadata_path)
+            after = datetime.now(timezone.utc)
+
+            self.assertTrue(os.path.exists(metadata_path))
+
+            with open(metadata_path, encoding="utf-8") as f:
+                metadata = json.load(f)
+
+            self.assertIn("generated_at", metadata)
+            self.assertEqual(metadata, result)
+
+            # Le timestamp doit être un ISO 8601 valide et parseable, situé
+            # entre le début et la fin de l'appel (pas figé/codé en dur).
+            generated_at = datetime.fromisoformat(metadata["generated_at"])
+            self.assertLessEqual(before, generated_at)
+            self.assertLessEqual(generated_at, after)
+
+    def test_includes_map_file_and_extra_fields_when_provided(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            metadata_path = os.path.join(tmp_dir, "map_metadata.json")
+            output_html = os.path.join(tmp_dir, "map_pings_lyon_calques.html")
+
+            result = generate_map.write_map_metadata(
+                metadata_path,
+                output_html=output_html,
+                extra={"rows_immo": 42},
+            )
+
+            self.assertEqual(result["map_file"], "map_pings_lyon_calques.html")
+            self.assertEqual(result["rows_immo"], 42)
+
+    def test_creates_parent_directory_if_missing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            nested_dir = os.path.join(tmp_dir, "data")
+            metadata_path = os.path.join(nested_dir, "map_metadata.json")
+
+            self.assertFalse(os.path.exists(nested_dir))
+            generate_map.write_map_metadata(metadata_path)
+            self.assertTrue(os.path.exists(metadata_path))
+
+    def test_overwrites_existing_metadata_with_fresh_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            metadata_path = os.path.join(tmp_dir, "map_metadata.json")
+
+            first = generate_map.write_map_metadata(metadata_path)
+            second = generate_map.write_map_metadata(metadata_path)
+
+            # Un deuxième appel doit rafraîchir la date de génération (contrôle
+            # de fraîcheur), pas conserver l'ancienne valeur silencieusement.
+            self.assertGreaterEqual(second["generated_at"], first["generated_at"])
 
 
 class SanitizeListingUrlTest(unittest.TestCase):
@@ -31,104 +96,57 @@ class SanitizeListingUrlTest(unittest.TestCase):
         self.assertIsNone(generate_map.sanitize_listing_url("   "))
 
 
-class ResolveListingVisualTest(unittest.TestCase):
-    def test_prefers_legit_photo_over_link(self):
-        row = {"image_url": "https://cdn.example.com/photo.jpg", "url": "https://example.com/annonce/3"}
-
-        visual = generate_map.resolve_listing_visual(row, "https://example.com/annonce/3")
-
-        self.assertEqual(visual, {"kind": "photo", "url": "https://cdn.example.com/photo.jpg"})
-
-    def test_falls_back_to_link_when_no_photo_column(self):
-        row = {"url": "https://example.com/annonce/4"}
-
-        visual = generate_map.resolve_listing_visual(row, "https://example.com/annonce/4")
-
-        self.assertEqual(visual, {"kind": "link", "url": "https://example.com/annonce/4"})
-
-    def test_falls_back_to_link_when_photo_url_invalid(self):
-        row = {"photo": "javascript:alert(1)", "url": "https://example.com/annonce/5"}
-
-        visual = generate_map.resolve_listing_visual(row, "https://example.com/annonce/5")
-
-        self.assertEqual(visual, {"kind": "link", "url": "https://example.com/annonce/5"})
-
-    def test_none_when_neither_photo_nor_url(self):
-        visual = generate_map.resolve_listing_visual({}, None)
-
-        self.assertEqual(visual, {"kind": "none", "url": None})
-
-
 class BuildImmoPopupHtmlTest(unittest.TestCase):
     def test_includes_price_type_and_quartier(self):
-        html = generate_map.build_immo_popup_html(
-            type_local="T2",
-            prix="750",
-            quartier="Perrache",
-            visual={"kind": "link", "url": "https://example.com/annonce/6"},
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/6",
         )
 
-        self.assertIn("T2", html)
-        self.assertIn("750", html)
-        self.assertIn("Perrache", html)
+        self.assertIn("T2", html_out)
+        self.assertIn("750", html_out)
+        self.assertIn("Perrache", html_out)
 
-    def test_renders_photo_thumbnail_when_visual_is_photo(self):
-        html = generate_map.build_immo_popup_html(
-            type_local="T2",
-            prix="750",
-            quartier="Perrache",
-            visual={"kind": "photo", "url": "https://cdn.example.com/photo.jpg"},
+    def test_renders_link_when_url_present(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/7",
         )
 
-        self.assertIn("<img", html)
-        self.assertIn("https://cdn.example.com/photo.jpg", html)
+        self.assertIn("https://example.com/annonce/7", html_out)
+        self.assertIn("<a ", html_out)
 
-    def test_renders_link_when_visual_is_link(self):
-        html = generate_map.build_immo_popup_html(
-            type_local="T2",
-            prix="750",
-            quartier="Perrache",
-            visual={"kind": "link", "url": "https://example.com/annonce/7"},
+    def test_never_renders_an_image_tag(self):
+        # Décision légale ORA-94 (LEGAL_DECISIONS.md) : aucune photo scrapée ne
+        # doit jamais être reproduite, même si les données en fournissaient une.
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/7",
         )
 
-        self.assertNotIn("<img", html)
-        self.assertIn("https://example.com/annonce/7", html)
-        self.assertIn("<a ", html)
+        self.assertNotIn("<img", html_out)
+
+    def test_omits_link_when_no_url(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache", listing_url=None,
+        )
+
+        self.assertNotIn("<a ", html_out)
 
     def test_escapes_hostile_quartier_value(self):
-        html = generate_map.build_immo_popup_html(
-            type_local="T2",
-            prix="750",
-            quartier="<script>alert(1)</script>",
-            visual={"kind": "none", "url": None},
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="<script>alert(1)</script>", listing_url=None,
         )
 
-        self.assertNotIn("<script>alert(1)</script>", html)
-
-    def test_includes_view_count_when_provided(self):
-        html = generate_map.build_immo_popup_html(
-            type_local="T2",
-            prix="750",
-            quartier="Perrache",
-            visual={"kind": "none", "url": None},
-            views=42,
-        )
-
-        self.assertIn("42", html)
+        self.assertNotIn("<script>alert(1)</script>", html_out)
 
 
 class BuildMarkerClickScriptTest(unittest.TestCase):
     def test_returns_empty_string_when_no_redirect_url(self):
-        script = generate_map.build_marker_click_script(
-            "circle_marker_abc", listing_id="1", redirect_url=None, api_base_url="http://localhost:5000/api"
-        )
+        script = generate_map.build_marker_click_script("circle_marker_abc", redirect_url=None)
 
         self.assertEqual(script, "")
 
     def test_binds_click_handler_and_opens_redirect_url(self):
         script = generate_map.build_marker_click_script(
-            "circle_marker_abc", listing_id="1", redirect_url="https://example.com/annonce/8",
-            api_base_url="http://localhost:5000/api",
+            "circle_marker_abc", redirect_url="https://example.com/annonce/8",
         )
 
         self.assertIn("circle_marker_abc.on('click'", script)
@@ -138,29 +156,15 @@ class BuildMarkerClickScriptTest(unittest.TestCase):
     def test_escapes_redirect_url_against_js_injection(self):
         hostile_url = 'https://example.com/");alert(document.cookie);//'
 
-        script = generate_map.build_marker_click_script(
-            "circle_marker_abc", listing_id="1", redirect_url=hostile_url, api_base_url="http://localhost:5000/api"
-        )
+        script = generate_map.build_marker_click_script("circle_marker_abc", redirect_url=hostile_url)
 
         self.assertNotIn('window.open("https://example.com/");alert', script)
         self.assertIn('\\"', script)
 
-    def test_posts_view_increment_before_redirect_when_listing_id_present(self):
-        script = generate_map.build_marker_click_script(
-            "circle_marker_abc", listing_id="42", redirect_url="https://example.com/annonce/9",
-            api_base_url="http://localhost:5000/api",
-        )
+    def test_rejects_non_http_redirect_url(self):
+        script = generate_map.build_marker_click_script("circle_marker_abc", redirect_url="javascript:alert(1)")
 
-        self.assertIn("fetch(", script)
-        self.assertIn("http://localhost:5000/api/listings/42/views", script)
-
-    def test_skips_view_increment_when_no_listing_id(self):
-        script = generate_map.build_marker_click_script(
-            "circle_marker_abc", listing_id=None, redirect_url="https://example.com/annonce/10",
-            api_base_url="http://localhost:5000/api",
-        )
-
-        self.assertNotIn("fetch(", script)
+        self.assertEqual(script, "")
 
 
 if __name__ == "__main__":
