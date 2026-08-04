@@ -72,6 +72,22 @@ class AnnoncesRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("error", response.get_json())
 
+    def test_log_click_returns_the_updated_view_count(self):
+        created = annonces_store.upsert_annonce(url="https://example.com/click", db_path=self.db_path)
+
+        first = self.client.post(f"/api/annonces/{created['id']}/click")
+        second = self.client.post(f"/api/annonces/{created['id']}/click")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.get_json(), {"logged": True, "views": 1})
+        self.assertEqual(second.get_json(), {"logged": True, "views": 2})
+
+    def test_log_click_returns_404_when_annonce_missing(self):
+        response = self.client.post("/api/annonces/999999/click")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("error", response.get_json())
+
 
 if __name__ == "__main__":
     unittest.main()

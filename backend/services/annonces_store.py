@@ -23,6 +23,8 @@ __all__ = [
     "upsert_annonce",
     "list_annonces",
     "get_annonce_by_id",
+    "log_click",
+    "count_clicks",
 ]
 
 DEFAULT_DB_PATH = os.path.join(
@@ -41,7 +43,7 @@ def get_connection(db_path=DEFAULT_DB_PATH):
 
 
 def init_db(db_path=DEFAULT_DB_PATH):
-    """Crée la table `annonces` si elle n'existe pas encore (ORA-81).
+    """Crée les tables `annonces` et `clics` si elles n'existent pas encore (ORA-81, ORA-91).
 
     `url` est NOT NULL UNIQUE (ORA-82) : c'est la clé utilisée par
     `upsert_annonce` pour dédupliquer (ORA-83).
@@ -61,6 +63,16 @@ def init_db(db_path=DEFAULT_DB_PATH):
                 url TEXT NOT NULL UNIQUE,
                 date_scraping TEXT NOT NULL,
                 images TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS clics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                annonce_id INTEGER NOT NULL,
+                clicked_at TEXT NOT NULL,
+                FOREIGN KEY (annonce_id) REFERENCES annonces(id)
             )
             """
         )
@@ -179,6 +191,36 @@ def get_annonce_by_id(annonce_id, db_path=DEFAULT_DB_PATH):
     finally:
         conn.close()
     return _row_to_dict(row)
+
+
+def log_click(annonce_id, clicked_at=None, db_path=DEFAULT_DB_PATH):
+    """Journalise un clic sortant vers l'annonce `annonce_id` (ORA-91).
+
+    Utilisé pour tracker les redirections vers le site source, et alimenter
+    le compteur de vues (ORA-92, `count_clicks`).
+    """
+    clicked_at = clicked_at or datetime.now(timezone.utc).isoformat()
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO clics (annonce_id, clicked_at) VALUES (?, ?)",
+            (annonce_id, clicked_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def count_clicks(annonce_id, db_path=DEFAULT_DB_PATH):
+    """Nombre de clics enregistrés pour `annonce_id` (ORA-92)."""
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM clics WHERE annonce_id = ?", (annonce_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return row[0]
 
 
 def _row_to_dict(row):

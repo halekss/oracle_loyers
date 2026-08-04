@@ -323,6 +323,33 @@ def get_annonce_detail(annonce_id):
         return jsonify({"error": "Annonce introuvable"}), 404
     return jsonify(annonce)
 
+@app.route('/api/annonces/<int:annonce_id>/click', methods=['POST'])
+def log_annonce_click(annonce_id):
+    """
+    Journalise un clic sortant vers l'annonce source (ORA-91), et renvoie le
+    nouveau total de vues (ORA-92).
+    ---
+    tags:
+      - Annonces
+    parameters:
+      - name: annonce_id
+        in: path
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Clic journalisé
+      404:
+        description: Aucune annonce avec cet id
+    """
+    annonce = annonces_store.get_annonce_by_id(annonce_id, db_path=ANNONCES_DB_PATH)
+    if annonce is None:
+        return jsonify({"error": "Annonce introuvable"}), 404
+
+    annonces_store.log_click(annonce_id, db_path=ANNONCES_DB_PATH)
+    views = annonces_store.count_clicks(annonce_id, db_path=ANNONCES_DB_PATH)
+    return jsonify({"logged": True, "views": views})
+
 @app.route('/api/quartier-stats', methods=['POST'])
 def get_quartier_stats():
     """

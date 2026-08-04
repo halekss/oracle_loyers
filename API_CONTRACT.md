@@ -14,7 +14,7 @@ Toutes les routes `POST` acceptent un corps JSON (`Content-Type: application/jso
 
 **Décision : aucune authentification n'est mise en place sur les routes actuelles.**
 
-Toutes les routes exposées par `backend/app.py` sont en lecture seule ou de simple consultation publique, sans aucune action sensible :
+Toutes les routes exposées par `backend/app.py` sont en lecture seule ou de simple consultation publique, à l'exception du tracking de clics ci-dessous — qui reste une écriture anonyme et non sensible (aucune donnée personnelle, pas d'action destructive) :
 
 | Route | Nature |
 |---|---|
@@ -22,6 +22,7 @@ Toutes les routes exposées par `backend/app.py` sont en lecture seule ou de sim
 | `GET /api/listings` | Lecture — annonces publiques affichées sur la carte |
 | `GET /api/annonces` | Lecture — liste paginée des annonces stockées (aucune écriture) |
 | `GET /api/annonces/<id>` | Lecture — détail d'une annonce stockée (aucune écriture) |
+| `POST /api/annonces/<id>/click` | Écriture — journalisation anonyme d'un clic sortant (compteur de vues, ORA-91/92), aucune donnée personnelle |
 | `POST /api/quartier-stats` | Lecture — agrégats calculés à la volée sur le CSV (aucune écriture) |
 | `POST /api/quartier-historique` | Lecture — historique des snapshots (aucune écriture) |
 | `POST /api/predict` | Lecture — inférence du modèle ML déjà chargé en mémoire (aucune écriture, aucun ré-entraînement) |
@@ -152,6 +153,36 @@ Exemple :
 
 ```bash
 curl http://localhost:5000/api/annonces/1
+```
+
+---
+
+## `POST /api/annonces/<id>/click`
+
+Journalise un clic sortant vers l'annonce source (ORA-91), et renvoie le nouveau total de vues (ORA-92). Chaque appel insère une ligne dans la table `clics` (`annonce_id`, `clicked_at`) — pas de déduplication : plusieurs clics du même visiteur comptent chacun.
+
+### Décision ORA-86 — redirection directe vs modal intermédiaire
+
+**Décision : redirection directe** (`window.open(url, '_blank', 'noopener,noreferrer')` au clic sur une `AnnonceCard`, sans modal de confirmation intermédiaire). Le clic déclenche cet appel `POST` en fire-and-forget (sans bloquer ni retarder la redirection) puis ouvre l'url source dans un nouvel onglet.
+
+Justification :
+- Cohérent avec la posture « agrégateur » déjà actée en ORA-94 (`LEGAL_DECISIONS.md`) : l'application ne fait que pointer vers l'annonce d'origine, elle n'en reproduit ni le contenu ni les visuels — une redirection franche renforce cette distinction (pas d'ambiguïté sur qui héberge quoi).
+- Une modal de confirmation ("Vous quittez Oracle des Loyers...") n'apporte aucune protection réelle ici : aucune donnée utilisateur n'est engagée par le clic, et l'usage (comparateur de loyers) est celui d'un simple lien de renvoi, pas d'une transaction.
+- Le tracking étant fire-and-forget et non bloquant, échouer à le journaliser (backend indisponible, réseau) ne doit jamais empêcher l'utilisateur d'atteindre l'annonce.
+
+- **Payload d'entrée** : aucun (id dans le chemin).
+- **Réponse `200`** :
+
+```json
+{ "logged": true, "views": 3 }
+```
+
+- **Réponse `404`** : `{ "error": "Annonce introuvable" }`.
+
+Exemple :
+
+```bash
+curl -X POST http://localhost:5000/api/annonces/1/click
 ```
 
 ---

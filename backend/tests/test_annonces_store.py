@@ -101,6 +101,28 @@ class AnnoncesStoreTest(unittest.TestCase):
 
         self.assertEqual(fetched["titre"], "T3 Confluence")
 
+    def test_count_clicks_is_zero_when_no_click_logged(self):
+        created = annonces_store.upsert_annonce(url="https://example.com/d", db_path=self.db_path)
+
+        self.assertEqual(annonces_store.count_clicks(created["id"], db_path=self.db_path), 0)
+
+    def test_log_click_increments_the_click_count(self):
+        created = annonces_store.upsert_annonce(url="https://example.com/e", db_path=self.db_path)
+
+        annonces_store.log_click(created["id"], db_path=self.db_path)
+        annonces_store.log_click(created["id"], db_path=self.db_path)
+
+        self.assertEqual(annonces_store.count_clicks(created["id"], db_path=self.db_path), 2)
+
+    def test_log_click_does_not_affect_other_annonces(self):
+        annonce_a = annonces_store.upsert_annonce(url="https://example.com/f", db_path=self.db_path)
+        annonce_b = annonces_store.upsert_annonce(url="https://example.com/g", db_path=self.db_path)
+
+        annonces_store.log_click(annonce_a["id"], db_path=self.db_path)
+
+        self.assertEqual(annonces_store.count_clicks(annonce_a["id"], db_path=self.db_path), 1)
+        self.assertEqual(annonces_store.count_clicks(annonce_b["id"], db_path=self.db_path), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

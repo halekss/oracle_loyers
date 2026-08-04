@@ -76,6 +76,38 @@ export const describeApiError = (error) => {
 };
 
 export const api = {
+  // Liste paginée des annonces — GET /api/annonces (ORA-84)
+  getAnnonces: async ({ ville, quartier, page = 1, perPage = 20 } = {}) => {
+    try {
+      const params = new URLSearchParams();
+      if (ville) params.set('ville', ville);
+      if (quartier) params.set('quartier', quartier);
+      params.set('page', page);
+      params.set('per_page', perPage);
+
+      const response = await fetchWithClassification(`${API_URL}/annonces?${params.toString()}`);
+
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Erreur Annonces:", error);
+      throw error;
+    }
+  },
+
+  // Journalise un clic sortant vers l'annonce source — POST /api/annonces/:id/click (ORA-91)
+  logAnnonceClick: async (annonceId) => {
+    try {
+      const response = await fetchWithClassification(`${API_URL}/annonces/${annonceId}/click`, {
+        method: 'POST',
+      });
+
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Erreur tracking clic annonce:", error);
+      throw error;
+    }
+  },
+
   // SCAN QUARTIER
   getQuartierStats: async (quartierName, typeLocal = 'Tout') => {
     try {

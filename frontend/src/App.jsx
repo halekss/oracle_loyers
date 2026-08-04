@@ -4,6 +4,7 @@ import ResultCard from './components/ResultCard';
 import PriceHistory from './components/PriceHistory';
 import MapComponent from './components/MapComponent';
 import ChatOracle from './components/ChatOracle';
+import AnnoncesList from './components/AnnoncesList';
 import { api, describeApiError } from './services/api';
 
 // Correspond au breakpoint `md` de Tailwind : au-delà, les deux panneaux
@@ -11,6 +12,7 @@ import { api, describeApiError } from './services/api';
 // toujours être montée. En dessous, elle ne doit se monter que si son
 // onglet mobile est actif, pour éviter de charger l'iframe (4 Mo) inutilement.
 const DESKTOP_MEDIA_QUERY = '(min-width: 768px)';
+const MOBILE_TABS = ['carte', 'oracle', 'annonces'];
 
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(
@@ -166,6 +168,15 @@ function App() {
             historique={priceHistory?.historique}
           />
 
+          {/* Annonces récentes (ORA-87/88) — desktop uniquement, l'onglet mobile
+              "Annonces" ci-dessous joue le même rôle en plein écran sur mobile. */}
+          <div className="hidden md:block shrink-0 p-4 border-b border-slate-800">
+            <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
+              Annonces récentes
+            </p>
+            <AnnoncesList compact />
+          </div>
+
           {/* Chat */}
           <div className="flex-1 min-h-0 relative">
             <ChatOracle
@@ -179,6 +190,20 @@ function App() {
             />
           </div>
         </div>
+
+        {/* COLONNE ANNONCES — onglet plein écran mobile uniquement (desktop :
+            un aperçu compact est déjà intégré dans la colonne Oracle ci-dessus) */}
+        <div
+          id="panel-annonces"
+          role="tabpanel"
+          aria-labelledby="tab-annonces"
+          className={`${activeTab === 'annonces' ? 'flex' : 'hidden'} md:hidden flex-col w-full h-full bg-slate-900/95 overflow-y-auto p-4`}
+        >
+          <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-3">
+            Annonces récentes
+          </p>
+          <AnnoncesList />
+        </div>
       </div>
 
       {/* Barre d'onglets — mobile uniquement */}
@@ -189,7 +214,12 @@ function App() {
         onKeyDown={(e) => {
           if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
             e.preventDefault();
-            setActiveTab((prev) => (prev === 'carte' ? 'oracle' : 'carte'));
+            setActiveTab((prev) => {
+              const currentIndex = MOBILE_TABS.indexOf(prev);
+              const delta = e.key === 'ArrowRight' ? 1 : -1;
+              const nextIndex = (currentIndex + delta + MOBILE_TABS.length) % MOBILE_TABS.length;
+              return MOBILE_TABS[nextIndex];
+            });
           }
         }}
       >
@@ -227,6 +257,26 @@ function App() {
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
           <span className="text-[9px] uppercase tracking-widest font-bold">Oracle</span>
+        </button>
+
+        <button
+          role="tab"
+          id="tab-annonces"
+          aria-selected={activeTab === 'annonces'}
+          aria-controls="panel-annonces"
+          tabIndex={activeTab === 'annonces' ? 0 : -1}
+          onClick={() => setActiveTab('annonces')}
+          className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${
+            activeTab === 'annonces' ? 'text-purple-400' : 'text-slate-500'
+          }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+          </svg>
+          <span className="text-[9px] uppercase tracking-widest font-bold">Annonces</span>
         </button>
       </nav>
     </div>
