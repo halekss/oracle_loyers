@@ -12,6 +12,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
       - GEMINI_MAX_OUTPUT_TOKENS=${GEMINI_MAX_OUTPUT_TOKENS:-800}
+      # Doit suivre FRONTEND_PORT : le navigateur appelle ce backend depuis
+      # l'origine http://localhost:<FRONTEND_PORT> servie par le conteneur frontend.
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:${FRONTEND_PORT:-5174}}
       - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE:-0.7}
     command: python app.py
     restart: unless-stopped
@@ -32,12 +35,17 @@ services:
       target: dev
     container_name: oracle_frontend
     ports:
-      - "5173:5173"
+      # Port hôte configurable (FRONTEND_PORT dans .env) : évite un conflit
+      # avec un autre projet qui utiliserait déjà le 5173 en local.
+      - "${FRONTEND_PORT:-5174}:5173"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:5000
+      # Toutes les routes Flask sont sous /api/ (voir backend/app.py) : sans
+      # ce suffixe, chaque appel visait une URL inexistante (404 -> "Requête
+      # invalide" côté frontend, voir services/api.js#classifyResponseError).
+      - VITE_API_URL=http://localhost:5000/api
     depends_on:
       - backend
     command: ["npm", "run", "dev", "--", "--host"]
