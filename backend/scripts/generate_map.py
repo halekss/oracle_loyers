@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import random
 import json
+import html
 import logging
 from datetime import datetime, timezone
 
@@ -34,6 +35,68 @@ METRO_COLORS = {
     'C': '#f78e1e', 'D': '#009e49',
     'F1': '#888888', 'F2': '#888888'
 }
+
+
+def sanitize_listing_url(url):
+    """Ne garde que les URL http(s) valides issues des données scrapées externes."""
+    if not isinstance(url, str):
+        return None
+    candidate = url.strip()
+    if not candidate:
+        return None
+    lowered = candidate.lower()
+    if lowered.startswith('http://') or lowered.startswith('https://'):
+        return candidate
+    return None
+
+
+def build_immo_popup_html(type_local, prix, quartier, listing_url=None):
+    """Contenu du popup affiché au survol d'un marker d'annonce (ORA-90).
+
+    N'affiche jamais d'image tirée de l'annonce scrapée : décision légale/éthique
+    actée dans LEGAL_DECISIONS.md (ORA-94) — seul un lien de redirection vers la
+    source est autorisé, aucune reproduction de photo ou de capture d'écran.
+    """
+    safe_type = html.escape(str(type_local))
+    safe_prix = html.escape(str(prix))
+    safe_quartier = html.escape(str(quartier))
+
+    link_html = ""
+    if listing_url:
+        safe_link_url = html.escape(listing_url, quote=True)
+        link_html = (
+            f"<a href='{safe_link_url}' target='_blank' rel='noopener noreferrer' "
+            "style='display:block; font-size:12px; color:#22c55e; margin-top:4px;'>Voir l'annonce &#8599;</a>"
+        )
+
+    return f"""
+    <div style='font-family:sans-serif; min-width:140px;'>
+        <h4 style='margin:0 0 5px 0; color:#22c55e; border-bottom:1px solid #334155; padding-bottom:3px;'>{safe_type}</h4>
+        <div style='font-size:15px; font-weight:bold; margin-bottom:5px;'>{safe_prix} €</div>
+        <div style='color:#94a3b8; font-size:12px;'>{safe_quartier}</div>
+        {link_html}
+    </div>
+    """
+
+
+def build_marker_click_script(marker_var, redirect_url):
+    """Lie le clic sur un marker à l'ouverture de l'annonce source (ORA-90).
+
+    `redirect_url` est resanitisé et échappé via json.dumps avant interpolation
+    JS : c'est une donnée scrapée externe, jamais fiable telle quelle.
+    """
+    safe_redirect_url = sanitize_listing_url(redirect_url)
+    if not safe_redirect_url:
+        return ""
+
+    redirect_js = json.dumps(safe_redirect_url)
+    return (
+        f"if (typeof {marker_var} !== 'undefined') {{\n"
+        f"  {marker_var}.on('click', function() {{\n"
+        f"    window.open({redirect_js}, '_blank', 'noopener,noreferrer');\n"
+        "  });\n"
+        "}"
+    )
 
 
 def write_map_metadata(metadata_path, output_html=None, extra=None):
@@ -108,6 +171,8 @@ def main():
     fg_nuisance = folium.FeatureGroup(name='Nuisance', show=False)
     fg_superstition = folium.FeatureGroup(name='Superstition', show=False)
 
+    click_scripts = []
+
     # --- 5. GENERATION POINTS IMMO ---
     for _, row in df_immo.iterrows():
         if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')):
@@ -116,14 +181,9 @@ def main():
 
             type_local = str(row.get('type_local', '')).strip()
             prix = str(row.get('prix', '?')).replace('.0', '')
+            listing_url = sanitize_listing_url(row.get('url'))
 
-            txt_popup = f"""
-            <div style='font-family:sans-serif; min-width:140px;'>
-                <h4 style='margin:0 0 5px 0; color:#22c55e; border-bottom:1px solid #334155; padding-bottom:3px;'>{type_local}</h4>
-                <div style='font-size:15px; font-weight:bold; margin-bottom:5px;'>{prix} €</div>
-                <div style='color:#94a3b8; font-size:12px;'>{row.get('quartier', 'Lyon')}</div>
-            </div>
-            """
+            txt_popup = build_immo_popup_html(type_local, prix, row.get('quartier', 'Lyon'), listing_url)
 
             target_group = None
             if type_local == 'Studio/T1': target_group = fg_studio
@@ -132,10 +192,15 @@ def main():
             elif type_local == 'Grand (T4+)': target_group = fg_t4
 
             if target_group:
-                folium.CircleMarker(
+                marker = folium.CircleMarker(
                     [lat, lon], radius=5, color=COLORS['Immo'], weight=1, fill=True, fill_color=COLORS['Immo'], fill_opacity=0.8,
-                    popup=folium.Popup(txt_popup, max_width=300, className='oracle-popup')
-                ).add_to(target_group)
+                    tooltip=folium.Tooltip(txt_popup, sticky=True, class_name='oracle-popup'),
+                )
+                marker.add_to(target_group)
+
+                script = build_marker_click_script(marker.get_name(), listing_url)
+                if script:
+                    click_scripts.append(script)
 
     # --- 6. GESTION DU MÉTRO VIA JSON (LIGNES + STATIONS) ---
     if os.path.exists(METRO_JSON):
@@ -252,50 +317,53 @@ def main():
     fg_superstition.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
 
-    html = m.get_root().render()
+    html_out = m.get_root().render()
 
-    # --- 9. HACK CSS/JS (JUSTE POPUPS + CONTROLE CALQUES) ---
-    hack = """
+    # --- 9. HACK CSS/JS (POPUPS, CONTROLE CALQUES, CLIC -> REDIRECTION) ---
+    click_scripts_js = "\n".join(click_scripts)
+    hack = f"""
     <style>
-        .leaflet-control-layers { display: none !important; }
+        .leaflet-control-layers {{ display: none !important; }}
 
         /* STYLE POPUP DARK */
-        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip,
+        .leaflet-tooltip.oracle-popup {{
             background-color: #0f172a !important;
             color: #f8fafc !important;
             border: 1px solid #334155 !important;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
             border-radius: 12px !important;
-        }
-        .leaflet-popup-close-button { color: #94a3b8 !important; }
-        .leaflet-popup-close-button:hover { color: #f8fafc !important; }
-        .leaflet-interactive { cursor: pointer !important; }
+        }}
+        .leaflet-popup-close-button {{ color: #94a3b8 !important; }}
+        .leaflet-popup-close-button:hover {{ color: #f8fafc !important; }}
+        .leaflet-interactive {{ cursor: pointer !important; }}
     </style>
 
     <script>
-    window.addEventListener("message", function(e) {
-        if(e.data.type==='TOGGLE_LAYER'){
+    window.addEventListener("message", function(e) {{
+        if(e.data.type==='TOGGLE_LAYER'){{
             var labels=document.getElementsByTagName('label');
-            for(var i=0;i<labels.length;i++){
+            for(var i=0;i<labels.length;i++){{
                 var labelText = labels[i].textContent.trim();
-                if(labelText === e.data.name || labelText.includes(e.data.name)){
+                if(labelText === e.data.name || labelText.includes(e.data.name)){{
                    var box=labels[i].querySelector('input');
                    if(box && box.checked!==e.data.show) box.click();
-                }
-            }
-        }
-    });
+                }}
+            }}
+        }}
+    }});
+    {click_scripts_js}
     </script>
     </body>
     """
 
-    html = html.replace('</body>', hack)
+    html_out = html_out.replace('</body>', hack)
 
     if not os.path.exists(FRONTEND_DATA_DIR):
         os.makedirs(FRONTEND_DATA_DIR)
 
     with open(OUTPUT_HTML, 'w', encoding='utf-8') as f:
-        f.write(html)
+        f.write(html_out)
 
     print(f"🎉 TERMINÉ : {OUTPUT_HTML} (Métro : Lignes reliées automatiquement)")
 

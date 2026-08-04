@@ -16,23 +16,26 @@ export default function AnnoncesList({ compact = false }) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    api.getAnnonces({ page, perPage })
-      .then((data) => {
+    async function loadAnnonces() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data = await api.getAnnonces({ page, perPage });
         if (cancelled) return;
         setItems(data.items || []);
         setTotalPages(data.total_pages || 0);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         console.error(err);
         setError(describeApiError(err));
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    }
+
+    loadAnnonces();
 
     return () => {
       cancelled = true;
