@@ -141,11 +141,18 @@ export default function MapComponent({ center }) {
           {/* BOUTON UNIQUE METRO */}
           <ToggleItem label="Métro (Lignes & Stations)" color="#818181" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
           
-          <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Contexte</h3>
-          <ToggleItem label="Vice" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
-          <ToggleItem label="Gentrification" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
-          <ToggleItem label="Nuisance" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
-          <ToggleItem label="Superstition" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
+          <details className="mt-4 group" open>
+            <summary className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-slate-300 transition-colors">
+              <span>Contexte</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-180">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </summary>
+            <ToggleItem label="Vice" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
+            <ToggleItem label="Gentrification" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
+            <ToggleItem label="Nuisance" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
+            <ToggleItem label="Superstition" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
+          </details>
           
           <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Offres Immobilières</h3>
           <ToggleItem label="Studio / T1" color="#22c55e" isActive={layers['Studio']} onToggle={() => toggleLayer('Studio')} />

@@ -37,8 +37,12 @@ function App() {
   const [chatContext, setChatContext] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
   const [activeTab, setActiveTab] = useState('oracle');
+  // Contrôle manuel du bloc résultats (au-dessus du chat) : permet de le
+  // replier entièrement pour rendre au chat toute la hauteur disponible.
+  const [infoOpen, setInfoOpen] = useState(true);
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
+  const facteurs = result?.facteurs || [];
 
   const handleScan = async (quartier, typeLocal, surfaceInput) => {
     setLoading(true);
@@ -137,7 +141,7 @@ function App() {
         >
 
           {/* En-tête / Recherche */}
-          <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-950/50 z-20">
+          <div className="shrink-0 p-4 md:p-5 border-b border-slate-800 bg-slate-950/50 z-20">
             <h1 className="text-xl font-black tracking-tighter text-white mb-4">
               ORACLE <span className="text-purple-500">DES LOYERS</span>
             </h1>
@@ -151,34 +155,94 @@ function App() {
             )}
           </div>
 
-          {/* Résultat */}
-          <div className="shrink-0 p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
-            <ResultCard data={result} loading={loading} />
-            {result && (
-              <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
-                Données réelles ({result.count} biens)
+          {/* Résultat + détails (cavaliers/historique/annonces) — regroupés dans
+              un bloc scrollable indépendant pour que ce contenu, potentiellement
+              long, n'écrase jamais le chat en dessous. Repliable en entier via
+              le bouton juste après, pour rendre toute la hauteur au chat. */}
+          <div
+            id="oracle-info-panel"
+            className={infoOpen ? 'flex-1 min-h-0 overflow-y-auto custom-scrollbar' : 'hidden'}
+          >
+            {/* Résultat */}
+            <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
+              <ResultCard data={result} loading={loading} />
+              {result && (
+                <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
+                  Données réelles ({result.count} biens)
+                </div>
+              )}
+            </div>
+
+            {/* Détails du quartier — Les 4 Cavaliers, historique des prix et
+                annonces récentes, regroupés dans un seul dropdown (desktop
+                uniquement, l'onglet mobile "Annonces" joue ce rôle en plein
+                écran sur mobile pour les annonces). */}
+            <details className="hidden md:block border-b border-slate-800 group" open>
+              <summary className="px-4 md:px-5 py-2.5 bg-slate-900/20 text-[9px] uppercase text-slate-500 font-bold tracking-widest cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-slate-300 transition-colors">
+                <span>Détails du quartier</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-180">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </summary>
+
+              <div className="p-4 md:p-5 pt-3 space-y-4">
+                {/* Les 4 Cavaliers */}
+                {facteurs.length > 0 && (
+                  <div>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-1.5">
+                      Les 4 Cavaliers
+                    </p>
+                    <div className="space-y-1.5">
+                      {facteurs.map((f) => (
+                        <div key={f.categorie} className="text-[11px] text-slate-400 bg-slate-900/50 rounded-lg px-2 py-1.5 border border-slate-800">
+                          <span className="text-purple-400 font-bold">{f.categorie} — </span>
+                          {f.phrase}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Historique du prix moyen/m² (ORA-72) */}
+                <PriceHistory
+                  status={priceHistory?.status}
+                  message={priceHistory?.message}
+                  historique={priceHistory?.historique}
+                />
+
+                {/* Annonces récentes (ORA-87/88) */}
+                <div>
+                  <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
+                    Annonces récentes
+                  </p>
+                  <AnnoncesList compact />
+                </div>
               </div>
-            )}
+            </details>
           </div>
 
-          {/* Historique du prix moyen/m² (ORA-72) */}
-          <PriceHistory
-            status={priceHistory?.status}
-            message={priceHistory?.message}
-            historique={priceHistory?.historique}
-          />
+          {/* Bascule : replier/déplier tout le bloc résultats pour donner
+              (ou rendre) de la place au chat, toujours accessible entre les
+              deux zones. */}
+          <button
+            type="button"
+            onClick={() => setInfoOpen((v) => !v)}
+            aria-expanded={infoOpen}
+            aria-controls="oracle-info-panel"
+            className="shrink-0 w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-950 border-y border-slate-800 text-slate-500 hover:text-purple-400 hover:bg-slate-900 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${infoOpen ? '' : 'rotate-180'}`}>
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+            <span className="text-[9px] uppercase tracking-widest font-bold">
+              {infoOpen ? 'Réduire' : 'Agrandir le chat'}
+            </span>
+          </button>
 
-          {/* Annonces récentes (ORA-87/88) — desktop uniquement, l'onglet mobile
-              "Annonces" ci-dessous joue le même rôle en plein écran sur mobile. */}
-          <div className="hidden md:block shrink-0 p-4 border-b border-slate-800">
-            <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
-              Annonces récentes
-            </p>
-            <AnnoncesList compact />
-          </div>
-
-          {/* Chat */}
-          <div className="flex-1 min-h-0 relative">
+          {/* Chat — hauteur garantie (part fixe de la colonne) quand le bloc
+              résultats est ouvert ; prend toute la place restante quand il
+              est replié. */}
+          <div className={`relative border-t border-slate-800 ${infoOpen ? 'shrink-0 h-[42%] min-h-[260px]' : 'flex-1 min-h-0'}`}>
             <ChatOracle
               analysis={result?.analysis}
               context={chatContext}

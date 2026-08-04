@@ -9,7 +9,7 @@ export default function PriceHistory({ status, message, historique }) {
   if (!status) return null;
 
   return (
-    <div className="px-4 md:px-5 py-3 border-b border-slate-800 bg-slate-900/20 print:hidden">
+    <div className="print:hidden">
       <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-1.5">
         Évolution du prix moyen/m²
       </p>
