@@ -16,6 +16,10 @@ venv/
 # restent exclus.
 backend/models/*.joblib
 
+# Store SQLite runtime de la table `annonces` (ORA-81) : régénéré au démarrage
+# de l'API (init_db), pas une donnée source à versionner.
+backend/data/*.db
+
 # Node / React (Frontend)
 node_modules/
 frontend/dist/
@@ -26,6 +30,9 @@ frontend/.env
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
+
+# Captures/logs de sessions Playwright MCP (outil de dev, pas des artefacts de build)
+.playwright-mcp/
 # Airflow logs
 Airflow/logs/
 airflow/logs/

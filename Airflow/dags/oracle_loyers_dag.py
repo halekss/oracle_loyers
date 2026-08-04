@@ -3,7 +3,7 @@ L'Oracle des Loyers — DAG Airflow
 
 Architecture :
   scrape_cavaliers → enrich_cavaliers ─┐
-                                        ├──→ clean_immo → train_model
+                                        ├──→ clean_immo → train_model → generate_map
   data_fusion ──────────────────────────┘
 """
 
@@ -67,7 +67,16 @@ with DAG(
         bash_command=f"cd {SCRIPTS} && python train_model.py",
     )
 
-    # ORDRE : 2 branches parallèles → jonction → modèle
+    # POST-ENTRAINEMENT : Régénère la carte statique à partir des données/modèle
+    # à jour, pour éviter toute péremption silencieuse (ORA-54).
+    # Écrit : frontend/public/data/map_pings_lyon_calques.html + map_metadata.json
+    step_generate_map = BashOperator(
+        task_id="generate_map",
+        bash_command=f"cd {SCRIPTS} && python generate_map.py",
+    )
+
+    # ORDRE : 2 branches parallèles → jonction → modèle → carte
     step_scrape >> step_enrich >> step_features
     step_fusion >> step_features
     step_features >> step_train
+    step_train >> step_generate_map

@@ -9,7 +9,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
 
-from data_versioning import archive_model_version, record_model_metadata, snapshot_dataset
+from data_versioning import (
+    archive_model_version,
+    decide_promotion,
+    load_active_model_metadata,
+    record_model_metadata,
+    snapshot_dataset,
+)
+from rollback_model import rollback_to
 
 # Vérification XGBoost
 try:
@@ -95,18 +102,6 @@ print("="*40)
 print(f"💰 Marge d'erreur moyenne : ± {mae:.2f} €")
 print(f"📈 Précision (R²)       : {r2:.2f} / 1.0")
 
-# --- 7bis. PERSISTANCE DES MÉTRIQUES (historique comparable d'un run à l'autre) ---
-metrics_entry = {
-    "trained_at": datetime.now(timezone.utc).isoformat(),
-    "mae": round(float(mae), 2),
-    "r2": round(float(r2), 4),
-    "dataset_size": int(X.shape[0]),
-    "n_features": int(X.shape[1]),
-}
-with open(metrics_log_path, 'a', encoding='utf-8') as f:
-    f.write(json.dumps(metrics_entry, ensure_ascii=False) + "\n")
-print(f"📈 Métriques ajoutées à l'historique : {metrics_log_path}")
-
 # --- 8. IMPORTANCE DES CRITÈRES ---
 importances = pd.DataFrame({
     'Feature': X.columns,
@@ -116,7 +111,16 @@ importances = pd.DataFrame({
 print("\n🔍 Top 12 des critères décisifs :")
 print(importances.head(12).to_string(index=False))
 
-# --- 9. SAUVEGARDE ---
+# --- 9. GARDE-FOU DE PROMOTION (ORA-34) ---
+# Un ré-entraînement automatique (DAG Airflow quotidien) ne doit jamais dégrader
+# silencieusement le modèle servi en production. On lit les métriques du modèle
+# ACTUELLEMENT actif (avant tout écrasement) et on compare à celles du nouveau
+# modèle : une régression au-delà d'une marge raisonnable bloque la promotion.
+new_metrics = {'mae': float(mae), 'r2': float(r2)}
+previous_metrics, previous_version = load_active_model_metadata(model_save_path)
+promote, regression_reasons = decide_promotion(new_metrics, previous_metrics)
+
+# --- 10. SAUVEGARDE ---
 # Sérialisé en mémoire d'abord pour pouvoir hasher le binaire exact écrit sur
 # disque (ORA-31 : identifie chaque modèle entraîné par un hash de version).
 model_buffer = io.BytesIO()
@@ -124,26 +128,69 @@ joblib.dump(model, model_buffer)
 model_bytes = model_buffer.getvalue()
 model_version = hashlib.sha256(model_bytes).hexdigest()[:12]
 
-with open(model_save_path, 'wb') as f:
-    f.write(model_bytes)
-print(f"\n💾 Modèle sauvegardé : {model_save_path} (version {model_version})")
-
+# Le candidat est toujours archivé sous sa version (audit/rejeu possible), qu'il
+# soit promu ou non — mais il ne remplace le modèle actif (`model_save_path`)
+# que s'il ne régresse pas.
 versioned_path = archive_model_version(model_save_path, model_bytes, model_version)
 print(f"🗂️  Version archivée : {versioned_path} — voir rollback_model.py pour y revenir sans réentraîner.")
 
-# --- 10. VERSIONING DES DONNÉES (ORA-28) ET MÉTADONNÉES DU MODÈLE (ORA-31) ---
+if promote:
+    with open(model_save_path, 'wb') as f:
+        f.write(model_bytes)
+    print(f"\n💾 Modèle promu comme actif : {model_save_path} (version {model_version})")
+else:
+    print(f"\n🚫 Modèle {model_version} REJETÉ : régression détectée vs le modèle actif ({previous_version}) :")
+    for reason in regression_reasons:
+        print(f"   - {reason}")
+    if previous_version:
+        rollback_to(previous_version)
+        print(f"↩️  Rollback déclenché : modèle actif reconfirmé à la version {previous_version}.")
+    else:
+        print("⚠️  Aucun modèle précédent connu : le modèle actif reste inchangé (non écrasé).")
+
+# --- 11. VERSIONING DES DONNÉES (ORA-28) ET MÉTADONNÉES DU MODÈLE (ORA-31) ---
 # Trace quelle version de master_immo_final.csv a servi à entraîner ce modèle,
-# pour pouvoir reproduire un ancien modèle à partir de son snapshot.
+# pour pouvoir reproduire un ancien modèle à partir de son snapshot. Les
+# métadonnées du modèle ACTIF ne sont mises à jour que si le candidat est promu
+# (sinon `rollback_to` ci-dessus les a déjà reconfirmées pour l'ancienne version).
 snapshots_dir = os.path.join(script_dir, '..', 'data', 'snapshots')
 data_snapshot_sha256 = snapshot_dataset(data_path, snapshots_dir)
 data_snapshot_file = f"master_immo_final_{data_snapshot_sha256[:12]}.csv"
-meta_path = record_model_metadata(
-    model_save_path,
-    data_snapshot_sha256=data_snapshot_sha256,
-    data_snapshot_file=data_snapshot_file,
-    metrics={'mae': float(mae), 'r2': float(r2)},
-    model_version=model_version,
-    hyperparameters=hyperparameters,
-)
-print(f"📌 Snapshot des données : {data_snapshot_file} ({data_snapshot_sha256[:12]}...)")
-print(f"📎 Métadonnées du modèle : {meta_path}")
+
+if promote:
+    meta_path = record_model_metadata(
+        model_save_path,
+        data_snapshot_sha256=data_snapshot_sha256,
+        data_snapshot_file=data_snapshot_file,
+        metrics=new_metrics,
+        model_version=model_version,
+        hyperparameters=hyperparameters,
+    )
+    print(f"📌 Snapshot des données : {data_snapshot_file} ({data_snapshot_sha256[:12]}...)")
+    print(f"📎 Métadonnées du modèle : {meta_path}")
+
+# --- 12. PERSISTANCE DES MÉTRIQUES (historique comparable d'un run à l'autre) ---
+metrics_entry = {
+    "trained_at": datetime.now(timezone.utc).isoformat(),
+    "mae": round(float(mae), 2),
+    "r2": round(float(r2), 4),
+    "dataset_size": int(X.shape[0]),
+    "n_features": int(X.shape[1]),
+    "model_version": model_version,
+    "promoted": promote,
+}
+with open(metrics_log_path, 'a', encoding='utf-8') as f:
+    f.write(json.dumps(metrics_entry, ensure_ascii=False) + "\n")
+print(f"📈 Métriques ajoutées à l'historique : {metrics_log_path}")
+
+# --- 13. ÉCHEC EXPLICITE POUR AIRFLOW EN CAS DE RÉGRESSION (ORA-34) ---
+# Code de sortie non nul => la tâche BashOperator `train_model` du DAG échoue
+# (et est retentée selon `default_args`), ce qui empêche ce run-ci de laisser
+# croire à un déploiement réussi. Le DAG n'a pas `depends_on_past=True` : chaque
+# exécution planifiée (quotidienne) reste indépendante et n'est donc PAS bloquée
+# par l'échec d'un run précédent.
+if not promote:
+    raise SystemExit(
+        f"❌ Entraînement rejeté (régression détectée) : le modèle actif reste "
+        f"la version {previous_version or 'inconnue'}."
+    )

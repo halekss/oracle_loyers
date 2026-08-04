@@ -70,6 +70,56 @@ jobs:
 
       - run: npm test
 
+  dependency-scan:
+    # Scan de vulnérabilités connues (ORA-65) : pip-audit sur les dépendances
+    # Python du backend (CVE/PYSEC via l'API OSV) et `npm audit` sur les
+    # dépendances JS du frontend. Objectif : détecter une dépendance
+    # vulnérable avant qu'elle n'atteigne la prod, pas juste documenter le
+    # risque a posteriori.
+    #
+    # pip-audit n'a pas de filtre de sévérité natif (contrairement à
+    # `npm audit --audit-level`) : la moindre vulnérabilité connue fait
+    # échouer l'étape, quelle que soit sa gravité réelle. Si un jour un
+    # correctif casse d'autres dépendances (ex. incompatibilité de version)
+    # ou si une vulnérabilité remonte sur du code qu'on n'exécute pas
+    # réellement (faux positif applicatif), l'ignorer explicitement avec
+    # `pip-audit -r requirements.txt --ignore-vuln PYSEC-XXXX-XXXX` en
+    # ajoutant un commentaire juste au-dessus expliquant pourquoi (jamais
+    # silencieusement, et jamais en désactivant le job entier).
+    #
+    # `npm audit --audit-level=critical` ne fait échouer le job que sur une
+    # vulnérabilité de sévérité "critical" : les vulnérabilités low/moderate/
+    # high restent visibles dans les logs (rapport toujours affiché) mais ne
+    # bloquent pas la CI — à corriger au fil de l'eau (`npm audit fix`) sans
+    # urgence de faux rouge permanent.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: pip-audit sur backend/requirements.txt
+        working-directory: backend
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit sur frontend/package.json (seuil critique)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=critical
+
   e2e:
     # Parcours utilisateur critique (ORA-59) : Playwright pilote le vrai build
     # de production (`vite preview`) contre un vrai backend Flask (webServer
@@ -104,12 +154,14 @@ jobs:
 
   deploy:
     # CD (ORA-64) : ne se déclenche que sur un push vers main, et seulement
-    # si backend/scrapers/frontend/e2e ont TOUS réussi — `needs:` + le `if:`
-    # explicite ci-dessous (nécessaire car ajouter un `if:` sur un job avec
-    # `needs` remplace la condition implicite success(), il faut la
-    # réécrire explicitement pour qu'un échec de test bloque bien le déploi).
+    # si backend/scrapers/frontend/e2e/dependency-scan ont TOUS réussi —
+    # `needs:` + le `if:` explicite ci-dessous (nécessaire car ajouter un
+    # `if:` sur un job avec `needs` remplace la condition implicite
+    # success(), il faut la réécrire explicitement pour qu'un échec de test
+    # (ou une vulnérabilité critique détectée par dependency-scan, ORA-65)
+    # bloque bien le déploi).
     name: Déploiement (Render)
-    needs: [backend, scrapers, frontend, e2e]
+    needs: [backend, scrapers, frontend, e2e, dependency-scan]
     if: success() && github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     # `secrets` n'est pas utilisable directement dans un `if:` (GitHub Actions

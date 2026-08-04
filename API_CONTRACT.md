@@ -10,6 +10,32 @@ Toutes les routes `POST` acceptent un corps JSON (`Content-Type: application/jso
 
 ---
 
+## Authentification (ORA-46)
+
+**Décision : aucune authentification n'est mise en place sur les routes actuelles.**
+
+Toutes les routes exposées par `backend/app.py` sont en lecture seule ou de simple consultation publique, à l'exception du tracking de clics ci-dessous — qui reste une écriture anonyme et non sensible (aucune donnée personnelle, pas d'action destructive) :
+
+| Route | Nature |
+|---|---|
+| `GET /api/health` | Lecture — état du serveur et version du modèle |
+| `GET /api/listings` | Lecture — annonces publiques affichées sur la carte |
+| `GET /api/annonces` | Lecture — liste paginée des annonces stockées (aucune écriture) |
+| `GET /api/annonces/<id>` | Lecture — détail d'une annonce stockée (aucune écriture) |
+| `POST /api/annonces/<id>/click` | Écriture — journalisation anonyme d'un clic sortant (compteur de vues, ORA-91/92), aucune donnée personnelle |
+| `POST /api/quartier-stats` | Lecture — agrégats calculés à la volée sur le CSV (aucune écriture) |
+| `POST /api/quartier-historique` | Lecture — historique des snapshots (aucune écriture) |
+| `POST /api/predict` | Lecture — inférence du modèle ML déjà chargé en mémoire (aucune écriture, aucun ré-entraînement) |
+| `POST /api/chat` | Lecture — chatbot RAG groundé sur les données existantes (aucune écriture) |
+
+Aucune de ces routes ne supprime ou ne modifie de données, ne déclenche de ré-entraînement, ni n'expose de logs ou d'informations d'administration. Le ré-entraînement du modèle est piloté exclusivement par le DAG Airflow (hors périmètre HTTP, protégé par l'authentification Airflow elle-même via `AIRFLOW_ADMIN_USERNAME`/`AIRFLOW_ADMIN_PASSWORD`). Il n'existe aujourd'hui **aucune route d'administration ou de déclenchement manuel exposée via Flask**.
+
+Ce projet est une démo portfolio publique sans notion d'utilisateur ni de compte : imposer une authentification (API-key ou JWT) sur des routes de consultation publiques ajouterait de la friction et de la complexité sans bénéfice de sécurité réel. La protection en place aujourd'hui (rate limiting par IP, CORS restreint à une liste d'origines de confiance) est jugée suffisante et proportionnée au risque.
+
+**Cette décision doit être réévaluée dès qu'une route d'administration, de suppression de données, de déclenchement manuel de ré-entraînement, ou d'accès à des logs/informations sensibles serait ajoutée.** Dans ce cas, le mécanisme recommandé est une API-key simple (en-tête `X-API-Key`, comparée à une variable d'environnement type `ADMIN_API_KEY`), suffisant pour un projet de cette taille sans système d'utilisateurs.
+
+---
+
 ## `GET /api/health`
 
 Expose l'état du serveur et la version du modèle de prédiction actuellement chargé (ORA-31). Non soumis au rate limiting (`@limiter.exempt`).
@@ -64,6 +90,99 @@ Exemple :
 
 ```bash
 curl http://localhost:5000/api/listings
+```
+
+---
+
+## `GET /api/annonces`
+
+Liste paginée des annonces stockées dans la table `annonces` (SQLite, `backend/data/annonces.db`, ORA-81), filtrable par ville et/ou quartier (ORA-84). Distinct de `GET /api/listings` : `annonces` est le store dédié aux futures fonctionnalités de consultation d'annonces (fiche détail, tracking de clics), alors que `/api/listings` sert uniquement l'affichage sur la carte à partir du CSV du pipeline ML.
+
+- **Paramètres de requête** (tous optionnels) :
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `ville` | string | — | Filtre exact sur la ville |
+| `quartier` | string | — | Filtre exact sur le quartier |
+| `page` | integer | `1` | Numéro de page (≥ 1) |
+| `per_page` | integer | `20` | Taille de page (≥ 1, plafonné à 100) |
+
+- **Réponse `200`** :
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "titre": "T2 Gerland",
+      "prix": 850,
+      "surface": 45,
+      "ville": "Lyon",
+      "quartier": "Gerland",
+      "url": "https://example.com/annonce-1",
+      "date_scraping": "2026-08-04T10:00:00+00:00",
+      "images": []
+    }
+  ],
+  "page": 1,
+  "per_page": 20,
+  "total": 1,
+  "total_pages": 1
+}
+```
+
+- **Réponse `400`** : `{ "error": "page et per_page doivent être des entiers" }` ou `{ "error": "page et per_page doivent être positifs" }`.
+
+Exemple :
+
+```bash
+curl "http://localhost:5000/api/annonces?ville=Lyon&quartier=Gerland&page=1&per_page=20"
+```
+
+---
+
+## `GET /api/annonces/<id>`
+
+Détail d'une annonce par son id (ORA-85).
+
+- **Payload d'entrée** : aucun (id dans le chemin).
+- **Réponse `200`** : l'objet annonce (mêmes champs que dans `items` ci-dessus).
+- **Réponse `404`** : `{ "error": "Annonce introuvable" }`.
+
+Exemple :
+
+```bash
+curl http://localhost:5000/api/annonces/1
+```
+
+---
+
+## `POST /api/annonces/<id>/click`
+
+Journalise un clic sortant vers l'annonce source (ORA-91), et renvoie le nouveau total de vues (ORA-92). Chaque appel insère une ligne dans la table `clics` (`annonce_id`, `clicked_at`) — pas de déduplication : plusieurs clics du même visiteur comptent chacun.
+
+### Décision ORA-86 — redirection directe vs modal intermédiaire
+
+**Décision : redirection directe** (`window.open(url, '_blank', 'noopener,noreferrer')` au clic sur une `AnnonceCard`, sans modal de confirmation intermédiaire). Le clic déclenche cet appel `POST` en fire-and-forget (sans bloquer ni retarder la redirection) puis ouvre l'url source dans un nouvel onglet.
+
+Justification :
+- Cohérent avec la posture « agrégateur » déjà actée en ORA-94 (`LEGAL_DECISIONS.md`) : l'application ne fait que pointer vers l'annonce d'origine, elle n'en reproduit ni le contenu ni les visuels — une redirection franche renforce cette distinction (pas d'ambiguïté sur qui héberge quoi).
+- Une modal de confirmation ("Vous quittez Oracle des Loyers...") n'apporte aucune protection réelle ici : aucune donnée utilisateur n'est engagée par le clic, et l'usage (comparateur de loyers) est celui d'un simple lien de renvoi, pas d'une transaction.
+- Le tracking étant fire-and-forget et non bloquant, échouer à le journaliser (backend indisponible, réseau) ne doit jamais empêcher l'utilisateur d'atteindre l'annonce.
+
+- **Payload d'entrée** : aucun (id dans le chemin).
+- **Réponse `200`** :
+
+```json
+{ "logged": true, "views": 3 }
+```
+
+- **Réponse `404`** : `{ "error": "Annonce introuvable" }`.
+
+Exemple :
+
+```bash
+curl -X POST http://localhost:5000/api/annonces/1/click
 ```
 
 ---

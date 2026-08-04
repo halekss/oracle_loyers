@@ -70,18 +70,10 @@ export default function ResultCard({ data, loading }) {
 
       {data && (
         <>
-          {/* LES 4 CAVALIERS — visible à l'écran, masqué à l'impression (repris dans le rapport imprimable ci-dessous) */}
-          {facteurs.length > 0 && (
-            <div className="mt-3 print:hidden space-y-1.5">
-              <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-1">Les 4 Cavaliers</p>
-              {facteurs.map((f) => (
-                <div key={f.categorie} className="text-[11px] text-slate-400 bg-slate-900/50 rounded-lg px-2 py-1.5 border border-slate-800">
-                  <span className="text-purple-400 font-bold">{f.categorie} — </span>
-                  {f.phrase}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Les 4 Cavaliers ne sont plus affichés ici à l'écran : regroupés
+              avec l'historique et les annonces dans le dropdown "Détails du
+              quartier" (App.jsx), pour ne garder qu'un seul repli à gérer.
+              Toujours repris ci-dessous dans le rapport imprimable. */}
 
           <button
             type="button"

@@ -109,13 +109,24 @@ def load_existing_rows(path):
     return rows, liens_vus
 
 
-def get_chrome_driver(ignore_certificate_errors=True, block_images=False, user_agent=None, proxy=None):
+def get_chrome_driver(
+    ignore_certificate_errors=True,
+    block_images=False,
+    user_agent=None,
+    proxy=None,
+    page_load_timeout=30,
+):
     """
     Factory undetected_chromedriver commune aux scrapers.
     `block_images` désactive le chargement des images (utile pour accélérer
     certains sites, cf. scraper_vizzit.py).
     `user_agent`/`proxy` sont optionnels (None par défaut = comportement inchangé) :
     voir pick_user_agent()/pick_proxy() pour les tirer du pool configuré (ORA-18).
+    `page_load_timeout` (secondes) borne chaque driver.get() : par défaut Selenium
+    peut attendre indéfiniment si une page ne termine jamais son chargement.
+    Combiné à retry_with_backoff (déjà en place autour de driver.get() dans les
+    6 scrapers), un dépassement lève une TimeoutException qui est retentée puis
+    loggée en ERROR sans planter le run (ORA-25).
     """
     options = uc.ChromeOptions()
     if ignore_certificate_errors:
@@ -128,7 +139,9 @@ def get_chrome_driver(ignore_certificate_errors=True, block_images=False, user_a
         options.add_argument(f"--user-agent={user_agent}")
     if proxy:
         options.add_argument(f"--proxy-server={proxy}")
-    return uc.Chrome(options=options)
+    driver = uc.Chrome(options=options)
+    driver.set_page_load_timeout(page_load_timeout)
+    return driver
 
 
 def find_first(element, selectors, default=""):

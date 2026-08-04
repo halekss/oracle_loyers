@@ -154,7 +154,7 @@ Le frontend lit l'URL de l'API via Vite (`VITE_API_URL`, voir [`.env.example`](.
 
 ### 🚚 Déploiement continu (CD, ORA-64)
 
-Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render (via son [Deploy Hook](https://render.com/docs/deploy-hooks)) uniquement quand **tous** les jobs de CI (`backend`, `scrapers`, `frontend`, `e2e`) ont réussi sur un push vers `main` — `needs: [...]` + `if: success() && ...` : un échec de test bloque bien le déploiement (le job `deploy` est alors sauté, pas juste marqué en échec).
+Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render (via son [Deploy Hook](https://render.com/docs/deploy-hooks)) uniquement quand **tous** les jobs de CI (`backend`, `scrapers`, `frontend`, `e2e`, `dependency-scan`) ont réussi sur un push vers `main` — `needs: [...]` + `if: success() && ...` : un échec de test (ou une vulnérabilité détectée par `dependency-scan`) bloque bien le déploiement (le job `deploy` est alors sauté, pas juste marqué en échec).
 
 **Configuration requise (à faire une seule fois, côté Render puis GitHub) :**
 1. Dans le dashboard Render, pour chaque service (backend, frontend) : *Settings → Deploy Hook* → copier l'URL générée.
@@ -162,6 +162,35 @@ Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render 
 3. **Désactiver l'auto-deploy natif de Render** sur ces deux services (*Settings → Auto-Deploy → No*) — sinon Render redéploierait à chaque push, y compris si la CI échoue, en plus du déploiement déclenché par ce workflow.
 
 **Rollback :** chaque déploiement Render reste visible dans l'historique du service (*Dashboard → Deploys*). En cas de déploiement problématique, cliquer sur un déploiement antérieur réussi puis *Rollback to this deploy* revient immédiatement dessus (pas besoin de revert Git ni de relancer la CI).
+
+### 🔎 Scan de vulnérabilités des dépendances (ORA-65)
+
+Le job `dependency-scan` de `.github/workflows/ci.yml` s'exécute sur chaque push/PR et vérifie les dépendances connues pour des vulnérabilités publiées (CVE/PYSEC via l'API [OSV](https://osv.dev/)) :
+
+- **`pip-audit -r requirements.txt`** (working-directory `backend`) sur `backend/requirements.txt`. `pip-audit` n'a pas de filtre de sévérité natif : **toute** vulnérabilité connue fait échouer l'étape, quelle que soit sa gravité.
+- **`npm audit --audit-level=critical`** (working-directory `frontend`, après `npm ci`) sur `frontend/package.json`. Seule une vulnérabilité de sévérité **critical** fait échouer le job ; les vulnérabilités low/moderate/high restent visibles dans les logs (le rapport `npm audit` est toujours affiché) mais ne bloquent pas la CI.
+
+**Comment traiter une alerte :**
+1. Regarder si un correctif existe : `pip-audit` liste la colonne `Fix Versions` ; `npm audit fix` corrige automatiquement ce qui peut l'être sans breaking change.
+2. Si un correctif casse d'autres dépendances, ou si la vulnérabilité ne s'applique pas réellement à notre usage (faux positif applicatif), l'ignorer **explicitement** plutôt que de laisser la CI rouge en permanence ou de désactiver le job :
+   - Python : ajouter `--ignore-vuln PYSEC-XXXX-XXXX` à la commande `pip-audit` dans `ci.yml`, avec un commentaire juste au-dessus expliquant pourquoi.
+   - JS : `npm audit` ne propose pas d'exclusion par ID directement dans la CLI stable ; documenter le cas ici et suivre le correctif upstream, ou geler `--audit-level` si le risque est jugé acceptable temporairement (à documenter également).
+3. Ne jamais supprimer ou commenter l'étape de scan pour faire passer la CI — l'objectif du job est justement d'empêcher qu'une dépendance vulnérable connue parte en prod silencieusement.
+
+**État au 2026-08-03 :** `pip-audit` sur `backend/requirements.txt` ne remonte aucune vulnérabilité connue. `npm audit` sur `frontend/package.json` remonte 9 vulnérabilités (1 low, 2 moderate, 6 high, 0 critical) sur des dépendances de outillage transitives (`postcss`, `js-yaml`, `minimatch`, `picomatch`, `brace-expansion`, `flatted`, `ajv`, `@babel/core`, `yaml`) — aucune n'est critique, le seuil `--audit-level=critical` n'échoue donc pas la CI ; elles restent visibles dans les logs pour correction ultérieure (`npm audit fix`).
+
+---
+
+## 🩺 Observabilité backend (logs structurés, Sentry) — ORA-63
+
+Le backend Flask centralise sa configuration de logging dans `backend/logging_config.py`, importé et appelé en tout premier dans `backend/app.py`.
+
+- **Logs structurés** : tous les logs applicatifs (démarrage, erreurs, avertissements) passent par le module `logging` standard (`logger.info/.warning/.error/.critical`), avec un format cohérent `timestamp [NIVEAU] module: message`. Plus aucun `print()` n'est utilisé pour signaler une erreur applicative dans `app.py` ou `services/*.py` (les `print()` restants, dans `backend/scripts/`, sont des CLI qui affichent une progression humaine et ne relèvent pas de l'observabilité applicative).
+- **Niveau configurable** via la variable d'environnement `LOG_LEVEL` (`DEBUG`, `INFO` par défaut, `WARNING`, `ERROR`, `CRITICAL`). Voir [`.env.example`](./.env.example).
+- **Tracking d'erreurs (Sentry)** : si la variable d'environnement `SENTRY_DSN` est définie, `sentry-sdk` (avec son intégration Flask) est initialisé au démarrage et capture automatiquement les exceptions non gérées ainsi que les réponses 5xx. Si `SENTRY_DSN` est absent (dev local, CI), l'initialisation est un no-op silencieux : rien à configurer pour développer en local.
+- **Alerte sur erreurs critiques** : les erreurs jugées critiques (ex. le provider LLM Gemini indisponible dans `services/chat_service.py`) sont loguées via `logger.critical(...)` avec le tag `[LLM_UNAVAILABLE]`. Lorsque Sentry est configuré, ces logs remontent comme événements dans le dashboard Sentry, qui gère l'alerting (email/Slack/etc.) — pas de système d'alerte custom à maintenir côté backend.
+
+**Configuration requise pour activer Sentry en production :** créer un projet sur [sentry.io](https://sentry.io) (ou une instance self-hosted), copier son DSN et renseigner `SENTRY_DSN` (et éventuellement `SENTRY_ENVIRONMENT`) dans les variables d'environnement du service Render. Configurer ensuite les règles d'alerte côté dashboard Sentry (ex. notification sur toute nouvelle erreur taguée `[LLM_UNAVAILABLE]`, ou sur un volume de 5xx au-delà d'un seuil).
 
 ---
 
@@ -276,6 +305,8 @@ Les 6 scrapers tirent à chaque run un User-Agent réaliste au hasard dans un po
 **Décision explicite (posture du projet) :** 4 des 6 scrapers ciblent des chemins explicitement disallow par le site source. Le `robots.txt` n'a pas de valeur contractuelle contraignante (contrairement aux CGU), mais signale une volonté explicite du site. Décision assumée : **ne pas modifier les scrapers en production**, compte tenu du contexte du projet — usage non commercial/portfolio, volumes de requêtes faibles et temporisés, aucune donnée personnelle sensible collectée (annonces publiques uniquement), aucune republication de contenu protégé (voir point suivant). Le risque résiduel (accès jugé non souhaité par le site, même sans base légale contraignante) est assumé explicitement plutôt qu'ignoré. Cette décision est à réévaluer si l'usage du projet change (volumes, contexte commercial).
 
 **Affichage des annonces — photo hébergée vs lien (ORA-93, epic ORA-80) :** vérifié dans les en-têtes CSV de sortie des 6 scrapers (`atomic_csv_writer(OUTPUT_PATH, [...])` dans chaque `scraper_*.py`) : aucune colonne photo/image n'est collectée ni stockée, sur aucun des 6 sites. Chaque annonce n'expose que des champs texte (titre, prix, lieu, détails) et un lien `Lien` vers l'annonce originale. L'application n'héberge donc aucune photo scrapée — elle renvoie vers la source, à la manière d'un agrégateur/moteur de recherche. Ceci limite significativement le risque de reproduction non autorisée de contenu protégé (photos) par rapport à un hébergement direct.
+
+**Décision explicite (ORA-94, epic ORA-80) :** ce constat est formalisé en décision produit dans [`LEGAL_DECISIONS.md`](./LEGAL_DECISIONS.md) — l'application ne doit jamais héberger de photo d'annonce scrapée (ni capture d'écran du site source en guise de thumbnail), uniquement un lien de redirection vers l'annonce d'origine. Implication directe pour les tickets frontend ORA-87/ORA-88/ORA-89 : pas de balise `<img>` pointant vers une photo scrapée dans les composants d'affichage des annonces.
 
 ### 📦 Versioning des snapshots de données
 

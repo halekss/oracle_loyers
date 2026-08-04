@@ -1,18 +1,28 @@
 import os
 import json
+import logging
 import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flasgger import Swagger
+from logging_config import configure_logging, init_sentry
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
+from services import annonces_store
 from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
+
+# Observabilité (ORA-63) : logging structuré + tracking d'erreurs Sentry,
+# à configurer avant tout le reste (Flask, chargement des données/modèle)
+# pour que les logs de démarrage soient déjà structurés.
+configure_logging()
+init_sentry()
+logger = logging.getLogger(__name__)
 
 # Initialisation de l'application
 app = Flask(__name__)
@@ -52,7 +62,7 @@ def get_server_port():
 
 
 cors_origins = get_cors_origins()
-print(f"🔒 Politique CORS effective : {cors_origins}")
+logger.info("Politique CORS effective : %s", cors_origins)
 CORS(app, origins=cors_origins)  # Autorise les requêtes du Frontend React
 
 # Documentation interactive Swagger/OpenAPI, accessible sur /apidocs (voir
@@ -118,6 +128,19 @@ def handle_rate_limit_exceeded(error):
     return jsonify({"error": "Trop de requêtes. Réessayez dans quelques instants."}), 429
 
 
+@app.after_request
+def set_security_headers(response):
+    """
+    En-têtes de sécurité de base (ORA-69), sans impact fonctionnel :
+    l'API ne sert que du JSON, jamais de HTML/JS, donc pas de CSP applicative
+    à définir ici (voir frontend/ pour le CSP éventuel côté SPA).
+    """
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
+
 def get_request_json():
     data = request.get_json(silent=True)
     if data is not None:
@@ -137,27 +160,36 @@ MODEL_META_PATH = f"{MODEL_PATH}.meta.json"
 CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_lyon.csv')
 SNAPSHOTS_DIR = os.path.join(BASE_DIR, 'data', 'snapshots')
 SNAPSHOTS_MANIFEST_PATH = os.path.join(SNAPSHOTS_DIR, 'manifest.csv')
+ANNONCES_DB_PATH = os.path.join(BASE_DIR, 'data', 'annonces.db')
 
 # Chargement des services
-print("Chargement des données...")
+logger.info("Initialisation de la base annonces...")
+annonces_store.init_db(ANNONCES_DB_PATH)
+logger.info("Chargement des données...")
 data_loader = DataLoader(DATA_PATH)
 
-print("Chargement des points d'intérêt (cavaliers)...")
+logger.info("Chargement des points d'intérêt (cavaliers)...")
 try:
     cavaliers_df = pd.read_csv(CAVALIERS_PATH)
-except Exception:
-    print("⚠️ Attention : cavaliers_lyon.csv introuvable, features de distance à 0 par défaut.")
+except Exception as exc:
+    logger.warning(
+        "cavaliers_lyon.csv introuvable, features de distance à 0 par défaut : %s - %s",
+        type(exc).__name__, exc,
+    )
     cavaliers_df = None
 
-print("Initialisation d'Immotep (Service Chat)...")
+logger.info("Initialisation d'Immotep (Service Chat)...")
 chat_service = ChatService()
 
 # Chargement du modèle IA (XGBoost)
-print("Chargement du modèle IA...")
+logger.info("Chargement du modèle IA...")
 try:
     model = joblib.load(MODEL_PATH)
-except Exception:
-    print("⚠️ Attention : Modèle price_predictor.pkl introuvable.")
+except Exception as exc:
+    logger.warning(
+        "Modèle price_predictor.pkl introuvable : %s - %s",
+        type(exc).__name__, exc,
+    )
     model = None
 
 # --- ROUTES API ---
@@ -217,6 +249,106 @@ def get_listings():
     # On renvoie les colonnes nécessaires uniquement et on gère les NaN
     data = df[['latitude', 'longitude', 'prix', 'type_local', 'quartier']].fillna('').to_dict(orient='records')
     return jsonify(data)
+
+@app.route('/api/annonces', methods=['GET'])
+def get_annonces():
+    """
+    Liste paginée des annonces stockées, filtrable par ville et/ou quartier (ORA-84).
+    ---
+    tags:
+      - Annonces
+    parameters:
+      - name: ville
+        in: query
+        type: string
+        required: false
+      - name: quartier
+        in: query
+        type: string
+        required: false
+      - name: page
+        in: query
+        type: integer
+        required: false
+        default: 1
+      - name: per_page
+        in: query
+        type: integer
+        required: false
+        default: 20
+    responses:
+      200:
+        description: Page d'annonces correspondant aux filtres
+      400:
+        description: Paramètre de pagination invalide
+    """
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+    except ValueError:
+        return jsonify({"error": "page et per_page doivent être des entiers"}), 400
+
+    if page < 1 or per_page < 1:
+        return jsonify({"error": "page et per_page doivent être positifs"}), 400
+
+    result = annonces_store.list_annonces(
+        ville=request.args.get('ville') or None,
+        quartier=request.args.get('quartier') or None,
+        page=page,
+        per_page=per_page,
+        db_path=ANNONCES_DB_PATH,
+    )
+    return jsonify(result)
+
+@app.route('/api/annonces/<int:annonce_id>', methods=['GET'])
+def get_annonce_detail(annonce_id):
+    """
+    Détail d'une annonce par son id (ORA-85).
+    ---
+    tags:
+      - Annonces
+    parameters:
+      - name: annonce_id
+        in: path
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Annonce trouvée
+      404:
+        description: Aucune annonce avec cet id
+    """
+    annonce = annonces_store.get_annonce_by_id(annonce_id, db_path=ANNONCES_DB_PATH)
+    if annonce is None:
+        return jsonify({"error": "Annonce introuvable"}), 404
+    return jsonify(annonce)
+
+@app.route('/api/annonces/<int:annonce_id>/click', methods=['POST'])
+def log_annonce_click(annonce_id):
+    """
+    Journalise un clic sortant vers l'annonce source (ORA-91), et renvoie le
+    nouveau total de vues (ORA-92).
+    ---
+    tags:
+      - Annonces
+    parameters:
+      - name: annonce_id
+        in: path
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Clic journalisé
+      404:
+        description: Aucune annonce avec cet id
+    """
+    annonce = annonces_store.get_annonce_by_id(annonce_id, db_path=ANNONCES_DB_PATH)
+    if annonce is None:
+        return jsonify({"error": "Annonce introuvable"}), 404
+
+    annonces_store.log_click(annonce_id, db_path=ANNONCES_DB_PATH)
+    views = annonces_store.count_clicks(annonce_id, db_path=ANNONCES_DB_PATH)
+    return jsonify({"logged": True, "views": views})
 
 @app.route('/api/quartier-stats', methods=['POST'])
 def get_quartier_stats():
@@ -342,7 +474,10 @@ def get_quartier_stats():
         })
 
     except Exception as e:
-        print(f"Erreur Stats Quartier: {e}")
+        logger.error(
+            "Erreur endpoint /api/quartier-stats : %s - %s",
+            type(e).__name__, e, exc_info=True,
+        )
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/quartier-historique', methods=['POST'])
@@ -555,7 +690,10 @@ def chat():
         return jsonify(result_immotep)
 
     except Exception as e:
-        print(f"Erreur Chat: {e}")
+        logger.error(
+            "Erreur endpoint /api/chat : %s - %s",
+            type(e).__name__, e, exc_info=True,
+        )
         return jsonify({"response": "Erreur interne côté serveur. Immotep revient dès que l'API répond correctement."}), 500
 
 if __name__ == '__main__':

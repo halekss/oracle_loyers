@@ -38,19 +38,20 @@ describe('ResultCard', () => {
     expect(report.textContent).toContain('Gerland');
   });
 
-  it('renders the cavaliers factors when present', () => {
-    // Le rapport imprimable (#printable-report) répète les mêmes phrases pour
-    // l'export PDF : on s'attend à 2 occurrences (affichage écran + rapport).
+  it('includes the cavaliers factors in the printable report', () => {
+    // Les 4 Cavaliers ne sont plus affichés à l'écran par ResultCard (regroupés
+    // avec l'historique et les annonces dans le dropdown "Détails du quartier"
+    // de App.jsx) : seul le rapport imprimable (#printable-report) les reprend.
     render(<ResultCard data={baseData} loading={false} />);
 
-    expect(screen.getAllByText(/parfait pour un verre/)).toHaveLength(2);
-    expect(screen.getAllByText(/muscle aussi les mollets/)).toHaveLength(2);
+    expect(screen.getAllByText(/parfait pour un verre/)).toHaveLength(1);
+    expect(screen.getAllByText(/muscle aussi les mollets/)).toHaveLength(1);
   });
 
-  it('does not render a factors section when there are none', () => {
+  it('does not render a factors section in the report when there are none', () => {
     render(<ResultCard data={{ ...baseData, facteurs: [] }} loading={false} />);
 
-    expect(screen.queryByText('Les 4 Cavaliers')).not.toBeInTheDocument();
+    expect(screen.queryByText('Les 4 Cavaliers du quartier')).not.toBeInTheDocument();
   });
 
   it('does not render the export button or factors when there is no data', () => {
