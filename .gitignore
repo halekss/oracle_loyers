@@ -16,6 +16,10 @@ venv/
 # restent exclus.
 backend/models/*.joblib
 
+# Store SQLite runtime de la table `annonces` (ORA-81) : régénéré au démarrage
+# de l'API (init_db), pas une donnée source à versionner.
+backend/data/*.db
+
 # Node / React (Frontend)
 node_modules/
 frontend/dist/

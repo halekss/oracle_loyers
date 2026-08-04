@@ -13,6 +13,7 @@ from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
+from services import annonces_store
 from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
 
@@ -159,8 +160,11 @@ MODEL_META_PATH = f"{MODEL_PATH}.meta.json"
 CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_lyon.csv')
 SNAPSHOTS_DIR = os.path.join(BASE_DIR, 'data', 'snapshots')
 SNAPSHOTS_MANIFEST_PATH = os.path.join(SNAPSHOTS_DIR, 'manifest.csv')
+ANNONCES_DB_PATH = os.path.join(BASE_DIR, 'data', 'annonces.db')
 
 # Chargement des services
+logger.info("Initialisation de la base annonces...")
+annonces_store.init_db(ANNONCES_DB_PATH)
 logger.info("Chargement des données...")
 data_loader = DataLoader(DATA_PATH)
 
@@ -245,6 +249,79 @@ def get_listings():
     # On renvoie les colonnes nécessaires uniquement et on gère les NaN
     data = df[['latitude', 'longitude', 'prix', 'type_local', 'quartier']].fillna('').to_dict(orient='records')
     return jsonify(data)
+
+@app.route('/api/annonces', methods=['GET'])
+def get_annonces():
+    """
+    Liste paginée des annonces stockées, filtrable par ville et/ou quartier (ORA-84).
+    ---
+    tags:
+      - Annonces
+    parameters:
+      - name: ville
+        in: query
+        type: string
+        required: false
+      - name: quartier
+        in: query
+        type: string
+        required: false
+      - name: page
+        in: query
+        type: integer
+        required: false
+        default: 1
+      - name: per_page
+        in: query
+        type: integer
+        required: false
+        default: 20
+    responses:
+      200:
+        description: Page d'annonces correspondant aux filtres
+      400:
+        description: Paramètre de pagination invalide
+    """
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+    except ValueError:
+        return jsonify({"error": "page et per_page doivent être des entiers"}), 400
+
+    if page < 1 or per_page < 1:
+        return jsonify({"error": "page et per_page doivent être positifs"}), 400
+
+    result = annonces_store.list_annonces(
+        ville=request.args.get('ville') or None,
+        quartier=request.args.get('quartier') or None,
+        page=page,
+        per_page=per_page,
+        db_path=ANNONCES_DB_PATH,
+    )
+    return jsonify(result)
+
+@app.route('/api/annonces/<int:annonce_id>', methods=['GET'])
+def get_annonce_detail(annonce_id):
+    """
+    Détail d'une annonce par son id (ORA-85).
+    ---
+    tags:
+      - Annonces
+    parameters:
+      - name: annonce_id
+        in: path
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Annonce trouvée
+      404:
+        description: Aucune annonce avec cet id
+    """
+    annonce = annonces_store.get_annonce_by_id(annonce_id, db_path=ANNONCES_DB_PATH)
+    if annonce is None:
+        return jsonify({"error": "Annonce introuvable"}), 404
+    return jsonify(annonce)
 
 @app.route('/api/quartier-stats', methods=['POST'])
 def get_quartier_stats():

@@ -20,6 +20,8 @@ Toutes les routes exposées par `backend/app.py` sont en lecture seule ou de sim
 |---|---|
 | `GET /api/health` | Lecture — état du serveur et version du modèle |
 | `GET /api/listings` | Lecture — annonces publiques affichées sur la carte |
+| `GET /api/annonces` | Lecture — liste paginée des annonces stockées (aucune écriture) |
+| `GET /api/annonces/<id>` | Lecture — détail d'une annonce stockée (aucune écriture) |
 | `POST /api/quartier-stats` | Lecture — agrégats calculés à la volée sur le CSV (aucune écriture) |
 | `POST /api/quartier-historique` | Lecture — historique des snapshots (aucune écriture) |
 | `POST /api/predict` | Lecture — inférence du modèle ML déjà chargé en mémoire (aucune écriture, aucun ré-entraînement) |
@@ -87,6 +89,69 @@ Exemple :
 
 ```bash
 curl http://localhost:5000/api/listings
+```
+
+---
+
+## `GET /api/annonces`
+
+Liste paginée des annonces stockées dans la table `annonces` (SQLite, `backend/data/annonces.db`, ORA-81), filtrable par ville et/ou quartier (ORA-84). Distinct de `GET /api/listings` : `annonces` est le store dédié aux futures fonctionnalités de consultation d'annonces (fiche détail, tracking de clics), alors que `/api/listings` sert uniquement l'affichage sur la carte à partir du CSV du pipeline ML.
+
+- **Paramètres de requête** (tous optionnels) :
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `ville` | string | — | Filtre exact sur la ville |
+| `quartier` | string | — | Filtre exact sur le quartier |
+| `page` | integer | `1` | Numéro de page (≥ 1) |
+| `per_page` | integer | `20` | Taille de page (≥ 1, plafonné à 100) |
+
+- **Réponse `200`** :
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "titre": "T2 Gerland",
+      "prix": 850,
+      "surface": 45,
+      "ville": "Lyon",
+      "quartier": "Gerland",
+      "url": "https://example.com/annonce-1",
+      "date_scraping": "2026-08-04T10:00:00+00:00",
+      "images": []
+    }
+  ],
+  "page": 1,
+  "per_page": 20,
+  "total": 1,
+  "total_pages": 1
+}
+```
+
+- **Réponse `400`** : `{ "error": "page et per_page doivent être des entiers" }` ou `{ "error": "page et per_page doivent être positifs" }`.
+
+Exemple :
+
+```bash
+curl "http://localhost:5000/api/annonces?ville=Lyon&quartier=Gerland&page=1&per_page=20"
+```
+
+---
+
+## `GET /api/annonces/<id>`
+
+Détail d'une annonce par son id (ORA-85).
+
+- **Payload d'entrée** : aucun (id dans le chemin).
+- **Réponse `200`** : l'objet annonce (mêmes champs que dans `items` ci-dessus).
+- **Réponse `404`** : `{ "error": "Annonce introuvable" }`.
+
+Exemple :
+
+```bash
+curl http://localhost:5000/api/annonces/1
 ```
 
 ---
