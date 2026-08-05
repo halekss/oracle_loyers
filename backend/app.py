@@ -27,13 +27,18 @@ logger = logging.getLogger(__name__)
 # Initialisation de l'application
 app = Flask(__name__)
 # Origines de confiance toujours autorisées, même sans CORS_ORIGINS : le
-# déploiement de démo et les serveurs de dev locaux (Vite). Pas de fallback
-# sur '*' pour éviter qu'un CORS_ORIGINS oublié n'ouvre l'API à n'importe
-# quelle origine.
+# déploiement de démo et les serveurs de dev locaux (Vite). 5174 est inclus
+# en plus du port par défaut 5173 : c'est le fallback vers lequel Vite
+# bascule automatiquement quand un autre projet local occupe déjà le 5173
+# (cf. FRONTEND_PORT dans docker-compose.yml, qui suit la même convention).
+# Pas de fallback sur '*' pour éviter qu'un CORS_ORIGINS oublié n'ouvre
+# l'API à n'importe quelle origine.
 DEFAULT_CORS_ORIGINS = [
     'https://oracle-loyers.onrender.com',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
 ]
 
 

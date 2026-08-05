@@ -21,8 +21,11 @@ test('recherche, carte et chatbot fonctionnent de bout en bout', async ({ page }
   await expect(page.getByText(/^\d[\d\s]*$/).first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/Données réelles \(\d+ biens\)/)).toBeVisible();
 
-  // Chatbot : envoi d'un message et réception d'une réponse (le backend
-  // répond même sans GEMINI_API_KEY configuré, avec un message explicite).
+  // Chatbot : ouverture de la bulle flottante (le chat est un overlay
+  // fermé par défaut, cf. App.jsx), puis envoi d'un message et réception
+  // d'une réponse (le backend répond même sans GEMINI_API_KEY configuré,
+  // avec un message explicite).
+  await page.getByRole('button', { name: 'Ouvrir le chat Immotep' }).click();
   const chatInput = page.getByPlaceholder('Prix, surface, quartier...');
   await chatInput.fill('Bonjour Immotep');
   await page.getByRole('button', { name: /envoyer le message/i }).click();

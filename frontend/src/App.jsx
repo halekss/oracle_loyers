@@ -37,9 +37,10 @@ function App() {
   const [chatContext, setChatContext] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
   const [activeTab, setActiveTab] = useState('oracle');
-  // Contrôle manuel du bloc résultats (au-dessus du chat) : permet de le
-  // replier entièrement pour rendre au chat toute la hauteur disponible.
-  const [infoOpen, setInfoOpen] = useState(true);
+  // Chat en bulle flottante superposée à l'écran (pas de fenêtre/page à
+  // part) : fermé par défaut pour laisser "Détails du quartier" toute la
+  // hauteur de la colonne Oracle.
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
   const facteurs = result?.facteurs || [];
@@ -155,13 +156,13 @@ function App() {
             )}
           </div>
 
-          {/* Résultat + détails (cavaliers/historique/annonces) — regroupés dans
-              un bloc scrollable indépendant pour que ce contenu, potentiellement
-              long, n'écrase jamais le chat en dessous. Repliable en entier via
-              le bouton juste après, pour rendre toute la hauteur au chat. */}
+          {/* Résultat + détails (cavaliers/historique/annonces) — bloc
+              scrollable indépendant occupant toute la hauteur restante de la
+              colonne (le chat n'y prend plus de place, cf. bulle flottante
+              plus bas). */}
           <div
             id="oracle-info-panel"
-            className={infoOpen ? 'flex-1 min-h-0 overflow-y-auto custom-scrollbar' : 'hidden'}
+            className="flex-1 min-h-0 overflow-y-auto custom-scrollbar"
           >
             {/* Résultat */}
             <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
@@ -221,38 +222,6 @@ function App() {
             </details>
           </div>
 
-          {/* Bascule : replier/déplier tout le bloc résultats pour donner
-              (ou rendre) de la place au chat, toujours accessible entre les
-              deux zones. */}
-          <button
-            type="button"
-            onClick={() => setInfoOpen((v) => !v)}
-            aria-expanded={infoOpen}
-            aria-controls="oracle-info-panel"
-            className="shrink-0 w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-950 border-y border-slate-800 text-slate-500 hover:text-purple-400 hover:bg-slate-900 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${infoOpen ? '' : 'rotate-180'}`}>
-              <polyline points="18 15 12 9 6 15"></polyline>
-            </svg>
-            <span className="text-[9px] uppercase tracking-widest font-bold">
-              {infoOpen ? 'Réduire' : 'Agrandir le chat'}
-            </span>
-          </button>
-
-          {/* Chat — hauteur garantie (part fixe de la colonne) quand le bloc
-              résultats est ouvert ; prend toute la place restante quand il
-              est replié. */}
-          <div className={`relative border-t border-slate-800 ${infoOpen ? 'shrink-0 h-[42%] min-h-[260px]' : 'flex-1 min-h-0'}`}>
-            <ChatOracle
-              analysis={result?.analysis}
-              context={chatContext}
-              onInsight={(insight) => {
-                if (insight?.map_focus?.lat && insight?.map_focus?.lng) {
-                  setMapCenter([insight.map_focus.lat, insight.map_focus.lng, insight.map_focus.zoom || 15]);
-                }
-              }}
-            />
-          </div>
         </div>
 
         {/* COLONNE ANNONCES — onglet plein écran mobile uniquement (desktop :
@@ -269,6 +238,63 @@ function App() {
           <AnnoncesList />
         </div>
       </div>
+
+      {/* Chat Immotep — bulle flottante + overlay, superposés à l'écran
+          principal quel que soit l'onglet actif (pas de fenêtre ni de page
+          séparée). ChatOracle reste monté en permanence, seule sa visibilité
+          bascule, pour ne jamais perdre l'historique de conversation entre
+          deux ouvertures. */}
+      <div
+        id="chat-overlay"
+        className={`fixed z-[60] bottom-36 md:bottom-24 right-4 md:right-6 w-[calc(100vw-2rem)] max-w-sm h-[70vh] max-h-[560px] flex-col rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/50 overflow-hidden ${isChatOpen ? 'flex' : 'hidden'}`}
+      >
+        <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800">
+          <span className="text-xs font-black uppercase tracking-widest text-white">
+            Immotep <span className="text-purple-400">— Oracle</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsChatOpen(false)}
+            aria-label="Fermer le chat"
+            className="text-slate-500 hover:text-white transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div className="flex-1 min-h-0">
+          <ChatOracle
+            analysis={result?.analysis}
+            context={chatContext}
+            onInsight={(insight) => {
+              if (insight?.map_focus?.lat && insight?.map_focus?.lng) {
+                setMapCenter([insight.map_focus.lat, insight.map_focus.lng, insight.map_focus.zoom || 15]);
+              }
+            }}
+          />
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setIsChatOpen((v) => !v)}
+        aria-expanded={isChatOpen}
+        aria-controls="chat-overlay"
+        aria-label={isChatOpen ? 'Fermer le chat Immotep' : 'Ouvrir le chat Immotep'}
+        className="fixed z-[60] bottom-20 md:bottom-6 right-4 md:right-6 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-lg shadow-indigo-900/40 flex items-center justify-center transition-all transform active:scale-95"
+      >
+        {isChatOpen ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+        )}
+      </button>
 
       {/* Barre d'onglets — mobile uniquement */}
       <nav
