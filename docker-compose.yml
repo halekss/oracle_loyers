@@ -103,7 +103,7 @@ services:
       # api_overpass.py (scrape_cavaliers_osm) lit scripts/scraping_config.json
       # à un chemin relatif à backend/scripts/../../scripts/ : sans ce mount,
       # FileNotFoundError (bug préexistant, jamais fonctionné en conteneur).
-      - ./scripts:/opt/airflow/scripts
+      - ./scripts:/opt/airflow/scripts:ro
     entrypoint: /bin/bash
     command:
       - -c
@@ -140,7 +140,7 @@ services:
       # api_overpass.py (scrape_cavaliers_osm) lit scripts/scraping_config.json
       # à un chemin relatif à backend/scripts/../../scripts/ : sans ce mount,
       # FileNotFoundError (bug préexistant, jamais fonctionné en conteneur).
-      - ./scripts:/opt/airflow/scripts
+      - ./scripts:/opt/airflow/scripts:ro
     ports:
       - "8082:8080"
     command: webserver
@@ -172,7 +172,7 @@ services:
       # api_overpass.py (scrape_cavaliers_osm) lit scripts/scraping_config.json
       # à un chemin relatif à backend/scripts/../../scripts/ : sans ce mount,
       # FileNotFoundError (bug préexistant, jamais fonctionné en conteneur).
-      - ./scripts:/opt/airflow/scripts
+      - ./scripts:/opt/airflow/scripts:ro
     command: scheduler
     restart: unless-stopped
     healthcheck:

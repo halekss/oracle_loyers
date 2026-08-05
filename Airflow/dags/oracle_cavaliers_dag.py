@@ -50,8 +50,10 @@ with DAG(
         bash_command=f"cd {DATA} && python {SCRIPTS}/api_overpass.py",
         # 21 catégories × jusqu'à 3 miroirs Overpass, chacun pouvant retenter
         # sur 429/504 : un run complet réussi a été mesuré à plus de 15 min en
-        # conditions réelles (2026-08-05). Marge portée à 40 min.
-        execution_timeout=timedelta(minutes=40),
+        # conditions réelles (2026-08-05), et les 504 récurrents des miroirs
+        # publics sur les catégories à fort volume peuvent dépasser cette
+        # marge même en cas de succès final. Portée à 45 min.
+        execution_timeout=timedelta(minutes=45),
     )
 
     # Enrichit le CSV cavaliers avec le code postal via API Data Gouv
