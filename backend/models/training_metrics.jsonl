@@ -1,2 +1,3 @@
 {"trained_at": "2026-08-03T13:15:34.586165+00:00", "mae": 167.03, "r2": 0.755, "dataset_size": 1197, "n_features": 45}
 {"trained_at": "2026-08-03T13:21:36.467168+00:00", "mae": 167.03, "r2": 0.755, "dataset_size": 1197, "n_features": 45}
+{"trained_at": "2026-08-05T16:34:17.704044+00:00", "mae": 169.86, "r2": 0.7313, "dataset_size": 1197, "n_features": 45, "model_version": "97355d253130", "promoted": true}
