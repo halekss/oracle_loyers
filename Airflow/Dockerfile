@@ -7,4 +7,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER airflow
 RUN pip install --no-cache-dir \
     pandas numpy scikit-learn shapely xgboost joblib \
-    requests beautifulsoup4
+    requests beautifulsoup4 folium

@@ -266,7 +266,7 @@ class GetChromeDriverOptionsTest(unittest.TestCase):
             def add_experimental_option(self, name, value):
                 pass
 
-        def fake_chrome(options=None):
+        def fake_chrome(options=None, version_main=None):
             captured["options"] = options
             return MagicMock()
 
@@ -290,7 +290,7 @@ class GetChromeDriverOptionsTest(unittest.TestCase):
             def add_experimental_option(self, name, value):
                 pass
 
-        def fake_chrome(options=None):
+        def fake_chrome(options=None, version_main=None):
             captured["options"] = options
             return MagicMock()
 
@@ -312,7 +312,7 @@ class GetChromeDriverOptionsTest(unittest.TestCase):
         fake_driver = MagicMock()
 
         with patch.object(scraper_utils.uc, "ChromeOptions", FakeChromeOptions), \
-             patch.object(scraper_utils.uc, "Chrome", lambda options=None: fake_driver):
+             patch.object(scraper_utils.uc, "Chrome", lambda options=None, version_main=None: fake_driver):
             driver = scraper_utils.get_chrome_driver()
 
         fake_driver.set_page_load_timeout.assert_called_once_with(30)
@@ -329,7 +329,7 @@ class GetChromeDriverOptionsTest(unittest.TestCase):
         fake_driver = MagicMock()
 
         with patch.object(scraper_utils.uc, "ChromeOptions", FakeChromeOptions), \
-             patch.object(scraper_utils.uc, "Chrome", lambda options=None: fake_driver):
+             patch.object(scraper_utils.uc, "Chrome", lambda options=None, version_main=None: fake_driver):
             scraper_utils.get_chrome_driver(page_load_timeout=60)
 
         fake_driver.set_page_load_timeout.assert_called_once_with(60)
