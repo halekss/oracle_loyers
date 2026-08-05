@@ -196,13 +196,17 @@ Le backend Flask centralise sa configuration de logging dans `backend/logging_co
 
 ## ⚙️ Les Scripts de Données (ETL)
 
-Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/` — **seule source de vérité** pour ce pipeline (le root `scripts/` ne contient que les 6 scrapers, voir plus bas) — orchestrés par le DAG Airflow `Airflow/dags/oracle_loyers_dag.py` (planifié quotidiennement à 2h) selon deux branches parallèles qui convergent :
+Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/` — **seule source de vérité** pour ce pipeline (le root `scripts/` ne contient que les 6 scrapers, voir plus bas) — orchestrés par **deux DAG Airflow indépendants**, découplés par cadence et par fiabilité (les POI ne bougent pas d'un jour à l'autre et l'API Overpass est rate-limitée ; les annonces ont besoin d'un rafraîchissement plus fréquent et ne doivent pas rester bloquées par la lenteur d'Overpass) :
 
 ```text
-api_overpass.py ──→ enrich_cavaliers_cp.py ─┐
-                                              ├──→ clean_immo.py ──→ train_model.py
-data_fusion.py ──────────────────────────────┘
+Airflow/dags/oracle_cavaliers_dag.py — cadence mensuelle
+  api_overpass.py ──→ enrich_cavaliers_cp.py
+
+Airflow/dags/oracle_annonces_dag.py — cadence hebdomadaire
+  data_fusion.py ──→ clean_immo.py ──→ train_model.py ──→ generate_map.py
 ```
+
+`clean_immo.py` (côté annonces) lit simplement le `cavaliers_lyon.csv` le plus récent sur disque, produit indépendamment par le DAG cavaliers — aucune dépendance inter-DAG.
 
 1.  **`api_overpass.py`**
     * Récupère ~1 668 lieux répartis sur 21 catégories de POI ("cavaliers") via l'API Overpass (OpenStreetMap), pour la ville active lue dans `scripts/scraping_config.json` (`resolve_active_city_name()` — même config que les 6 scrapers, pas de nom de ville en dur dans le code, voir ORA-71 ci-dessous).
@@ -351,8 +355,8 @@ oracle-des-loyers/
 ├── docker-compose.yml         # Chef d'orchestre des conteneurs (backend, frontend, Airflow)
 ├── README.md                  # Ce fichier
 │
-├── Airflow/                   # Orchestration du pipeline ETL (DAG planifié, cf. section ETL)
-│   └── dags/oracle_loyers_dag.py
+├── Airflow/                   # Orchestration du pipeline ETL (2 DAG planifiés, cf. section ETL)
+│   └── dags/oracle_cavaliers_dag.py, oracle_annonces_dag.py
 │
 ├── scripts/                   # Scrapers (exécution manuelle, hors DAG Airflow)
 │   ├── scraper_century_21.py, scraper_orpi.py, scraper_pap.py,
