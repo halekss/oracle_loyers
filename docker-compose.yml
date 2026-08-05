@@ -94,6 +94,7 @@ services:
       - ./Airflow/dags:/opt/airflow/dags
       - airflow-logs-volume:/opt/airflow/logs
       - ./backend:/opt/airflow/backend
+      - ./scripts:/opt/airflow/scripts:ro
     entrypoint: /bin/bash
     command:
       - -c
@@ -126,6 +127,7 @@ services:
       - ./Airflow/dags:/opt/airflow/dags
       - airflow-logs-volume:/opt/airflow/logs
       - ./backend:/opt/airflow/backend
+      - ./scripts:/opt/airflow/scripts:ro
     ports:
       - "8082:8080"
     command: webserver
@@ -153,6 +155,7 @@ services:
       - ./Airflow/dags:/opt/airflow/dags
       - airflow-logs-volume:/opt/airflow/logs
       - ./backend:/opt/airflow/backend
+      - ./scripts:/opt/airflow/scripts:ro
     command: scheduler
     restart: unless-stopped
     healthcheck:

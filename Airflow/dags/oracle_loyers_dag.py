@@ -35,7 +35,11 @@ with DAG(
     step_scrape = BashOperator(
         task_id="scrape_cavaliers_osm",
         bash_command=f"cd {DATA} && python {SCRIPTS}/api_overpass.py",
-        execution_timeout=timedelta(minutes=15),
+        # 21 catégories OSM, jusqu'à 3 serveurs Overpass publics par catégorie ;
+        # certaines catégories à fort volume (bars, kebabs...) subissent des 504
+        # répétés sur les miroirs publics avant repli, ce qui peut dépasser 15 min
+        # même en cas de succès final (constaté en pratique le 2026-08-05).
+        execution_timeout=timedelta(minutes=45),
     )
 
     # BRANCHE 1B : Enrichit le CSV cavaliers avec le code postal via API Data Gouv

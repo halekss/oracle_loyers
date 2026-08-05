@@ -12,6 +12,8 @@ import json
 import logging
 import os
 import random
+import re
+import subprocess
 import time
 from functools import wraps
 
@@ -109,6 +111,36 @@ def load_existing_rows(path):
     return rows, liens_vus
 
 
+def _detect_local_chrome_major_version():
+    """Détecte la version majeure du Chrome installé localement en interrogeant
+    le binaire directement, pour la transmettre à undetected_chromedriver.
+
+    Nécessaire car uc peut télécharger le ChromeDriver de la dernière version
+    stable connue, en avance de quelques jours sur l'auto-update réel du
+    navigateur local (ex : ChromeDriver 151 alors que Chrome reste en 150) —
+    ce qui casse la négociation de session Selenium. Renvoie None si la
+    détection échoue : uc retombe alors sur son comportement par défaut.
+    """
+    candidates = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+    ]
+    for candidate in candidates:
+        try:
+            output = subprocess.check_output(
+                [candidate, "--version"], stderr=subprocess.DEVNULL, timeout=5
+            ).decode()
+        except (OSError, subprocess.SubprocessError):
+            continue
+        match = re.search(r"(\d+)\.", output)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def get_chrome_driver(
     ignore_certificate_errors=True,
     block_images=False,
@@ -139,7 +171,7 @@ def get_chrome_driver(
         options.add_argument(f"--user-agent={user_agent}")
     if proxy:
         options.add_argument(f"--proxy-server={proxy}")
-    driver = uc.Chrome(options=options)
+    driver = uc.Chrome(options=options, version_main=_detect_local_chrome_major_version())
     driver.set_page_load_timeout(page_load_timeout)
     return driver
 
