@@ -8,6 +8,7 @@ import sys
 
 from scraper_utils import (
     atomic_csv_writer,
+    find_first_image_url,
     get_chrome_driver,
     get_scraper_logger,
     load_existing_rows,
@@ -43,6 +44,13 @@ LIEU_SELECTORS = [
 ]
 DETAIL_SELECTORS = ["span.detail__item", "span[class*='detail']", "[class*='feature']"]
 DESC_SELECTORS = ["p.description__text", "p[class*='description']", "div[class*='description']", "[class*='desc']"]
+IMAGE_SELECTORS = [
+    "img[class*='gallery']",
+    "img[class*='carousel']",
+    "picture img",
+    "img[class*='photo']",
+    "img",
+]
 
 def find_text(element, selectors, default=""):
     for sel in selectors:
@@ -76,9 +84,10 @@ if __name__ == '__main__':
     total_nouveaux_run = 0
     total_cards_vues = 0
 
-    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH)
+    CSV_HEADER = ['Lieu', 'Prix', 'Details', 'Description', 'Lien', 'Image']
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, expected_columns=len(CSV_HEADER))
 
-    with atomic_csv_writer(OUTPUT_PATH, ['Lieu', 'Prix', 'Details', 'Description', 'Lien']) as writer:
+    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
         for row in existing_rows:
             writer.writerow(row)
 
@@ -157,7 +166,9 @@ if __name__ == '__main__':
                         except Exception:
                             continue
 
-                    writer.writerow([info['lieu'], info['prix'], info['details'], description, info['lien']])
+                    image = find_first_image_url(driver, selectors=IMAGE_SELECTORS, base_url=driver.current_url)
+
+                    writer.writerow([info['lieu'], info['prix'], info['details'], description, info['lien'], image])
                     liens_vus.add(info['lien'])
                     compteur_page += 1
                     logger.info("Annonce récupérée : %s", info['lieu'])

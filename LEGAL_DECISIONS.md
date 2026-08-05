@@ -25,7 +25,19 @@ et le commit `5a5a9c1`, 2026-08-03 — ce document ne les modifie pas, il s'appu
 
 ## ORA-94 — Héberger les photos des annonces, ou juste un lien + thumbnail ?
 
-**Décision : Option (B) — ne jamais héberger nous-mêmes les photos des annonces scrapées.**
+> ⚠️ **SUPERSEDED le 2026-08-05 (ORA-134)** — décision révisée par le porteur du projet en
+> connaissance du risque juridique décrit ci-dessous : les popups d'annonces sur la carte
+> affichent désormais la photo de l'annonce (`backend/scripts/generate_map.py`,
+> `build_immo_popup_html`). Le choix technique retenu limite le risque par rapport au pire cas
+> décrit plus bas : **hotlink direct** vers l'URL de la photo hébergée par le site source
+> (`<img src="...">` pointant vers l'infra du site tiers), **jamais de téléchargement ni de
+> re-service depuis notre propre infrastructure**. C'est donc une atténuation du risque décrit
+> ci-dessous, pas une élimination : le raisonnement juridique original (droit d'auteur, absence
+> d'accord avec les 6 sites sources) reste valable et n'est pas remis en cause, seule la posture
+> produit change. Le reste de cette section documente le raisonnement original, conservé pour
+> traçabilité.
+
+**Décision originale (2026-08-03) : Option (B) — ne jamais héberger nous-mêmes les photos des annonces scrapées.**
 L'application affiche uniquement un lien direct (redirection) vers l'annonce sur le site
 source. Pas de téléchargement, pas de copie, pas de re-service d'image depuis notre infra.
 
@@ -60,6 +72,12 @@ source. Pas de téléchargement, pas de copie, pas de re-service d'image depuis 
   de photo. Aucun thumbnail basé sur du contenu du site source n'est retenu.
 
 ### Implication concrète pour les tickets frontend à venir
+
+> Note ORA-134 : la carte (popups Leaflet, `generate_map.py`) est désormais exemptée de cette
+> contrainte (cf. bandeau SUPERSEDED ci-dessus). Le point ci-dessous concernant `AnnonceCard`
+> (composant React, liste `/api/annonces`) **reste en vigueur** — non traité par ORA-134, qui ne
+> portait que sur la carte. Si le même hotlink doit s'appliquer à `AnnonceCard`, ce sera une
+> décision/ticket séparé.
 
 - **ORA-87 (`AnnonceCard`)** : le composant ne doit **pas** afficher de balise `<img>` pointant
   vers une photo scrapée, ni vers une capture d'écran du site source. Il peut afficher un visuel

@@ -9,6 +9,7 @@ import sys
 
 from scraper_utils import (
     atomic_csv_writer,
+    find_first_image_url,
     get_chrome_driver,
     get_scraper_logger,
     load_existing_rows,
@@ -69,12 +70,13 @@ if __name__ == '__main__':
 
     driver = get_chrome_driver(user_agent=pick_user_agent(), proxy=pick_proxy())
 
-    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH)
+    CSV_HEADER = ['Titre_Lieu', 'Prix', 'Infos', 'Lien', 'Image']
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, expected_columns=len(CSV_HEADER))
     erreurs = 0
     total_nouveaux_run = 0
     total_cards_vues = 0
 
-    with atomic_csv_writer(OUTPUT_PATH, ['Titre_Lieu', 'Prix', 'Infos', 'Lien']) as writer:
+    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
         for row in existing_rows:
             writer.writerow(row)
 
@@ -148,7 +150,9 @@ if __name__ == '__main__':
                     if not prix:
                         continue
 
-                    writer.writerow([titre, prix, infos, href])
+                    image = find_first_image_url(annonce, base_url=driver.current_url)
+
+                    writer.writerow([titre, prix, infos, href, image])
                     liens_vus.add(href)
                     compteur_nouveaux += 1
                     logger.info("Annonce trouvée : %s -- %s", titre[:60], prix)

@@ -50,12 +50,28 @@ def sanitize_listing_url(url):
     return None
 
 
-def build_immo_popup_html(type_local, prix, quartier, listing_url=None):
-    """Contenu du popup affiché au survol d'un marker d'annonce (ORA-90).
+def sanitize_image_url(url):
+    """Ne garde que les URL http(s) valides pour l'attribut src de l'image (même
+    logique que `sanitize_listing_url`) : évite d'interpoler un `javascript:`/
+    `data:` arbitraire venu du scraping dans le HTML généré."""
+    if not isinstance(url, str):
+        return None
+    candidate = url.strip()
+    if not candidate:
+        return None
+    lowered = candidate.lower()
+    if lowered.startswith('http://') or lowered.startswith('https://'):
+        return candidate
+    return None
 
-    N'affiche jamais d'image tirée de l'annonce scrapée : décision légale/éthique
-    actée dans LEGAL_DECISIONS.md (ORA-94) — seul un lien de redirection vers la
-    source est autorisé, aucune reproduction de photo ou de capture d'écran.
+
+def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_url=None):
+    """Contenu du popup affiché au clic sur un marker d'annonce (ORA-90).
+
+    Affiche la photo d'annonce scrapée telle quelle (hotlink direct vers le
+    site source, jamais téléchargée ni re-hébergée sur notre infra) : décision
+    ORA-94 (LEGAL_DECISIONS.md) explicitement révisée pour autoriser ce mode
+    d'affichage, cf. section "SUPERSEDED" du document.
     """
     safe_type = html.escape(str(type_local))
     safe_prix = html.escape(str(prix))
@@ -69,34 +85,25 @@ def build_immo_popup_html(type_local, prix, quartier, listing_url=None):
             "style='display:block; font-size:12px; color:#22c55e; margin-top:4px;'>Voir l'annonce &#8599;</a>"
         )
 
+    image_html = ""
+    safe_image_url = sanitize_image_url(image_url)
+    if safe_image_url:
+        safe_image_url = html.escape(safe_image_url, quote=True)
+        image_html = (
+            f"<img src='{safe_image_url}' loading='lazy' referrerpolicy='no-referrer' "
+            "style='display:block; width:100%; height:90px; object-fit:cover; border-radius:6px; "
+            "margin-bottom:6px;' onerror=\"this.style.display='none'\">"
+        )
+
     return f"""
-    <div style='font-family:sans-serif; min-width:140px;'>
+    <div style='font-family:sans-serif; min-width:160px; max-width:200px;'>
+        {image_html}
         <h4 style='margin:0 0 5px 0; color:#22c55e; border-bottom:1px solid #334155; padding-bottom:3px;'>{safe_type}</h4>
         <div style='font-size:15px; font-weight:bold; margin-bottom:5px;'>{safe_prix} €</div>
         <div style='color:#94a3b8; font-size:12px;'>{safe_quartier}</div>
         {link_html}
     </div>
     """
-
-
-def build_marker_click_script(marker_var, redirect_url):
-    """Lie le clic sur un marker à l'ouverture de l'annonce source (ORA-90).
-
-    `redirect_url` est resanitisé et échappé via json.dumps avant interpolation
-    JS : c'est une donnée scrapée externe, jamais fiable telle quelle.
-    """
-    safe_redirect_url = sanitize_listing_url(redirect_url)
-    if not safe_redirect_url:
-        return ""
-
-    redirect_js = json.dumps(safe_redirect_url)
-    return (
-        f"if (typeof {marker_var} !== 'undefined') {{\n"
-        f"  {marker_var}.on('click', function() {{\n"
-        f"    window.open({redirect_js}, '_blank', 'noopener,noreferrer');\n"
-        "  });\n"
-        "}"
-    )
 
 
 def write_map_metadata(metadata_path, output_html=None, extra=None):
@@ -171,8 +178,6 @@ def main():
     fg_nuisance = folium.FeatureGroup(name='Nuisance', show=False)
     fg_superstition = folium.FeatureGroup(name='Superstition', show=False)
 
-    click_scripts = []
-
     # --- 5. GENERATION POINTS IMMO ---
     for _, row in df_immo.iterrows():
         if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')):
@@ -182,8 +187,9 @@ def main():
             type_local = str(row.get('type_local', '')).strip()
             prix = str(row.get('prix', '?')).replace('.0', '')
             listing_url = sanitize_listing_url(row.get('url'))
+            image_url = row.get('image')
 
-            txt_popup = build_immo_popup_html(type_local, prix, row.get('quartier', 'Lyon'), listing_url)
+            txt_popup = build_immo_popup_html(type_local, prix, row.get('quartier', 'Lyon'), listing_url, image_url)
 
             target_group = None
             if type_local == 'Studio/T1': target_group = fg_studio
@@ -192,15 +198,14 @@ def main():
             elif type_local == 'Grand (T4+)': target_group = fg_t4
 
             if target_group:
+                # Popup (pas Tooltip) : reste ouvert au clic au lieu de disparaître
+                # dès que la souris quitte le marker, ce qui rendait le lien "Voir
+                # l'annonce" à l'intérieur impossible à atteindre (ORA-134).
                 marker = folium.CircleMarker(
                     [lat, lon], radius=5, color=COLORS['Immo'], weight=1, fill=True, fill_color=COLORS['Immo'], fill_opacity=0.8,
-                    tooltip=folium.Tooltip(txt_popup, sticky=True, class_name='oracle-popup'),
+                    popup=folium.Popup(txt_popup, max_width=220, className='oracle-popup'),
                 )
                 marker.add_to(target_group)
-
-                script = build_marker_click_script(marker.get_name(), listing_url)
-                if script:
-                    click_scripts.append(script)
 
     # --- 6. GESTION DU MÉTRO VIA JSON (LIGNES + STATIONS) ---
     if os.path.exists(METRO_JSON):
@@ -319,8 +324,7 @@ def main():
 
     html_out = m.get_root().render()
 
-    # --- 9. HACK CSS/JS (POPUPS, CONTROLE CALQUES, CLIC -> REDIRECTION) ---
-    click_scripts_js = "\n".join(click_scripts)
+    # --- 9. HACK CSS/JS (POPUPS, CONTROLE CALQUES) ---
     hack = f"""
     <style>
         .leaflet-control-layers {{ display: none !important; }}
@@ -352,7 +356,6 @@ def main():
             }}
         }}
     }});
-    {click_scripts_js}
     </script>
     </body>
     """

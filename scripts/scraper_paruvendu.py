@@ -4,6 +4,7 @@ import time
 import random
 import os
 import sys
+from urllib.parse import urljoin
 
 from scraper_utils import (
     atomic_csv_writer,
@@ -69,6 +70,28 @@ def find_bs4(soup_elem, selectors):
             continue
     return None
 
+
+IMAGE_ATTRIBUTES = ("data-src", "data-lazy-src", "data-lazy", "srcset", "src")
+
+
+def find_image_bs4(soup_elem, base_url=None):
+    """Équivalent BeautifulSoup de `scraper_utils.find_first_image_url` (pas de
+    Selenium/WebElement ici) : même cascade d'attributs pour gérer le lazy-loading,
+    et même résolution des chemins relatifs via `base_url` (l'URL de la page
+    fetchée) en URL absolue."""
+    img = soup_elem.find("img")
+    if not img:
+        return ""
+    for attribute in IMAGE_ATTRIBUTES:
+        value = (img.get(attribute) or "").strip()
+        if not value:
+            continue
+        if attribute == "srcset":
+            value = value.split(",")[0].strip().split(" ")[0].strip()
+        if value:
+            return urljoin(base_url, value) if base_url else value
+    return ""
+
 @retry_with_backoff(max_retries=3, backoff_seconds=2, exceptions=(requests.exceptions.RequestException,))
 def fetch_page(url):
     return requests.get(url, headers=headers, timeout=15, proxies=PROXIES)
@@ -76,14 +99,15 @@ def fetch_page(url):
 if __name__ == '__main__':
     logger.info("Lancement du Scraper ParuVendu (Mode Rapide) (%s)...", site_config['ville_nom'])
 
-    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH)
+    CSV_HEADER = ['Titre', 'Prix', 'Lien', 'Image']
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, expected_columns=len(CSV_HEADER))
     erreurs = 0
     total_nouveaux_run = 0
     total_cards_vues = 0
     page_num = 1
     continuer = True
 
-    with atomic_csv_writer(OUTPUT_PATH, ['Titre', 'Prix', 'Lien']) as writer:
+    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
         for row in existing_rows:
             writer.writerow(row)
 
@@ -132,7 +156,9 @@ if __name__ == '__main__':
                     if lien in liens_vus or lien == "Pas de lien":
                         continue
 
-                    writer.writerow([titre, prix, lien])
+                    image = find_image_bs4(annonce, base_url=url_page)
+
+                    writer.writerow([titre, prix, lien, image])
                     liens_vus.add(lien)
                     compteur_page += 1
                     logger.info("Annonce trouvée : %s -- %s", titre, prix)

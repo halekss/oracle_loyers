@@ -16,6 +16,7 @@ import re
 import subprocess
 import time
 from functools import wraps
+from urllib.parse import urljoin
 
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -25,6 +26,7 @@ from csv_atomic_writer import atomic_csv_writer
 __all__ = [
     "get_chrome_driver",
     "find_first",
+    "find_first_image_url",
     "atomic_csv_writer",
     "retry_with_backoff",
     "get_scraper_logger",
@@ -88,14 +90,22 @@ def pick_proxy(config_path=CONFIG_PATH):
     return random.choice(proxies) if proxies else None
 
 
-def load_existing_rows(path):
+def load_existing_rows(path, expected_columns=None):
     """Charge les lignes déjà connues (écrites lors d'un run précédent) et l'ensemble de
     leurs liens, pour dédupliquer d'un run à l'autre et pas seulement au sein d'un même run.
 
     Stratégie retenue : append. Une annonce déjà vue lors d'un run précédent est ignorée
     (ni ré-écrite, ni mise à jour) ; sa ligne existante est conservée telle quelle et
-    réécrite avec le reste. Le lien (dernière colonne de chaque ligne, par convention sur
-    les 6 scrapers) sert de clé de déduplication.
+    réécrite avec le reste. Le lien (dernière colonne *au moment de l'écriture d'origine*)
+    sert de clé de déduplication — voir note `expected_columns` ci-dessous.
+
+    `expected_columns` (optionnel) : nombre de colonnes du header courant. Si fourni, les
+    lignes plus courtes (écrites avant l'ajout d'une nouvelle colonne, ex: 'Image' ajoutée
+    après 'Lien' sur les 6 scrapers) sont complétées avec des chaînes vides à la fin, pour
+    rester alignées avec le header et éviter un CSV en dents de scie que `pandas.read_csv`
+    lirait mal. Dans ce cas, 'Lien' est l'avant-dernière colonne (la dernière est 'Image') ;
+    sans `expected_columns` (compat rétroactive), 'Lien' reste la dernière colonne, comme
+    avant l'ajout d'Image.
 
     Renvoie ([], set()) si `path` n'existe pas encore (premier run).
     """
@@ -107,7 +117,13 @@ def load_existing_rows(path):
         next(reader, None)  # en-tête
         rows = [row for row in reader if row]
 
-    liens_vus = {row[-1] for row in rows}
+    if expected_columns is not None:
+        rows = [row + [""] * (expected_columns - len(row)) for row in rows]
+        lien_index = -2
+    else:
+        lien_index = -1
+
+    liens_vus = {row[lien_index] for row in rows}
     return rows, liens_vus
 
 
@@ -187,6 +203,46 @@ def find_first(element, selectors, default=""):
         except Exception:
             continue
     return default
+
+
+IMAGE_ATTRIBUTES = ("data-src", "data-lazy-src", "data-lazy", "srcset", "src")
+
+
+def find_first_image_url(element, selectors=("img",), attributes=IMAGE_ATTRIBUTES, base_url=None):
+    """
+    Cherche la première balise <img> correspondant à l'un des `selectors` dans
+    `element`, et renvoie une URL d'image exploitable.
+
+    La plupart des portails immobiliers font du lazy-loading (l'attribut `src`
+    réel n'est peuplé qu'au scroll, remplacé entre-temps par un placeholder) :
+    on essaie donc les attributs `data-src`/`data-lazy-src`/`data-lazy` avant
+    `src`, et on parse `srcset` (garde la première URL, avant le descripteur
+    de taille "500w"/"2x") si aucun des attributs directs n'est présent.
+
+    `base_url` (ex: `driver.current_url`) résout les chemins relatifs/racine
+    (ex: "/imagesBien/...") en URL absolue via `urljoin` : sans ça, une image
+    valide mais relative serait rejetée plus tard par `sanitize_image_url`
+    (generate_map.py), qui n'accepte que du http(s) absolu.
+
+    Renvoie "" si aucune image exploitable n'est trouvée (annonce sans photo,
+    ou sélecteur qui ne correspond plus à la structure du site).
+    """
+    for selector in selectors:
+        try:
+            img = element.find_element(By.CSS_SELECTOR, selector)
+        except Exception:
+            continue
+
+        for attribute in attributes:
+            value = (img.get_attribute(attribute) or "").strip()
+            if not value:
+                continue
+            if attribute == "srcset":
+                value = value.split(",")[0].strip().split(" ")[0].strip()
+            if value:
+                return urljoin(base_url, value) if base_url else value
+
+    return ""
 
 
 def get_scraper_logger(name):
