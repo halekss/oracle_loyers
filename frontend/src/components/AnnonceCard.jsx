@@ -3,9 +3,59 @@ import { api } from '../services/api';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
 
-// Pas de photo hébergée par nous (décision ORA-94/ORA-86 : cf. LEGAL_DECISIONS.md)
-// — la carte affiche un simple bandeau placeholder, la photo réelle reste sur le
-// site source, atteint via la redirection au clic.
+// Mêmes seuils que `determine_type_local` dans backend/scripts/clean_immo.py,
+// utilisés ici uniquement pour varier le style de l'illustration générique :
+// `annonces.db` ne stocke pas de colonne `type_local` séparée, seule `surface`
+// est disponible côté API.
+const getTypeCategory = (surface) => {
+  const s = Number(surface);
+  if (!Number.isFinite(s)) return null;
+  if (s < 35) return 'Studio/T1';
+  if (s < 55) return 'T2';
+  if (s < 75) return 'T3';
+  return 'Grand (T4+)';
+};
+
+const ILLUSTRATION_BY_CATEGORY = {
+  'Studio/T1': 'from-sky-900/50 to-slate-900 text-sky-400',
+  'T2': 'from-emerald-900/50 to-slate-900 text-emerald-400',
+  'T3': 'from-amber-900/50 to-slate-900 text-amber-400',
+  'Grand (T4+)': 'from-rose-900/50 to-slate-900 text-rose-400',
+};
+const DEFAULT_ILLUSTRATION_CLASSES = 'from-slate-800 to-slate-900 text-slate-500';
+
+// Illustration générique produite par nous (icône SVG maison inline, pas de
+// fichier externe) — jamais de photo ni de capture d'écran issue de l'annonce
+// ou du site source (ORA-133 ; contrainte légale documentée dans
+// LEGAL_DECISIONS.md, section ORA-94 : AnnonceCard ne doit afficher aucune
+// image provenant de l'annonce elle-même, y compris via hotlink).
+function AnnonceIllustration({ surface }) {
+  const category = getTypeCategory(surface);
+  const classes = ILLUSTRATION_BY_CATEGORY[category] || DEFAULT_ILLUSTRATION_CLASSES;
+
+  return (
+    <div className={`h-20 flex flex-col items-center justify-center gap-1 bg-gradient-to-br ${classes}`}>
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="w-7 h-7"
+        aria-hidden="true"
+      >
+        <path d="M3 11.5 12 4l9 7.5" />
+        <path d="M5.5 10v9.5h13V10" />
+        <path d="M10 19.5v-6h4v6" />
+      </svg>
+      {category && (
+        <span className="text-[8px] uppercase tracking-widest font-bold opacity-80">{category}</span>
+      )}
+    </div>
+  );
+}
+
 export default function AnnonceCard({ annonce }) {
   if (!annonce) return null;
 
@@ -40,9 +90,7 @@ export default function AnnonceCard({ annonce }) {
       onKeyDown={handleKeyDown}
       className="animate-fade-in text-left w-full bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-purple-500/20 overflow-hidden cursor-pointer hover:border-purple-500/50 transition-colors group"
     >
-      <div className="h-20 bg-slate-800/60 flex items-center justify-center text-slate-600 text-[9px] uppercase tracking-widest font-bold px-2 text-center">
-        Photo sur le site source
-      </div>
+      <AnnonceIllustration surface={surface} />
 
       <div className="p-3">
         <div className="flex justify-between items-start gap-2">

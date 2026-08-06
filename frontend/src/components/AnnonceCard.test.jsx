@@ -85,4 +85,21 @@ describe('AnnonceCard', () => {
     expect(openSpy).toHaveBeenCalled();
     openSpy.mockRestore();
   });
+
+  it('renders a generic illustration instead of any image (ORA-133 : pas de photo tierce)', () => {
+    const { container } = render(<AnnonceCard annonce={baseAnnonce} />);
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it.each([
+    [20, 'Studio/T1'],
+    [45, 'T2'],
+    [65, 'T3'],
+    [90, 'Grand (T4+)'],
+  ])('labels the illustration %s m² as %s', (surface, expectedLabel) => {
+    render(<AnnonceCard annonce={{ ...baseAnnonce, surface }} />);
+    expect(screen.getByText(expectedLabel)).toBeInTheDocument();
+  });
 });
