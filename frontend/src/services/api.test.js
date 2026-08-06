@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getApiBaseUrl, apiFetchOptions } from './api.js';
+import { getApiBaseUrl, apiFetchOptions, parseRateLimitHeaders } from './api.js';
 
 describe('getApiBaseUrl', () => {
   it('uses VITE_API_URL when provided', () => {
@@ -32,5 +32,17 @@ describe('apiFetchOptions', () => {
       headers: { 'Content-Type': 'text/plain' },
       body: '{"message":"test"}',
     });
+  });
+});
+
+describe('parseRateLimitHeaders', () => {
+  it('extracts limit and remaining from response headers (ORA-118)', () => {
+    const headers = new Headers({ 'X-RateLimit-Limit': '15', 'X-RateLimit-Remaining': '12' });
+
+    expect(parseRateLimitHeaders(headers)).toEqual({ limit: 15, remaining: 12 });
+  });
+
+  it('returns null when the headers are absent (rate limiting disabled or not exposed)', () => {
+    expect(parseRateLimitHeaders(new Headers())).toBeNull();
   });
 });

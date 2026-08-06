@@ -76,7 +76,14 @@ def get_server_port():
 
 cors_origins = get_cors_origins()
 logger.info("Politique CORS effective : %s", cors_origins)
-CORS(app, origins=cors_origins)  # Autorise les requêtes du Frontend React
+CORS(
+    app,
+    origins=cors_origins,
+    # ORA-118 : sans expose_headers, fetch() côté frontend ne peut pas lire
+    # ces headers même s'ils sont présents dans la réponse (restriction CORS
+    # par défaut aux headers "safelisted").
+    expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
+)  # Autorise les requêtes du Frontend React
 
 # Documentation interactive Swagger/OpenAPI, accessible sur /apidocs (voir
 # aussi API_CONTRACT.md à la racine du dépôt pour le contrat détaillé).
@@ -124,6 +131,9 @@ limiter = Limiter(
     app=app,
     default_limits=get_default_rate_limits(),
     storage_uri="memory://",
+    # ORA-118 : ajoute X-RateLimit-Limit/-Remaining/-Reset sur chaque réponse,
+    # pour que le frontend affiche un indicateur de quota avant le 429.
+    headers_enabled=True,
 )
 
 

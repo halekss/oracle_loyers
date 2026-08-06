@@ -8,6 +8,8 @@ Toutes les routes `POST` acceptent un corps JSON (`Content-Type: application/jso
 
 **Rate limiting** : toutes les routes ci-dessous sont soumises à une limite globale par IP (`RATE_LIMIT_DEFAULT` dans [`.env.example`](./.env.example), défaut `200 per day, 50 per hour`). Un dépassement renvoie `429 { "error": "Trop de requêtes. Réessayez dans quelques instants." }`.
 
+Chaque réponse expose les headers `X-RateLimit-Limit`/`X-RateLimit-Remaining`/`X-RateLimit-Reset` (Flask-Limiter, `headers_enabled=True`) — reflètent la limite la plus contraignante applicable à la route (ex. `RATE_LIMIT_CHAT` sur `/api/chat`, pas la limite globale). Exposés en CORS (`Access-Control-Expose-Headers`) pour être lisibles par `fetch()` côté frontend (ORA-118, indicateur de quota dans `ChatOracle.jsx` avant d'atteindre le 429).
+
 ---
 
 ## Authentification (ORA-46)

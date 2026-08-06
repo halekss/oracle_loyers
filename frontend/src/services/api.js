@@ -50,6 +50,20 @@ export const getApiBaseUrl = (env = import.meta.env || {}, locationInfo = global
 
 const API_URL = getApiBaseUrl();
 
+// ORA-118 : extrait le quota restant des headers X-RateLimit-* (Flask-Limiter,
+// exposés en CORS) — null si absents (rate limiting désactivé, ou route sans
+// limite dédiée renvoyant la limite globale plutôt que celle du chat).
+export const parseRateLimitHeaders = (headers) => {
+  const remaining = headers.get('X-RateLimit-Remaining');
+  if (remaining == null) return null;
+
+  const limit = headers.get('X-RateLimit-Limit');
+  return {
+    limit: limit != null ? Number(limit) : null,
+    remaining: Number(remaining),
+  };
+};
+
 export const apiFetchOptions = (payload) => ({
   method: "POST",
   headers: { "Content-Type": "text/plain" },
@@ -208,7 +222,9 @@ export const api = {
         ...apiFetchOptions(payload),
       });
 
-      return await response.json();
+      const rateLimit = parseRateLimitHeaders(response.headers);
+      const data = await response.json();
+      return { ...data, rateLimit };
     } catch (error) {
       console.error("❌ Erreur Chat:", error);
       throw error;

@@ -52,6 +52,38 @@ class RateLimitBehaviorTest(unittest.TestCase):
         finally:
             del os.environ["RATE_LIMIT_CHAT"]
 
+    def test_chat_route_exposes_the_remaining_quota_header(self):
+        """ORA-118 : le frontend a besoin de X-RateLimit-Remaining pour
+        afficher un indicateur de quota avant que l'utilisateur ne tombe sur
+        un 429. Limite volontairement large pour ne pas dépendre de l'état
+        partagé du limiter avec les autres tests de ce fichier."""
+        os.environ["RATE_LIMIT_CHAT"] = "1000 per hour"
+        try:
+            client = app_module.app.test_client()
+            response = client.post("/api/chat", json={"message": "Quel prix à Gerland ?"})
+
+            self.assertIn("X-RateLimit-Remaining", response.headers)
+            self.assertIn("X-RateLimit-Limit", response.headers)
+        finally:
+            del os.environ["RATE_LIMIT_CHAT"]
+
+    def test_rate_limit_headers_are_exposed_via_cors(self):
+        """Sans Access-Control-Expose-Headers, fetch() côté frontend ne peut
+        pas lire ces headers même s'ils sont présents dans la réponse."""
+        os.environ["RATE_LIMIT_CHAT"] = "1000 per hour"
+        try:
+            client = app_module.app.test_client()
+            response = client.post(
+                "/api/chat",
+                json={"message": "Quel prix à Gerland ?"},
+                headers={"Origin": "http://localhost:5173"},
+            )
+
+            exposed = response.headers.get("Access-Control-Expose-Headers", "")
+            self.assertIn("X-RateLimit-Remaining", exposed)
+        finally:
+            del os.environ["RATE_LIMIT_CHAT"]
+
     def test_exceeding_the_configured_limit_returns_429_with_json_error(self):
         # Reproduit le même montage (Limiter + errorhandler 429) que app.py,
         # sur une mini-app isolée avec une limite volontairement basse, pour

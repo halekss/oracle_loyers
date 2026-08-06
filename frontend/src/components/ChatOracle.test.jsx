@@ -107,6 +107,34 @@ describe('ChatOracle', () => {
     expect(screen.getByRole('button', { name: /envoyer le message/i })).toBeDisabled();
   });
 
+  it('shows the remaining chat quota after a successful response (ORA-118)', async () => {
+    api.sendChatMessage.mockResolvedValue({
+      response: 'Gerland tourne autour de 780 EUR pour un T2.',
+      rateLimit: { limit: 15, remaining: 12 },
+    });
+    const user = userEvent.setup();
+
+    render(<ChatOracle />);
+    await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Quel prix a Gerland ?');
+    await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-quota')).toHaveTextContent(/12\s*\/\s*15/);
+    });
+  });
+
+  it('does not show a quota indicator when the backend does not expose it', async () => {
+    api.sendChatMessage.mockResolvedValue({ response: 'Réponse simple.' });
+    const user = userEvent.setup();
+
+    render(<ChatOracle />);
+    await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Salut');
+    await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+    await waitFor(() => expect(screen.getByText('Réponse simple.')).toBeInTheDocument());
+    expect(screen.queryByTestId('chat-quota')).not.toBeInTheDocument();
+  });
+
   it('appends the analysis message when the analysis prop changes', () => {
     const { rerender } = render(<ChatOracle analysis={null} />);
     rerender(<ChatOracle analysis="Analyse du secteur Gerland." />);

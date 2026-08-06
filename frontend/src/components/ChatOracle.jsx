@@ -37,6 +37,7 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [latestInsight, setLatestInsight] = useState(null);
+  const [rateLimit, setRateLimit] = useState(null);
   const messagesEndRef = useRef(null);
 
   // 1. Quand une nouvelle analyse arrive (depuis le scan), Immotep parle tout seul
@@ -78,6 +79,10 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
       if (typeof oracleResponse === 'object') {
         setLatestInsight(oracleResponse);
         onInsight?.(oracleResponse);
+        // ORA-118 : indicateur de quota, visible avant d'atteindre la limite
+        if (oracleResponse.rateLimit) {
+          setRateLimit(oracleResponse.rateLimit);
+        }
       }
     } catch (error) {
       console.error('Erreur chat:', error);
@@ -163,6 +168,13 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
               Secteur actif : {quartier || 'zone scannée'}
             </span>
           </div>
+        )}
+
+        {/* ORA-118 : quota restant, discret, visible avant d'atteindre le 429 */}
+        {rateLimit && (
+          <p data-testid="chat-quota" className="text-[9px] text-slate-600 mb-2 px-2 text-right">
+            {rateLimit.remaining}{rateLimit.limit != null ? ` / ${rateLimit.limit}` : ''} question{rateLimit.limit > 1 ? 's' : ''} restante{rateLimit.limit > 1 ? 's' : ''} cette heure
+          </p>
         )}
 
         <form onSubmit={handleSend} className="relative flex items-center gap-2">
