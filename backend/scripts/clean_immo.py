@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 import random
+import sys
 import warnings
 import re
 from shapely.geometry import MultiPoint, Point
@@ -15,11 +16,21 @@ warnings.filterwarnings('ignore')
 print("⚙️  Configuration du pipeline...")
 script_dir = os.path.dirname(os.path.abspath(__file__))
 data_dir = os.path.join(script_dir, '..', 'data')
+backend_dir = os.path.dirname(script_dir)
+
+# backend/services (annonces_store) n'est pas sur sys.path par défaut quand ce
+# script est lancé depuis backend/scripts/ (ex: `python clean_immo.py`, ou
+# l'étape DAG Airflow `clean_immo`) plutôt que depuis backend/ (comme app.py).
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+from services import annonces_store  # noqa: E402 (après le sys.path.insert nécessaire)
 
 # Fichiers d'entrée/sortie
 INPUT_RAW_CSV = os.path.join(data_dir, "base_de_donnees_immo_lyon_complet.csv")
 CAVALIERS_CSV = os.path.join(data_dir, "cavaliers_lyon.csv")
 OUTPUT_FINAL_CSV = os.path.join(data_dir, "master_immo_final.csv")
+ANNONCES_DB_PATH = os.path.join(data_dir, "annonces.db")
 
 # Paramètres globaux
 RADIUS_METERS = 500
@@ -242,6 +253,63 @@ def step_ids(df):
     return df
 
 # =============================================================================
+# ETAPE 6 : SYNCHRONISATION DU STORE SQLITE (ORA-112)
+# =============================================================================
+def build_titre(row):
+    """Pas de vrai champ 'titre' dans le CSV master (seulement 'description',
+    un texte libre déjà nettoyé par data_fusion.py) : on synthétise un titre
+    court et lisible à partir du type de bien + quartier, cohérent avec ce
+    qu'affiche AnnonceCard.jsx."""
+    type_local = str(row.get('type_local') or '').strip()
+    quartier = str(row.get('quartier') or '').strip()
+    if type_local and quartier:
+        return f"{type_local} — {quartier}"
+    return type_local or quartier or str(row.get('description') or '').strip()[:80] or None
+
+
+def step_sync_annonces_store(df, db_path=ANNONCES_DB_PATH):
+    """Alimente la table SQLite `annonces` (services/annonces_store.py) à partir
+    du dataframe final, pour que `/api/annonces` (liste "Annonces récentes",
+    tracking de clics) ait réellement des données à servir — jusqu'ici cette
+    table n'était peuplée que par les tests unitaires, jamais par le pipeline
+    (ORA-112). `upsert_annonce` dédoublonne par `url` (contrainte UNIQUE),
+    donc rejouer cette étape sur les mêmes annonces les met juste à jour.
+    """
+    print("\n🗃️  ETAPE 6 : Synchronisation du store annonces (SQLite)...")
+    annonces_store.init_db(db_path)
+
+    synced = 0
+    skipped = 0
+    for _, row in df.iterrows():
+        url = row.get('url')
+        if not isinstance(url, str) or not url.strip():
+            skipped += 1
+            continue
+
+        image = row.get('image')
+        images = [image] if isinstance(image, str) and image.strip() else None
+
+        try:
+            annonces_store.upsert_annonce(
+                titre=build_titre(row),
+                prix=float(row['prix']) if pd.notna(row.get('prix')) else None,
+                surface=float(row['surface']) if pd.notna(row.get('surface')) else None,
+                ville=row.get('ville') or None,
+                quartier=row.get('quartier') or None,
+                url=url,
+                images=images,
+                db_path=db_path,
+            )
+            synced += 1
+        except ValueError:
+            # url vide/blanche après strip malgré le filtre ci-dessus (garde-fou) :
+            # upsert_annonce lève ValueError plutôt que d'insérer une ligne invalide.
+            skipped += 1
+
+    print(f"   ✅ {synced} annonces synchronisées, {skipped} ignorées (url manquante).")
+    return df
+
+# =============================================================================
 # MAIN PIPELINE
 # =============================================================================
 def load_cavaliers(cavaliers_csv_path=CAVALIERS_CSV):
@@ -274,6 +342,9 @@ def main():
     print(f"\n💾 Sauvegarde finale vers {OUTPUT_FINAL_CSV}...")
     df.to_csv(OUTPUT_FINAL_CSV, index=False)
     print("✨ TERMINÉ ! Le fichier master est prêt.")
+
+    # 4. Synchronisation du store SQLite consommé par /api/annonces (ORA-112)
+    step_sync_annonces_store(df)
 
 if __name__ == "__main__":
     main()

@@ -92,6 +92,95 @@ class StepIdsTest(unittest.TestCase):
         self.assertIn("id_annonce", result.columns)
 
 
+class StepSyncAnnoncesStoreTest(unittest.TestCase):
+    def test_syncs_rows_with_url_into_store(self):
+        import tempfile
+
+        from services import annonces_store
+
+        df = pd.DataFrame([
+            {
+                "type_local": "T2",
+                "quartier": "Part-Dieu",
+                "description": "beau T2 lumineux",
+                "prix": 750,
+                "surface": 45,
+                "ville": "Lyon",
+                "url": "https://example.com/annonce-1",
+                "image": "https://example.com/photo-1.jpg",
+            },
+        ])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = os.path.join(tmp_dir, "annonces.db")
+
+            result = clean_immo.step_sync_annonces_store(df, db_path=db_path)
+
+            annonces = annonces_store.list_annonces(db_path=db_path)
+            self.assertEqual(annonces["total"], 1)
+            annonce = annonces["items"][0]
+            self.assertEqual(annonce["titre"], "T2 — Part-Dieu")
+            self.assertEqual(annonce["prix"], 750)
+            self.assertEqual(annonce["url"], "https://example.com/annonce-1")
+            self.assertEqual(annonce["images"], ["https://example.com/photo-1.jpg"])
+            # step_sync_annonces_store renvoie le dataframe inchangé (étape terminale du pipeline)
+            self.assertIs(result, df)
+
+    def test_skips_rows_without_url(self):
+        import tempfile
+
+        from services import annonces_store
+
+        df = pd.DataFrame([
+            {"type_local": "T3", "quartier": "Croix-Rousse", "prix": 900, "surface": 60,
+             "ville": "Lyon", "url": None, "image": None},
+        ])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = os.path.join(tmp_dir, "annonces.db")
+
+            clean_immo.step_sync_annonces_store(df, db_path=db_path)
+
+            annonces = annonces_store.list_annonces(db_path=db_path)
+            self.assertEqual(annonces["total"], 0)
+
+    def test_rerun_upserts_instead_of_duplicating(self):
+        import tempfile
+
+        from services import annonces_store
+
+        df = pd.DataFrame([
+            {"type_local": "Studio/T1", "quartier": "Guillotière", "prix": 500, "surface": 22,
+             "ville": "Lyon", "url": "https://example.com/annonce-2", "image": None},
+        ])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = os.path.join(tmp_dir, "annonces.db")
+
+            clean_immo.step_sync_annonces_store(df, db_path=db_path)
+            clean_immo.step_sync_annonces_store(df, db_path=db_path)
+
+            annonces = annonces_store.list_annonces(db_path=db_path)
+            self.assertEqual(annonces["total"], 1)
+
+
+class BuildTitreTest(unittest.TestCase):
+    def test_combines_type_local_and_quartier(self):
+        row = pd.Series({"type_local": "T3", "quartier": "Croix-Rousse", "description": ""})
+
+        self.assertEqual(clean_immo.build_titre(row), "T3 — Croix-Rousse")
+
+    def test_falls_back_to_description_when_type_and_quartier_missing(self):
+        row = pd.Series({"type_local": "", "quartier": "", "description": "Superbe maison avec jardin"})
+
+        self.assertEqual(clean_immo.build_titre(row), "Superbe maison avec jardin")
+
+    def test_returns_none_when_nothing_available(self):
+        row = pd.Series({"type_local": "", "quartier": "", "description": ""})
+
+        self.assertIsNone(clean_immo.build_titre(row))
+
+
 class BuildShapesFromCavaliersTest(unittest.TestCase):
     def test_missing_file_returns_empty_dict(self):
         result = clean_immo.build_shapes_from_cavaliers("/inexistant.csv")
