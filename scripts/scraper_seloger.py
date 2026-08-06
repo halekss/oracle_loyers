@@ -17,6 +17,8 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    should_continue_pagination,
+    today_iso,
 )
 
 site_config = load_site_config("seloger")
@@ -71,106 +73,118 @@ if __name__ == '__main__':
 
     driver = get_chrome_driver(user_agent=pick_user_agent(), proxy=pick_proxy())
 
-    CSV_HEADER = ['Titre', 'Prix', 'Lieu', 'Infos', 'Lien', 'Image']
-    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, expected_columns=len(CSV_HEADER))
+    CSV_HEADER = ['Titre', 'Prix', 'Lieu', 'Infos', 'Lien', 'Image', 'DerniereVue']
+    LIEN_INDEX = CSV_HEADER.index('Lien')
+    DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
+
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
+    rows_by_lien = {row[LIEN_INDEX]: row for row in existing_rows}
+    today = today_iso()
+
     erreurs = 0
     total_nouveaux_run = 0
     total_cards_vues = 0
+    consecutive_empty_pages = 0
 
-    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
-        for row in existing_rows:
-            writer.writerow(row)
+    page_num = 1
+    continuer = True
 
-        page_num = 1
-        continuer = True
+    while continuer:
+        url = base_url if page_num == 1 else f"{base_url}&{PAGE_QUERY_PARAM}={page_num}"
+        logger.info("Analyse de la page %s", page_num)
+        try:
+            load_page(driver, url)
+        except Exception as exc:
+            logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
+            break
 
-        while continuer:
-            url = base_url if page_num == 1 else f"{base_url}&{PAGE_QUERY_PARAM}={page_num}"
-            logger.info("Analyse de la page %s", page_num)
-            try:
-                load_page(driver, url)
-            except Exception as exc:
-                logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
-                break
-
-            if page_num == 1:
-                logger.info("En attente de la validation du Captcha ou des Cookies...")
-                card_found = False
-                for sel in CARD_SELECTORS:
-                    try:
-                        WebDriverWait(driver, 120).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, sel))
-                        )
-                        logger.info("Page accessible (%s)", sel)
-                        card_found = True
-                        break
-                    except Exception:
-                        continue
-                if not card_found:
-                    logger.error("Aucune carte détectée. Captcha non résolu ou structure changée.")
-                    break
-            else:
-                time.sleep(random.uniform(5, 8))
-
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
-
-            annonces = []
+        if page_num == 1:
+            logger.info("En attente de la validation du Captcha ou des Cookies...")
+            card_found = False
             for sel in CARD_SELECTORS:
-                annonces = driver.find_elements(By.CSS_SELECTOR, sel)
-                if annonces:
+                try:
+                    WebDriverWait(driver, 120).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+                    )
+                    logger.info("Page accessible (%s)", sel)
+                    card_found = True
                     break
+                except Exception:
+                    continue
+            if not card_found:
+                logger.error("Aucune carte détectée. Captcha non résolu ou structure changée.")
+                break
+        else:
+            time.sleep(random.uniform(5, 8))
 
-            if not annonces:
-                logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2)
+
+        annonces = []
+        for sel in CARD_SELECTORS:
+            annonces = driver.find_elements(By.CSS_SELECTOR, sel)
+            if annonces:
                 break
 
-            total_cards_vues += len(annonces)
-            compteur_page = 0
-            for annonce in annonces:
-                try:
-                    lien = annonce.get_attribute("href")
-                    if not lien or lien in liens_vus:
-                        continue
+        if not annonces:
+            logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
+            break
 
-                    # Stratégie 1 : parser l'attribut title
-                    full_title = annonce.get_attribute("title") or ""
-                    parsed = parse_title_attribute(full_title)
-
-                    if parsed:
-                        titre, lieu, prix, infos = parsed
-                    else:
-                        # Stratégie 2 : extraction DOM directe
-                        titre = find_text(annonce, TITRE_DOM_SELECTORS)
-                        prix = find_text(annonce, PRIX_DOM_SELECTORS)
-                        lieu = find_text(annonce, LIEU_DOM_SELECTORS)
-                        infos = find_text(annonce, INFOS_DOM_SELECTORS)
-
-                    if not prix:
-                        continue
-
-                    image = find_first_image_url(annonce, base_url=driver.current_url)
-
-                    writer.writerow([titre, prix, lieu, infos, lien, image])
-                    liens_vus.add(lien)
-                    compteur_page += 1
-                    logger.info("Annonce trouvée : %s (%s) -- %s", titre, lieu, prix)
-
-                except Exception as exc:
-                    erreurs += 1
-                    logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
+        total_cards_vues += len(annonces)
+        compteur_page = 0
+        for annonce in annonces:
+            try:
+                lien = annonce.get_attribute("href")
+                if not lien:
                     continue
 
-            logger.info("Page %s terminée : %s nouvelles annonces.", page_num, compteur_page)
-            total_nouveaux_run += compteur_page
+                if lien in rows_by_lien:
+                    # Déjà connue : pas de re-scraping de ses détails, on note juste
+                    # qu'elle est toujours présente sur le site (ORA-134, TTL).
+                    rows_by_lien[lien][DERNIERE_VUE_INDEX] = today
+                    continue
 
-            if compteur_page == 0:
-                logger.info("Plus de nouvelles annonces uniques.")
-                continuer = False
-            else:
-                page_num += 1
+                # Stratégie 1 : parser l'attribut title
+                full_title = annonce.get_attribute("title") or ""
+                parsed = parse_title_attribute(full_title)
+
+                if parsed:
+                    titre, lieu, prix, infos = parsed
+                else:
+                    # Stratégie 2 : extraction DOM directe
+                    titre = find_text(annonce, TITRE_DOM_SELECTORS)
+                    prix = find_text(annonce, PRIX_DOM_SELECTORS)
+                    lieu = find_text(annonce, LIEU_DOM_SELECTORS)
+                    infos = find_text(annonce, INFOS_DOM_SELECTORS)
+
+                if not prix:
+                    continue
+
+                image = find_first_image_url(annonce, base_url=driver.current_url)
+
+                rows_by_lien[lien] = [titre, prix, lieu, infos, lien, image, today]
+                liens_vus.add(lien)
+                compteur_page += 1
+                logger.info("Annonce trouvée : %s (%s) -- %s", titre, lieu, prix)
+
+            except Exception as exc:
+                erreurs += 1
+                logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
+                continue
+
+        logger.info("Page %s terminée : %s nouvelles annonces.", page_num, compteur_page)
+        total_nouveaux_run += compteur_page
+
+        continuer, consecutive_empty_pages = should_continue_pagination(compteur_page, consecutive_empty_pages)
+        if not continuer:
+            logger.info("Fin des nouvelles annonces uniques (%s page(s) consécutive(s) sans nouveauté).", consecutive_empty_pages)
+        page_num += 1
 
     driver.quit()
+
+    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
+        for row in rows_by_lien.values():
+            writer.writerow(row)
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour SeLoger. Le site a peut-être changé de structure.")
@@ -178,5 +192,5 @@ if __name__ == '__main__':
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
+        len(rows_by_lien), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

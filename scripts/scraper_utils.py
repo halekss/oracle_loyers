@@ -15,6 +15,7 @@ import random
 import re
 import subprocess
 import time
+from datetime import datetime, timezone
 from functools import wraps
 from urllib.parse import urljoin
 
@@ -34,7 +35,17 @@ __all__ = [
     "pick_user_agent",
     "pick_proxy",
     "load_existing_rows",
+    "today_iso",
+    "should_continue_pagination",
+    "GRACE_PAGES_SANS_NOUVEAUTE",
 ]
+
+# Nombre de pages consécutives sans nouvelle annonce à parcourir avant d'arrêter
+# la pagination (ORA-134). Sans cette marge, la pagination s'arrêterait dès la
+# 1ère page entièrement déjà-connue et les annonces plus profondément paginées
+# ne seraient jamais revues — un TTL basé sur "dernière fois vue" les
+# expirerait alors à tort, qu'elles soient encore actives ou non sur le site.
+GRACE_PAGES_SANS_NOUVEAUTE = 3
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -90,41 +101,63 @@ def pick_proxy(config_path=CONFIG_PATH):
     return random.choice(proxies) if proxies else None
 
 
-def load_existing_rows(path, expected_columns=None):
+def load_existing_rows(path, header):
     """Charge les lignes déjà connues (écrites lors d'un run précédent) et l'ensemble de
     leurs liens, pour dédupliquer d'un run à l'autre et pas seulement au sein d'un même run.
 
-    Stratégie retenue : append. Une annonce déjà vue lors d'un run précédent est ignorée
-    (ni ré-écrite, ni mise à jour) ; sa ligne existante est conservée telle quelle et
-    réécrite avec le reste. Le lien (dernière colonne *au moment de l'écriture d'origine*)
-    sert de clé de déduplication — voir note `expected_columns` ci-dessous.
+    Stratégie retenue : append/update en place. Une annonce déjà vue lors d'un run
+    précédent n'est pas re-scrapée en détail ; sa ligne existante est conservée et
+    réécrite avec le reste — l'appelant peut cependant en muter des champs
+    (typiquement la colonne 'DerniereVue', ORA-134) si l'annonce est revue au cours
+    de ce run, puisque les lignes renvoyées sont les objets `list` mutables utilisés
+    ensuite pour l'écriture. `header` (liste de colonnes du CSV_HEADER courant) sert
+    à localiser 'Lien' par nom plutôt que par position fixe, pour rester robuste à
+    l'ajout de colonnes en fin de header (ex: 'Image', puis 'DerniereVue').
 
-    `expected_columns` (optionnel) : nombre de colonnes du header courant. Si fourni, les
-    lignes plus courtes (écrites avant l'ajout d'une nouvelle colonne, ex: 'Image' ajoutée
-    après 'Lien' sur les 6 scrapers) sont complétées avec des chaînes vides à la fin, pour
-    rester alignées avec le header et éviter un CSV en dents de scie que `pandas.read_csv`
-    lirait mal. Dans ce cas, 'Lien' est l'avant-dernière colonne (la dernière est 'Image') ;
-    sans `expected_columns` (compat rétroactive), 'Lien' reste la dernière colonne, comme
-    avant l'ajout d'Image.
+    Les lignes plus courtes que `header` (écrites avant l'ajout d'une colonne) sont
+    complétées avec des chaînes vides à la fin, pour rester alignées avec le header
+    courant et éviter un CSV en dents de scie que `pandas.read_csv` lirait mal.
 
     Renvoie ([], set()) si `path` n'existe pas encore (premier run).
     """
     if not os.path.exists(path):
         return [], set()
 
+    lien_index = header.index("Lien")
+
     with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         next(reader, None)  # en-tête
         rows = [row for row in reader if row]
 
-    if expected_columns is not None:
-        rows = [row + [""] * (expected_columns - len(row)) for row in rows]
-        lien_index = -2
-    else:
-        lien_index = -1
-
+    rows = [row + [""] * (len(header) - len(row)) for row in rows]
     liens_vus = {row[lien_index] for row in rows}
     return rows, liens_vus
+
+
+def today_iso():
+    """Date du jour (UTC) au format ISO — utilisée pour horodater la colonne
+    'DerniereVue' des scrapers (ORA-134 : TTL par re-scraping)."""
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def should_continue_pagination(compteur_nouveaux, consecutive_empty_pages):
+    """Décide si la pagination d'un scraper doit continuer après une page où
+    `compteur_nouveaux` nouvelles annonces ont été trouvées (ORA-134).
+
+    Une page sans nouvelle annonce ne stoppe plus immédiatement la pagination :
+    elle bénéficie de `GRACE_PAGES_SANS_NOUVEAUTE` pages de marge, pour laisser
+    une chance de re-confirmer périodiquement la présence des annonces déjà
+    connues plus profondément paginées (sans quoi elles ne seraient jamais
+    revues, et un TTL basé sur 'dernière fois vue' les expirerait à tort).
+
+    Renvoie `(continuer, nouveau_consecutive_empty_pages)`.
+    """
+    if compteur_nouveaux > 0:
+        return True, 0
+
+    consecutive_empty_pages += 1
+    return consecutive_empty_pages < GRACE_PAGES_SANS_NOUVEAUTE, consecutive_empty_pages
 
 
 def _detect_local_chrome_major_version():

@@ -17,6 +17,8 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    should_continue_pagination,
+    today_iso,
 )
 
 site_config = load_site_config("orpi")
@@ -70,108 +72,120 @@ if __name__ == '__main__':
 
     driver = get_chrome_driver(user_agent=pick_user_agent(), proxy=pick_proxy())
 
-    CSV_HEADER = ['Titre_Lieu', 'Prix', 'Infos', 'Lien', 'Image']
-    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, expected_columns=len(CSV_HEADER))
+    CSV_HEADER = ['Titre_Lieu', 'Prix', 'Infos', 'Lien', 'Image', 'DerniereVue']
+    LIEN_INDEX = CSV_HEADER.index('Lien')
+    DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
+
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
+    rows_by_lien = {row[LIEN_INDEX]: row for row in existing_rows}
+    today = today_iso()
+
     erreurs = 0
     total_nouveaux_run = 0
     total_cards_vues = 0
+    consecutive_empty_pages = 0
 
-    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
-        for row in existing_rows:
-            writer.writerow(row)
+    page_num = 1
+    continuer = True
 
-        page_num = 1
-        continuer = True
+    while continuer:
+        url = base_url.format(page_num)
+        logger.info("Analyse de la page %s", page_num)
+        try:
+            load_page(driver, url)
+        except Exception as exc:
+            logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
+            break
 
-        while continuer:
-            url = base_url.format(page_num)
-            logger.info("Analyse de la page %s", page_num)
-            try:
-                load_page(driver, url)
-            except Exception as exc:
-                logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
-                break
-
-            if page_num == 1:
-                logger.info("En attente de la validation des cookies sur Orpi...")
-                card_found = False
-                for sel in CARD_SELECTORS:
-                    try:
-                        WebDriverWait(driver, 60).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, sel))
-                        )
-                        logger.info("Accès détecté avec sélecteur : %s", sel)
-                        card_found = True
-                        break
-                    except Exception:
-                        continue
-                if not card_found:
-                    logger.error("Aucun sélecteur de carte ne correspond. Structure inconnue.")
-                    break
-            else:
-                time.sleep(random.uniform(3, 6))
-
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
-
-            # Essai des sélecteurs de carte dans l'ordre
-            annonces = []
+        if page_num == 1:
+            logger.info("En attente de la validation des cookies sur Orpi...")
+            card_found = False
             for sel in CARD_SELECTORS:
-                annonces = driver.find_elements(By.CSS_SELECTOR, sel)
-                if annonces:
+                try:
+                    WebDriverWait(driver, 60).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+                    )
+                    logger.info("Accès détecté avec sélecteur : %s", sel)
+                    card_found = True
                     break
+                except Exception:
+                    continue
+            if not card_found:
+                logger.error("Aucun sélecteur de carte ne correspond. Structure inconnue.")
+                break
+        else:
+            time.sleep(random.uniform(3, 6))
 
-            if not annonces:
-                logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2)
+
+        # Essai des sélecteurs de carte dans l'ordre
+        annonces = []
+        for sel in CARD_SELECTORS:
+            annonces = driver.find_elements(By.CSS_SELECTOR, sel)
+            if annonces:
                 break
 
-            total_cards_vues += len(annonces)
-            compteur_nouveaux = 0
-            for annonce in annonces:
+        if not annonces:
+            logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
+            break
+
+        total_cards_vues += len(annonces)
+        compteur_nouveaux = 0
+        for annonce in annonces:
+            try:
                 try:
-                    try:
-                        lien_elem = annonce.find_element(By.TAG_NAME, "a")
-                        href = lien_elem.get_attribute("href")
-                    except Exception:
-                        continue
-
-                    if not href or href in liens_vus:
-                        continue
-
-                    # Extraction structurée avec fallback sur le texte brut
-                    titre = find_text(annonce, TITRE_SELECTORS)
-                    prix = find_text(annonce, PRIX_SELECTORS)
-                    infos = find_text(annonce, INFOS_SELECTORS)
-
-                    # Si pas de prix via sélecteur, chercher dans le texte complet
-                    if not prix:
-                        prix = extract_price_from_text(annonce.text)
-
-                    if not prix:
-                        continue
-
-                    image = find_first_image_url(annonce, base_url=driver.current_url)
-
-                    writer.writerow([titre, prix, infos, href, image])
-                    liens_vus.add(href)
-                    compteur_nouveaux += 1
-                    logger.info("Annonce trouvée : %s -- %s", titre[:60], prix)
-
-                except Exception as exc:
-                    erreurs += 1
-                    logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
+                    lien_elem = annonce.find_element(By.TAG_NAME, "a")
+                    href = lien_elem.get_attribute("href")
+                except Exception:
                     continue
 
-            logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_nouveaux)
-            total_nouveaux_run += compteur_nouveaux
+                if not href:
+                    continue
 
-            if compteur_nouveaux == 0:
-                logger.info("Fin des nouvelles annonces.")
-                continuer = False
-            else:
-                page_num += 1
+                if href in rows_by_lien:
+                    # Déjà connue : pas de re-scraping de ses détails, on note juste
+                    # qu'elle est toujours présente sur le site (ORA-134, TTL).
+                    rows_by_lien[href][DERNIERE_VUE_INDEX] = today
+                    continue
+
+                # Extraction structurée avec fallback sur le texte brut
+                titre = find_text(annonce, TITRE_SELECTORS)
+                prix = find_text(annonce, PRIX_SELECTORS)
+                infos = find_text(annonce, INFOS_SELECTORS)
+
+                # Si pas de prix via sélecteur, chercher dans le texte complet
+                if not prix:
+                    prix = extract_price_from_text(annonce.text)
+
+                if not prix:
+                    continue
+
+                image = find_first_image_url(annonce, base_url=driver.current_url)
+
+                rows_by_lien[href] = [titre, prix, infos, href, image, today]
+                liens_vus.add(href)
+                compteur_nouveaux += 1
+                logger.info("Annonce trouvée : %s -- %s", titre[:60], prix)
+
+            except Exception as exc:
+                erreurs += 1
+                logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
+                continue
+
+        logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_nouveaux)
+        total_nouveaux_run += compteur_nouveaux
+
+        continuer, consecutive_empty_pages = should_continue_pagination(compteur_nouveaux, consecutive_empty_pages)
+        if not continuer:
+            logger.info("Fin des nouvelles annonces (%s page(s) consécutive(s) sans nouveauté).", consecutive_empty_pages)
+        page_num += 1
 
     driver.quit()
+
+    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
+        for row in rows_by_lien.values():
+            writer.writerow(row)
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour ORPI. Le site a peut-être changé de structure.")
@@ -179,5 +193,5 @@ if __name__ == '__main__':
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
+        len(rows_by_lien), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

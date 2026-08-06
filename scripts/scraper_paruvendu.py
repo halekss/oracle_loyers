@@ -14,6 +14,8 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    should_continue_pagination,
+    today_iso,
 )
 
 site_config = load_site_config("paruvendu")
@@ -99,84 +101,97 @@ def fetch_page(url):
 if __name__ == '__main__':
     logger.info("Lancement du Scraper ParuVendu (Mode Rapide) (%s)...", site_config['ville_nom'])
 
-    CSV_HEADER = ['Titre', 'Prix', 'Lien', 'Image']
-    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, expected_columns=len(CSV_HEADER))
+    CSV_HEADER = ['Titre', 'Prix', 'Lien', 'Image', 'DerniereVue']
+    LIEN_INDEX = CSV_HEADER.index('Lien')
+    DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
+
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
+    rows_by_lien = {row[LIEN_INDEX]: row for row in existing_rows}
+    today = today_iso()
+
     erreurs = 0
     total_nouveaux_run = 0
     total_cards_vues = 0
+    consecutive_empty_pages = 0
     page_num = 1
     continuer = True
 
-    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
-        for row in existing_rows:
-            writer.writerow(row)
+    while continuer:
+        url_page = base_url if page_num == 1 else f"{base_url}&{PAGE_QUERY_PARAM}={page_num}"
+        logger.info("Analyse de la page %s", page_num)
 
-        while continuer:
-            url_page = base_url if page_num == 1 else f"{base_url}&{PAGE_QUERY_PARAM}={page_num}"
-            logger.info("Analyse de la page %s", page_num)
+        try:
+            response = fetch_page(url_page)
+        except requests.exceptions.RequestException as exc:
+            logger.error("Échec réseau persistant après plusieurs tentatives sur la page %s : %s", page_num, exc)
+            break
 
+        if response.status_code != 200:
+            logger.error("Erreur de réponse HTTP : %s", response.status_code)
+            break
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Essai des sélecteurs de carte dans l'ordre
+        annonces = []
+        for tag, attrs in CARD_SELECTORS:
+            annonces = soup.find_all(tag, attrs)
+            if annonces:
+                break
+
+        if not annonces:
+            logger.warning("Aucune annonce trouvée sur la page %s (fin des résultats).", page_num)
+            break
+
+        total_cards_vues += len(annonces)
+        compteur_page = 0
+        for annonce in annonces:
             try:
-                response = fetch_page(url_page)
-            except requests.exceptions.RequestException as exc:
-                logger.error("Échec réseau persistant après plusieurs tentatives sur la page %s : %s", page_num, exc)
-                break
+                titre_elem = find_bs4(annonce, TITRE_SELECTORS)
+                prix_elem = find_bs4(annonce, PRIX_SELECTORS)
 
-            if response.status_code != 200:
-                logger.error("Erreur de réponse HTTP : %s", response.status_code)
-                break
-
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            # Essai des sélecteurs de carte dans l'ordre
-            annonces = []
-            for tag, attrs in CARD_SELECTORS:
-                annonces = soup.find_all(tag, attrs)
-                if annonces:
-                    break
-
-            if not annonces:
-                logger.warning("Aucune annonce trouvée sur la page %s (fin des résultats).", page_num)
-                break
-
-            total_cards_vues += len(annonces)
-            compteur_page = 0
-            for annonce in annonces:
-                try:
-                    titre_elem = find_bs4(annonce, TITRE_SELECTORS)
-                    prix_elem = find_bs4(annonce, PRIX_SELECTORS)
-
-                    if not titre_elem:
-                        continue
-
-                    titre = " ".join(titre_elem.text.split())
-                    prix = prix_elem.text.strip() if prix_elem else "N/C"
-                    lien_partiel = titre_elem.get('href') if titre_elem.name == 'a' else None
-                    lien = f"https://www.paruvendu.fr{lien_partiel}" if lien_partiel else "Pas de lien"
-
-                    if lien in liens_vus or lien == "Pas de lien":
-                        continue
-
-                    image = find_image_bs4(annonce, base_url=url_page)
-
-                    writer.writerow([titre, prix, lien, image])
-                    liens_vus.add(lien)
-                    compteur_page += 1
-                    logger.info("Annonce trouvée : %s -- %s", titre, prix)
-
-                except Exception as exc:
-                    erreurs += 1
-                    logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
+                if not titre_elem:
                     continue
 
-            logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_page)
-            total_nouveaux_run += compteur_page
+                titre = " ".join(titre_elem.text.split())
+                prix = prix_elem.text.strip() if prix_elem else "N/C"
+                lien_partiel = titre_elem.get('href') if titre_elem.name == 'a' else None
+                lien = f"https://www.paruvendu.fr{lien_partiel}" if lien_partiel else "Pas de lien"
 
-            if compteur_page == 0:
-                logger.info("Plus de nouvelles annonces disponibles.")
-                continuer = False
-            else:
-                page_num += 1
-                time.sleep(random.uniform(1.5, 3))
+                if lien == "Pas de lien":
+                    continue
+
+                if lien in rows_by_lien:
+                    # Déjà connue : pas de re-scraping de ses détails, on note juste
+                    # qu'elle est toujours présente sur le site (ORA-134, TTL).
+                    rows_by_lien[lien][DERNIERE_VUE_INDEX] = today
+                    continue
+
+                image = find_image_bs4(annonce, base_url=url_page)
+
+                rows_by_lien[lien] = [titre, prix, lien, image, today]
+                liens_vus.add(lien)
+                compteur_page += 1
+                logger.info("Annonce trouvée : %s -- %s", titre, prix)
+
+            except Exception as exc:
+                erreurs += 1
+                logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
+                continue
+
+        logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_page)
+        total_nouveaux_run += compteur_page
+
+        continuer, consecutive_empty_pages = should_continue_pagination(compteur_page, consecutive_empty_pages)
+        if not continuer:
+            logger.info("Fin des nouvelles annonces (%s page(s) consécutive(s) sans nouveauté).", consecutive_empty_pages)
+        else:
+            time.sleep(random.uniform(1.5, 3))
+        page_num += 1
+
+    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
+        for row in rows_by_lien.values():
+            writer.writerow(row)
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour ParuVendu. Le site a peut-être changé de structure.")
@@ -184,5 +199,5 @@ if __name__ == '__main__':
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
+        len(rows_by_lien), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

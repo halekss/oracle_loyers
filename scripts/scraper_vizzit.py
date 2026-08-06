@@ -16,6 +16,8 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    should_continue_pagination,
+    today_iso,
 )
 
 site_config = load_site_config("vizzit")
@@ -84,114 +86,127 @@ if __name__ == '__main__':
     total_nouveaux_run = 0
     total_cards_vues = 0
 
-    CSV_HEADER = ['Lieu', 'Prix', 'Details', 'Description', 'Lien', 'Image']
-    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, expected_columns=len(CSV_HEADER))
+    CSV_HEADER = ['Lieu', 'Prix', 'Details', 'Description', 'Lien', 'Image', 'DerniereVue']
+    LIEN_INDEX = CSV_HEADER.index('Lien')
+    DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
 
-    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
-        for row in existing_rows:
-            writer.writerow(row)
+    existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
+    rows_by_lien = {row[LIEN_INDEX]: row for row in existing_rows}
+    today = today_iso()
+    consecutive_empty_pages = 0
 
-        page_num = 1
-        continuer = True
+    page_num = 1
+    continuer = True
 
-        while continuer:
-            logger.info("Analyse de la page %s", page_num)
-            try:
-                load_page(driver, SEARCH_URL.format(page_num))
-            except Exception as exc:
-                logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
+    while continuer:
+        logger.info("Analyse de la page %s", page_num)
+        try:
+            load_page(driver, SEARCH_URL.format(page_num))
+        except Exception as exc:
+            logger.error("Impossible de charger la page %s après plusieurs tentatives : %s", page_num, exc)
+            break
+
+        if page_num == 1:
+            logger.info("En attente de la validation des cookies sur Vizzit...")
+            card_found = False
+            for sel in CARD_SELECTORS:
+                try:
+                    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, sel)))
+                    logger.info("Accès détecté (%s)", sel)
+                    card_found = True
+                    break
+                except Exception:
+                    continue
+            if not card_found:
+                logger.error("Aucune carte détectée.")
                 break
 
-            if page_num == 1:
-                logger.info("En attente de la validation des cookies sur Vizzit...")
-                card_found = False
-                for sel in CARD_SELECTORS:
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1.5)
+
+        blocs = []
+        for sel in CARD_SELECTORS:
+            blocs = driver.find_elements(By.CSS_SELECTOR, sel)
+            if blocs:
+                break
+
+        if not blocs:
+            logger.warning("Fin des résultats à la page %s.", page_num)
+            break
+
+        total_cards_vues += len(blocs)
+        annonces_a_visiter = []
+        for b in blocs:
+            try:
+                lien = find_attr(b, LIEN_SELECTORS, "href")
+                if not lien:
+                    continue
+
+                if lien in rows_by_lien:
+                    # Déjà connue : pas de re-visite de sa page détail, on note juste
+                    # qu'elle est toujours présente sur le site (ORA-134, TTL).
+                    rows_by_lien[lien][DERNIERE_VUE_INDEX] = today
+                    continue
+
+                prix = find_text(b, PRIX_SELECTORS)
+                lieu = find_text(b, LIEU_SELECTORS)
+                details_elems = []
+                for sel in DETAIL_SELECTORS:
+                    details_elems = b.find_elements(By.CSS_SELECTOR, sel)
+                    if details_elems:
+                        break
+                details = " - ".join(d.text.strip() for d in details_elems if d.text.strip())
+                annonces_a_visiter.append({'lieu': lieu, 'prix': prix, 'details': details, 'lien': lien})
+            except Exception as exc:
+                erreurs += 1
+                logger.warning("Erreur lors du parsing d'un bloc d'annonce : %s", exc)
+                continue
+
+        compteur_page = 0
+        for info in annonces_a_visiter:
+            try:
+                load_page(driver, info['lien'])
+                description = ""
+                for sel in DESC_SELECTORS:
                     try:
-                        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, sel)))
-                        logger.info("Accès détecté (%s)", sel)
-                        card_found = True
+                        desc_elem = WebDriverWait(driver, 10).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+                        )
+                        description = desc_elem.text.strip().replace('\n', ' ')
                         break
                     except Exception:
                         continue
-                if not card_found:
-                    logger.error("Aucune carte détectée.")
-                    break
 
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(1.5)
+                image = find_first_image_url(driver, selectors=IMAGE_SELECTORS, base_url=driver.current_url)
 
-            blocs = []
-            for sel in CARD_SELECTORS:
-                blocs = driver.find_elements(By.CSS_SELECTOR, sel)
-                if blocs:
-                    break
+                rows_by_lien[info['lien']] = [
+                    info['lieu'], info['prix'], info['details'], description, info['lien'], image, today
+                ]
+                liens_vus.add(info['lien'])
+                compteur_page += 1
+                logger.info("Annonce récupérée : %s", info['lieu'])
+                time.sleep(random.uniform(1, 2))
 
-            if not blocs:
-                logger.warning("Fin des résultats à la page %s.", page_num)
-                break
-
-            total_cards_vues += len(blocs)
-            annonces_a_visiter = []
-            for b in blocs:
+            except Exception as exc:
+                erreurs += 1
+                logger.warning("Erreur lors de la récupération d'une annonce : %s", exc)
                 try:
-                    lien = find_attr(b, LIEN_SELECTORS, "href")
-                    if not lien or lien in liens_vus:
-                        continue
-                    prix = find_text(b, PRIX_SELECTORS)
-                    lieu = find_text(b, LIEU_SELECTORS)
-                    details_elems = []
-                    for sel in DETAIL_SELECTORS:
-                        details_elems = b.find_elements(By.CSS_SELECTOR, sel)
-                        if details_elems:
-                            break
-                    details = " - ".join(d.text.strip() for d in details_elems if d.text.strip())
-                    annonces_a_visiter.append({'lieu': lieu, 'prix': prix, 'details': details, 'lien': lien})
-                except Exception as exc:
-                    erreurs += 1
-                    logger.warning("Erreur lors du parsing d'un bloc d'annonce : %s", exc)
-                    continue
+                    load_page(driver, SEARCH_URL.format(page_num))
+                except Exception as exc_recovery:
+                    logger.error("Impossible de revenir à la page de résultats %s : %s", page_num, exc_recovery)
+                continue
 
-            compteur_page = 0
-            for info in annonces_a_visiter:
-                try:
-                    load_page(driver, info['lien'])
-                    description = ""
-                    for sel in DESC_SELECTORS:
-                        try:
-                            desc_elem = WebDriverWait(driver, 10).until(
-                                EC.presence_of_element_located((By.CSS_SELECTOR, sel))
-                            )
-                            description = desc_elem.text.strip().replace('\n', ' ')
-                            break
-                        except Exception:
-                            continue
+        logger.info("Page %s terminée : %s annonces sauvegardées.", page_num, compteur_page)
+        total_nouveaux_run += compteur_page
 
-                    image = find_first_image_url(driver, selectors=IMAGE_SELECTORS, base_url=driver.current_url)
-
-                    writer.writerow([info['lieu'], info['prix'], info['details'], description, info['lien'], image])
-                    liens_vus.add(info['lien'])
-                    compteur_page += 1
-                    logger.info("Annonce récupérée : %s", info['lieu'])
-                    time.sleep(random.uniform(1, 2))
-
-                except Exception as exc:
-                    erreurs += 1
-                    logger.warning("Erreur lors de la récupération d'une annonce : %s", exc)
-                    try:
-                        load_page(driver, SEARCH_URL.format(page_num))
-                    except Exception as exc_recovery:
-                        logger.error("Impossible de revenir à la page de résultats %s : %s", page_num, exc_recovery)
-                    continue
-
-            logger.info("Page %s terminée : %s annonces sauvegardées.", page_num, compteur_page)
-            total_nouveaux_run += compteur_page
-
-            if compteur_page == 0:
-                continuer = False
-            else:
-                page_num += 1
+        continuer, consecutive_empty_pages = should_continue_pagination(compteur_page, consecutive_empty_pages)
+        page_num += 1
 
     driver.quit()
+
+    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
+        for row in rows_by_lien.values():
+            writer.writerow(row)
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour Vizzit. Le site a peut-être changé de structure.")
@@ -199,5 +214,5 @@ if __name__ == '__main__':
 
     logger.info(
         "Run terminé : %s trouvées, %s nouvelles, %s erreurs. Fichier : %s",
-        len(liens_vus), total_nouveaux_run, erreurs, OUTPUT_PATH
+        len(rows_by_lien), total_nouveaux_run, erreurs, OUTPUT_PATH
     )

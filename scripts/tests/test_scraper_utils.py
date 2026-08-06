@@ -17,6 +17,8 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    should_continue_pagination,
+    today_iso,
 )
 
 
@@ -217,12 +219,12 @@ class PickUserAgentAndProxyTest(unittest.TestCase):
 
 class LoadExistingRowsTest(unittest.TestCase):
     def test_missing_file_returns_empty(self):
-        rows, liens_vus = load_existing_rows("/inexistant.csv")
+        rows, liens_vus = load_existing_rows("/inexistant.csv", ["Titre", "Prix", "Lien"])
 
         self.assertEqual(rows, [])
         self.assertEqual(liens_vus, set())
 
-    def test_loads_rows_and_links_from_last_column(self):
+    def test_loads_rows_and_links_by_header_position(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = os.path.join(tmp_dir, "annonces.csv")
             with open(path, "w", newline="", encoding="utf-8-sig") as f:
@@ -232,10 +234,42 @@ class LoadExistingRowsTest(unittest.TestCase):
                 writer.writerow(["Studio Bellecour", "500€", "https://example.test/1"])
                 writer.writerow(["T2 Croix-Rousse", "700€", "https://example.test/2"])
 
-            rows, liens_vus = load_existing_rows(path)
+            rows, liens_vus = load_existing_rows(path, ["Titre", "Prix", "Lien"])
 
         self.assertEqual(len(rows), 2)
         self.assertEqual(liens_vus, {"https://example.test/1", "https://example.test/2"})
+
+    def test_locates_lien_column_by_name_not_position(self):
+        # 'Lien' n'est ni la dernière ni l'avant-dernière colonne ici (contrairement
+        # aux 6 scrapers actuels) : vérifie que la localisation par nom fonctionne
+        # indépendamment de la position, notamment avec 'DerniereVue' en dernier.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "annonces.csv")
+            header = ["Titre", "Lien", "Image", "DerniereVue"]
+            with open(path, "w", newline="", encoding="utf-8-sig") as f:
+                import csv as csv_module
+                writer = csv_module.writer(f)
+                writer.writerow(header)
+                writer.writerow(["Studio Bellecour", "https://example.test/1", "img.jpg", "2026-08-01"])
+
+            rows, liens_vus = load_existing_rows(path, header)
+
+        self.assertEqual(liens_vus, {"https://example.test/1"})
+
+    def test_pads_short_rows_to_match_current_header(self):
+        # Lignes écrites avant l'ajout de la colonne 'DerniereVue' (compat rétroactive).
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "annonces.csv")
+            with open(path, "w", newline="", encoding="utf-8-sig") as f:
+                import csv as csv_module
+                writer = csv_module.writer(f)
+                writer.writerow(["Titre", "Lien", "Image"])
+                writer.writerow(["Studio Bellecour", "https://example.test/1", "img.jpg"])
+
+            header = ["Titre", "Lien", "Image", "DerniereVue"]
+            rows, liens_vus = load_existing_rows(path, header)
+
+        self.assertEqual(rows, [["Studio Bellecour", "https://example.test/1", "img.jpg", ""]])
 
     def test_empty_file_besides_header_returns_no_rows(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -244,10 +278,39 @@ class LoadExistingRowsTest(unittest.TestCase):
                 import csv as csv_module
                 csv_module.writer(f).writerow(["Titre", "Prix", "Lien"])
 
-            rows, liens_vus = load_existing_rows(path)
+            rows, liens_vus = load_existing_rows(path, ["Titre", "Prix", "Lien"])
 
         self.assertEqual(rows, [])
         self.assertEqual(liens_vus, set())
+
+
+class TodayIsoTest(unittest.TestCase):
+    def test_returns_a_date_in_iso_format(self):
+        import re as re_module
+
+        self.assertRegex(today_iso(), r"^\d{4}-\d{2}-\d{2}$")
+
+
+class ShouldContinuePaginationTest(unittest.TestCase):
+    def test_resets_grace_counter_when_new_annonces_found(self):
+        continuer, consecutive = should_continue_pagination(5, 2)
+
+        self.assertTrue(continuer)
+        self.assertEqual(consecutive, 0)
+
+    def test_continues_within_grace_period_when_no_new_annonces(self):
+        continuer, consecutive = should_continue_pagination(0, 0)
+
+        self.assertTrue(continuer)
+        self.assertEqual(consecutive, 1)
+
+    def test_stops_once_grace_period_is_exhausted(self):
+        continuer, consecutive = should_continue_pagination(
+            0, scraper_utils.GRACE_PAGES_SANS_NOUVEAUTE - 1
+        )
+
+        self.assertFalse(continuer)
+        self.assertEqual(consecutive, scraper_utils.GRACE_PAGES_SANS_NOUVEAUTE)
 
 
 class GetChromeDriverOptionsTest(unittest.TestCase):
