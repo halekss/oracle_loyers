@@ -231,7 +231,8 @@ Les deux sont écrites à partir du **même dataframe final** en fin de `clean_i
     * *Output :* `base_de_donnees_immo_lyon_complet.csv`.
 
 4.  **`clean_immo.py`**
-    * Le cœur du calcul, en 5 étapes internes séquentielles :
+    * Le cœur du calcul, en 7 étapes internes séquentielles :
+      0. **Purge des annonces expirées** (TTL, ORA-134) — exclut les annonces dont `date_dernier_scan` dépasse 14 jours (~2 runs hebdomadaires de marge), avant tout le reste du pipeline. Conservateur : une ligne sans `date_dernier_scan` exploitable (CSV antérieur à ORA-134) est gardée plutôt que purgée. Voir la sous-section dédiée ci-dessous.
       1. **Géocodage & jitter** — place les annonces sans coordonnées réelles sur la carte, en utilisant l'enveloppe convexe (Convex Hull) des cavaliers pour dessiner la forme réelle des quartiers (fallback sur des zones circulaires par code postal si pas assez de cavaliers).
       2. **Assignation des quartiers** — attribue un nom de quartier lisible (ex: "Croix-Rousse Plateau") à partir du code postal et des coordonnées.
       3. **Classification du type de bien** (Studio/T1, T2, T3, Grand T4+) à partir du texte de l'annonce ou, à défaut, de la surface.
@@ -248,7 +249,22 @@ Les deux sont écrites à partir du **même dataframe final** en fin de `clean_i
     * Chaque modèle entraîné est identifié par un hash (`model_version`, sha256 du binaire) inclus dans `price_predictor.pkl.meta.json` avec ses hyperparamètres ; une copie est archivée dans `backend/models/versions/`. `GET /api/health` expose la version actuellement chargée. Pour revenir à une version antérieure **sans réentraîner** : `python backend/scripts/rollback_model.py <model_version>`.
     * `backend/tests/test_model_regression.py` (suite pytest, exécuté en CI) vérifie que le MAE/R² restent dans une plage acceptable sur un jeu de validation fixe (même split que l'entraînement), et que `/api/predict` ne régresse pas vers le bug historique de placeholder à 0 — remplace l'ancien script manuel `test_prediction.py`.
 
-> Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours.
+> Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours. Une annonce déjà connue et revue au cours du run voit sa colonne `DerniereVue` mise à jour (ORA-134, voir ci-dessous) sans être re-scrapée en détail.
+
+### 🗑️ Annonces mortes : TTL par re-scraping + nettoyage ponctuel (ORA-134)
+
+**Constat** : le pipeline n'avait jusqu'ici aucun mécanisme de suppression — une annonce retirée/louée/expirée sur le site source restait indéfiniment dans `annonces.db`, provoquant des 404 au clic.
+
+**Correctif structurel (TTL)** : chaque scraper trace désormais une colonne `DerniereVue` (date ISO), mise à jour à chaque fois qu'une annonce déjà connue est revue au cours d'un run. `data_fusion.py` la propage sous le nom `date_dernier_scan` dans `base_de_donnees_immo_lyon_complet.csv`, et `clean_immo.py` (étape 0 ci-dessus) exclut toute annonce dont cette date dépasse 14 jours — avant génération de `master_immo_final.csv` **et** synchronisation de `annonces.db`, donc les deux sources en bénéficient également.
+
+Complication prise en compte : chaque scraper arrêtait sa pagination dès la 1ère page entièrement déjà-connue, donc les annonces plus profondément paginées n'étaient jamais re-confirmées. `should_continue_pagination()` (`scripts/scraper_utils.py`) accorde désormais `GRACE_PAGES_SANS_NOUVEAUTE` (3) pages de marge sans nouvelle annonce avant d'arrêter réellement la pagination, pour laisser une chance de re-confirmer périodiquement les annonces déjà connues.
+
+**Nettoyage ponctuel du stock existant** : le TTL ne corrige le stock déjà accumulé qu'au fil des prochains runs (les annonces déjà en base n'ont pas de `date_dernier_scan` tant qu'elles n'ont pas été re-scrapées). `backend/scripts/prune_dead_annonces.py` vérifie en direct (HTTP) chaque url encore dans `annonces.db` et retire celles confirmées 404/410 — volontairement conservateur, un statut ambigu (403 anti-bot, timeout, 5xx) est laissé tel quel plutôt que de risquer une suppression à tort :
+
+```bash
+python backend/scripts/prune_dead_annonces.py --dry-run   # vérifie et logue sans rien supprimer
+python backend/scripts/prune_dead_annonces.py              # supprime les 404/410 confirmés
+```
 
 ### 🌍 Généricité multi-ville (ORA-71) — état actuel
 
