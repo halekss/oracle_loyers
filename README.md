@@ -311,6 +311,19 @@ python backend/scripts/generate_map.py
 
 **Calque "Quartiers"** (ORA-104) : les limites des 9 arrondissements de Lyon (`backend/data/lyon_arrondissements.geojson`, © contributeurs OpenStreetMap, ODbL 1.0) sont dessinées en polygones (`folium.GeoJson`, off par défaut comme Nuisance/Gentrification/Superstition), avec libellé au survol. Données récupérées une fois via `backend/scripts/fetch_lyon_arrondissements.py` (Nominatim) et versionnées dans le repo — aucune dépendance réseau à runtime. Le fichier des messages postMessage échangés pour piloter les calques (`TOGGLE_LAYER`) est documenté dans [`MAP_CONTRACT.md`](./MAP_CONTRACT.md).
 
+#### Décision (ORA-106) : garder le pré-rendu statique, pas de bascule vers un rendu dynamique piloté par API
+
+**Décision : conserver `generate_map.py` (pré-rendu HTML figé) plutôt que de réécrire la carte en Leaflet dynamique consommant `/api/listings` en direct.**
+
+Fréquence de régénération : `generate_map.py` est déjà la **dernière étape** du DAG Airflow `oracle_annonces_pipeline` (`data_fusion → clean_immo → train_model → generate_map`, voir `Airflow/dags/oracle_annonces_dag.py`), planifié `schedule="0 22 * * 1"` (chaque lundi 22h). La carte est donc **régénérée automatiquement à chaque run du scraping**, jamais désynchronisée de plus d'un cycle de collecte — il n'existe pas de job de régénération séparé à recaler, c'est déjà aligné par construction.
+
+Justification de garder le pré-rendu :
+- Les annonces immobilières ne varient pas à l'échelle de l'heure : un rafraîchissement hebdomadaire, calé sur la fréquence réelle du scraping, est déjà aussi "frais" qu'une carte dynamique le serait — passer en rendu API-live n'avancerait pas la fraîcheur réelle des données, seulement la latence entre une donnée déjà en base et son affichage (qui n'existe pas ici : les deux sont mis à jour au même instant, dans le même run de pipeline).
+- `generate_map.py` produit une mise en page riche (couches Cavaliers, lignes de métro reliées, popups avec photo hotlinkée et tracking de clic, contrat postMessage) : la réécrire en rendu client dynamique dupliquerait cette logique en JS (sélection de couches, sanitisation d'URL, calcul des tracés) sans bénéfice utilisateur mesurable.
+- Le fichier généré reste **versionné dans git** (cohérent avec le reste du projet, cf. section ci-dessus) : un rendu dynamique perdrait cette propriété (reproductibilité, diff visible en revue de code).
+
+**Cette décision doit être réévaluée si** : le scraping passe à une fréquence significativement plus élevée (quotidienne ou plus), ou si une fonctionnalité nécessite une mise à jour de la carte sans attendre le prochain run du DAG (ex. annonce retirée manuellement en urgence).
+
 ### 🧪 Tests frontend (Vitest + E2E Playwright)
 
 * **`npm test`** (`frontend/`) — Vitest (environment jsdom, cohérent avec Vite) : tests unitaires (`services/api.js`, config Vite) et tests de composants React (`ChatOracle`, `SearchForm`, `MapComponent`, `ResultCard` — rendu, interactions clés, gestion d'erreur, export PDF). Exécuté en CI à chaque push/PR.
