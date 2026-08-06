@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import MapComponent from './MapComponent';
 
@@ -41,5 +41,40 @@ describe('MapComponent', () => {
 
   it('does not attempt to fly to a center when none is provided', () => {
     expect(() => render(<MapComponent center={null} />)).not.toThrow();
+  });
+
+  it('sends FLY_TO to the page origin instead of any origin (ORA-125)', () => {
+    const { rerender } = render(<MapComponent center={null} />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    rerender(<MapComponent center={[45.75, 4.85, 15]} />);
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'FLY_TO' }),
+      window.location.origin,
+    );
+  });
+
+  it('sends TOGGLE_LAYER to the page origin instead of any origin (ORA-125)', async () => {
+    const user = userEvent.setup();
+    render(<MapComponent center={null} />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    await user.click(screen.getByText('Vice'));
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'TOGGLE_LAYER' }),
+      window.location.origin,
+    );
   });
 });

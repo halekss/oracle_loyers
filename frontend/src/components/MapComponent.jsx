@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 
+// Contrat des messages postMessage échangés avec la carte HTML embarquée
+// (générée par backend/scripts/generate_map.py) : voir MAP_CONTRACT.md (ORA-125).
+
 // --- CONFIGURATION DES CALQUES ---
 const LAYER_MAPPING = {
   'Studio': 'Immo Studio/T1',
@@ -60,7 +63,7 @@ export default function MapComponent({ center }) {
       iframeRef.current.contentWindow.postMessage({
         type: 'FLY_TO',
         lat: center[0], lng: center[1], zoom: center[2] || 16
-      }, '*');
+      }, window.location.origin);
     }
   }, [center]);
 
@@ -71,7 +74,7 @@ export default function MapComponent({ center }) {
         type: 'TOGGLE_LAYER',
         name: realName,
         show: show
-      }, '*');
+      }, window.location.origin);
     }
   };
 

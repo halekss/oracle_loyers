@@ -167,5 +167,31 @@ class BuildMarkerClickScriptTest(unittest.TestCase):
         self.assertEqual(script, "")
 
 
+class BuildBridgeMessageScriptTest(unittest.TestCase):
+    """Contrat postMessage carte (ORA-125) : la carte générée ne doit traiter
+    un message que s'il provient de la même origine que la page qui l'embarque,
+    et doit gérer tous les types de messages documentés (FLY_TO, TOGGLE_LAYER)."""
+
+    def test_rejects_messages_from_a_different_origin(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("e.origin", script)
+        self.assertIn("window.location.origin", script)
+
+    def test_handles_toggle_layer_by_clicking_matching_checkbox(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("TOGGLE_LAYER", script)
+        self.assertIn("box.click()", script)
+
+    def test_handles_fly_to_by_calling_flyto_on_the_map_instance(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("FLY_TO", script)
+        self.assertIn("map_abc123.flyTo(", script)
+        self.assertIn("e.data.lat", script)
+        self.assertIn("e.data.lng", script)
+
+
 if __name__ == "__main__":
     unittest.main()

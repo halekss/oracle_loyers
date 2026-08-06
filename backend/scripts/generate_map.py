@@ -133,6 +133,38 @@ def write_map_metadata(metadata_path, output_html=None, extra=None):
     return metadata
 
 
+def build_bridge_message_script(map_js_var_name):
+    """Génère le script JS qui écoute les messages postMessage envoyés par
+    MapComponent.jsx (React) vers la carte Folium embarquée en iframe.
+
+    Contrat documenté dans MAP_CONTRACT.md (ORA-125) : tout nouveau type de
+    message doit être ajouté ici ET dans ce document.
+
+    `map_js_var_name` : nom de la variable JS de l'objet Leaflet généré par
+    Folium (`m.get_name()`), utilisé pour piloter la carte (ex: FLY_TO).
+    """
+    return f"""
+    window.addEventListener("message", function(e) {{
+        if (e.origin !== window.location.origin) {{
+            return;
+        }}
+
+        if (e.data.type === 'TOGGLE_LAYER') {{
+            var labels = document.getElementsByTagName('label');
+            for (var i = 0; i < labels.length; i++) {{
+                var labelText = labels[i].textContent.trim();
+                if (labelText === e.data.name || labelText.includes(e.data.name)) {{
+                    var box = labels[i].querySelector('input');
+                    if (box && box.checked !== e.data.show) box.click();
+                }}
+            }}
+        }} else if (e.data.type === 'FLY_TO') {{
+            {map_js_var_name}.flyTo([e.data.lat, e.data.lng], e.data.zoom || {map_js_var_name}.getZoom());
+        }}
+    }});
+    """
+
+
 def main():
     # --- 3. CHARGEMENT DONNEES ---
     # A. Immo
@@ -344,18 +376,7 @@ def main():
     </style>
 
     <script>
-    window.addEventListener("message", function(e) {{
-        if(e.data.type==='TOGGLE_LAYER'){{
-            var labels=document.getElementsByTagName('label');
-            for(var i=0;i<labels.length;i++){{
-                var labelText = labels[i].textContent.trim();
-                if(labelText === e.data.name || labelText.includes(e.data.name)){{
-                   var box=labels[i].querySelector('input');
-                   if(box && box.checked!==e.data.show) box.click();
-                }}
-            }}
-        }}
-    }});
+    {build_bridge_message_script(m.get_name())}
     </script>
     </body>
     """
