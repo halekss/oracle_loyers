@@ -43,6 +43,41 @@ describe('ResultCard', () => {
     expect(screen.getByText(/Confiance IA : Élevée/)).toBeInTheDocument();
   });
 
+  it('explains the confidence using the comparables count (ORA-128)', () => {
+    render(<ResultCard data={{ ...baseData, count: 12 }} loading={false} />);
+
+    expect(screen.getByText(/12 bien/i)).toBeInTheDocument();
+  });
+
+  it('does not show a confidence explanation without a count', () => {
+    render(<ResultCard data={{ ...baseData, count: undefined }} loading={false} />);
+
+    expect(screen.queryByText(/bien\(s\) comparable/i)).not.toBeInTheDocument();
+  });
+
+  it('displays the comparables list when present (ORA-128)', () => {
+    const dataWithComparables = {
+      ...baseData,
+      comparables: [
+        { type_local: 'T2', prix: 780, surface: 45 },
+        { type_local: 'T2', prix: 810, surface: 48 },
+      ],
+    };
+
+    render(<ResultCard data={dataWithComparables} loading={false} />);
+
+    expect(screen.getByText('Biens comparables')).toBeInTheDocument();
+    expect(screen.getByText(/780/)).toBeInTheDocument();
+    expect(screen.getByText(/45/)).toBeInTheDocument();
+    expect(screen.getByText(/810/)).toBeInTheDocument();
+  });
+
+  it('does not show a comparables section when there are none', () => {
+    render(<ResultCard data={baseData} loading={false} />);
+
+    expect(screen.queryByText('Biens comparables')).not.toBeInTheDocument();
+  });
+
   it('does not render the export button when there is no data', () => {
     render(<ResultCard data={null} loading={false} />);
 

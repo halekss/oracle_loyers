@@ -85,11 +85,20 @@ export default function ResultCard({ data, loading, priceHistory }) {
                 </div>
             </div>
             {confiance && (
-              <span className={`text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border ${confidenceStyles[confiance] || 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+              <span
+                className={`text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border ${confidenceStyles[confiance] || 'bg-slate-800 text-slate-400 border-slate-700'}`}
+                title={safeData.count != null ? `Basée sur ${safeData.count} bien(s) comparable(s) du même quartier et type` : undefined}
+              >
                 Confiance IA : {confiance}
               </span>
             )}
           </div>
+          {/* ORA-128 : explique la confiance plutôt que de la laisser abstraite */}
+          {safeData.count != null && (
+            <p className="mt-2 text-[9px] text-slate-500">
+              Basée sur {safeData.count} bien{safeData.count > 1 ? 's' : ''} comparable{safeData.count > 1 ? 's' : ''} du même quartier et type.
+            </p>
+          )}
         </div>
 
         {/* PETIT BLOC : PRIX M2 */}
@@ -101,6 +110,20 @@ export default function ResultCard({ data, loading, priceHistory }) {
           <p className="text-[9px] text-slate-600 mt-1">Moyenne</p>
         </div>
       </div>
+
+      {comparables.length > 0 && (
+        <div className="mt-3 bg-slate-900 rounded-xl border border-slate-700 p-3">
+          <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">Biens comparables</p>
+          <ul className="space-y-1">
+            {comparables.map((c, i) => (
+              <li key={i} className="flex justify-between text-[11px] text-slate-300">
+                <span>{c.type_local || '—'}</span>
+                <span>{formatPrice(c.prix)} € · {formatPrice(c.surface)} m²</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {data && (
         <>
