@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { api, describeApiError } from "../services/api";
 import { downloadBlob } from "../services/downloadBlob";
 
-export default function ResultCard({ data, loading }) {
+export default function ResultCard({ data, loading, priceHistory }) {
 
   const safeData = data || {};
   const stats = safeData.stats || {};
@@ -12,6 +12,7 @@ export default function ResultCard({ data, loading }) {
   const confiance = safeData.confiance;
   const quartier = safeData.quartier;
   const facteurs = safeData.facteurs || [];
+  const comparables = safeData.comparables || [];
 
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
@@ -39,6 +40,8 @@ export default function ResultCard({ data, loading }) {
         count: safeData.count,
         type_local: safeData.type,
         facteurs,
+        historique: priceHistory?.historique || undefined,
+        comparables: comparables.length > 0 ? comparables : undefined,
       });
       const slug = (quartier || 'estimation').toLowerCase().replace(/[^a-z0-9]+/g, '-');
       downloadBlob(blob, `rapport-oracle-${slug}.pdf`);

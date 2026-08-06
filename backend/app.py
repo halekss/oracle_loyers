@@ -468,6 +468,7 @@ def get_quartier_stats():
                 "count": 0,
                 "prix_moyen": 0,
                 "prix_m2_moyen": 0,
+                "comparables": [],
                 "message": f"Pas de {type_filter} trouvé dans ce secteur."
             }), 200
 
@@ -482,6 +483,21 @@ def get_quartier_stats():
 
         count = len(filtered_df)
         
+        # ORA-122/ORA-128 : échantillon de biens comparables réels (les plus
+        # proches du prix moyen, donc les plus représentatifs), pour le
+        # rapport PDF et l'explication de la confiance côté frontend.
+        comparables_df = filtered_df.assign(
+            _ecart=(filtered_df['prix'] - mean_price).abs()
+        ).sort_values('_ecart').head(3)
+        comparables = [
+            {
+                "type_local": row.get('type_local'),
+                "prix": round(float(row['prix']), 0),
+                "surface": round(float(row['surface']), 0) if pd.notna(row.get('surface')) else None,
+            }
+            for _, row in comparables_df.iterrows()
+        ]
+
         # Libellé canonique déjà résolu (ex: "Gerland" au lieu de "greland")
         nom_officiel = resolved_quartier
         center = None
@@ -502,6 +518,7 @@ def get_quartier_stats():
             "prix_m2_moyen": round(float(mean_price_m2), 0),
             "center": center,
             "facteurs": summarize_cavaliers(filtered_df),
+            "comparables": comparables,
         })
 
     except Exception as e:

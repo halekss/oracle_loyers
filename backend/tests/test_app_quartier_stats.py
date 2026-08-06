@@ -31,6 +31,52 @@ class QuartierStatsRouteTest(unittest.TestCase):
             self.assertIn("categorie", facteur)
             self.assertIn("phrase", facteur)
 
+    def test_route_returns_up_to_3_comparables(self):
+        """ORA-122/ORA-128 : quelques biens comparables réels (échantillon),
+        pour le rapport PDF et l'explication de la confiance côté frontend."""
+        client = app.app.test_client()
+        controlled_df = pd.DataFrame({
+            'quartier': ['Gerland'] * 5,
+            'prix': [700, 750, 800, 850, 1200],
+            'surface': [30, 32, 35, 38, 50],
+            'type_local': ['T2'] * 5,
+        })
+
+        with patch.object(app.data_loader, "get_data", return_value=controlled_df):
+            response = client.post(
+                "/api/quartier-stats",
+                json={"quartier": "Gerland", "type_local": "T2"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("comparables", data)
+        self.assertLessEqual(len(data["comparables"]), 3)
+        self.assertGreater(len(data["comparables"]), 0)
+        for comparable in data["comparables"]:
+            self.assertIn("type_local", comparable)
+            self.assertIn("prix", comparable)
+            self.assertIn("surface", comparable)
+
+    def test_route_returns_empty_comparables_list_when_type_filtered_result_is_empty(self):
+        client = app.app.test_client()
+        controlled_df = pd.DataFrame({
+            'quartier': ['Gerland'],
+            'prix': [700],
+            'surface': [30],
+            'type_local': ['T2'],
+        })
+
+        with patch.object(app.data_loader, "get_data", return_value=controlled_df):
+            response = client.post(
+                "/api/quartier-stats",
+                json={"quartier": "Gerland", "type_local": "T4+"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["comparables"], [])
+
     def test_route_tolerates_a_typo_in_the_quartier_name(self):
         """ORA-110 : le endpoint utilise désormais le matching partagé
         (fuzzy) au lieu d'un str.contains naïf."""

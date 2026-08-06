@@ -74,6 +74,33 @@ describe('ResultCard', () => {
     clickSpy.mockRestore();
   });
 
+  it('includes the price history and comparables when exporting the PDF (ORA-122)', async () => {
+    api.exportEstimationPdf.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+    URL.revokeObjectURL = vi.fn();
+    const user = userEvent.setup();
+    const historique = [{ date: '2026-01-01T00:00:00+00:00', prix_m2_moyen: 20, count: 12 }];
+    const dataWithComparables = {
+      ...baseData,
+      comparables: [{ type_local: 'T2', prix: 780, surface: 45 }],
+    };
+
+    render(<ResultCard data={dataWithComparables} loading={false} priceHistory={{ historique }} />);
+    await user.click(screen.getByRole('button', { name: /exporter en pdf/i }));
+
+    await waitFor(() => {
+      expect(api.exportEstimationPdf).toHaveBeenCalledWith(
+        expect.objectContaining({
+          historique,
+          comparables: dataWithComparables.comparables,
+        }),
+      );
+    });
+
+    clickSpy.mockRestore();
+  });
+
   it('triggers a direct download instead of the system print dialog (ORA-121)', async () => {
     api.exportEstimationPdf.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
     const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {});

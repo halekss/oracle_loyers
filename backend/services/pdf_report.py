@@ -1,4 +1,5 @@
 import html as html_module
+from datetime import datetime
 
 try:
     # WeasyPrint dépend de libs système (libpango/libcairo/libgdk-pixbuf,
@@ -29,6 +30,13 @@ def _format_price(value):
     return f"{round(float(value)):,}".replace(",", " ")
 
 
+def _format_date(iso_value):
+    try:
+        return datetime.fromisoformat(str(iso_value)).strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
+        return _escape(iso_value)
+
+
 def build_report_html(data):
     """Construit le HTML source du rapport PDF (fonction pure, testable
     indépendamment du rendu WeasyPrint). `data` reprend le résultat déjà
@@ -41,6 +49,8 @@ def build_report_html(data):
     type_local = _escape(data.get("type_local")) if data.get("type_local") else None
     count = data.get("count")
     facteurs = data.get("facteurs") or []
+    historique = data.get("historique") or []
+    comparables = data.get("comparables") or []
 
     meta_parts = [f"Quartier : {quartier}"]
     if type_local:
@@ -62,6 +72,32 @@ def build_report_html(data):
         facteurs_html = f"""
         <h2>Les 4 Cavaliers du quartier</h2>
         <ul class="facteurs">{items}</ul>
+        """
+
+    historique_html = ""
+    if historique:
+        rows = "".join(
+            f"<tr><td>{_format_date(point.get('date'))}</td>"
+            f"<td>{_format_price(point.get('prix_m2_moyen'))} €/m²</td>"
+            f"<td>{_escape(point.get('count'))} bien(s)</td></tr>"
+            for point in historique
+        )
+        historique_html = f"""
+        <h2>Historique du prix moyen/m²</h2>
+        <table class="data-table">{rows}</table>
+        """
+
+    comparables_html = ""
+    if comparables:
+        rows = "".join(
+            f"<tr><td>{_escape(c.get('type_local')) or '—'}</td>"
+            f"<td>{_format_price(c.get('prix'))} €</td>"
+            f"<td>{_format_price(c.get('surface'))} m²</td></tr>"
+            for c in comparables
+        )
+        comparables_html = f"""
+        <h2>Biens comparables</h2>
+        <table class="data-table">{rows}</table>
         """
 
     return f"""
@@ -148,6 +184,16 @@ def build_report_html(data):
         ul.facteurs li {{
             margin-bottom: 6px;
         }}
+        table.data-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            color: {TEXT};
+        }}
+        table.data-table td {{
+            padding: 4px 6px;
+            border-bottom: 1px solid {BORDER};
+        }}
         .disclaimer {{
             font-size: 9px;
             color: {MUTED};
@@ -168,6 +214,10 @@ def build_report_html(data):
         </div>
 
         {facteurs_html}
+
+        {historique_html}
+
+        {comparables_html}
 
         <p class="disclaimer">Estimation générée par l'Oracle des Loyers, à titre indicatif — non contractuelle.</p>
     </body>

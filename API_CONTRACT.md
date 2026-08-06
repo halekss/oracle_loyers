@@ -219,11 +219,18 @@ Calcule des statistiques réelles (prix moyen, prix/m², nombre de biens) à par
     { "categorie": "Gentrification", "phrase": "Une salle de sport à 338m — la gentrification muscle aussi les mollets." },
     { "categorie": "Nuisance", "phrase": "Une aire de jeux à 208m — cris d'enfants inclus, gratuitement." },
     { "categorie": "Superstition", "phrase": "Ni cimetière ni pompes funèbres à moins de 500m — rien à signaler côté au-delà." }
+  ],
+  "comparables": [
+    { "type_local": "T2", "prix": 780, "surface": 45 },
+    { "type_local": "T2", "prix": 760, "surface": 42 },
+    { "type_local": "T2", "prix": 810, "surface": 48 }
   ]
 }
 ```
 
-`facteurs` (ORA-73) : résumé des 4 "Cavaliers" pour le quartier détecté, sous forme de phrases concrètes (pas un score abstrait) générées par `backend/services/cavaliers_factors.py` à partir des colonnes `dist_*`/`nb_*_500m` de `master_immo_final.csv`. Utilisé par le frontend pour l'export PDF de l'estimation (bouton "Exporter en PDF", `window.print()` sur un rapport dédié).
+`facteurs` (ORA-73) : résumé des 4 "Cavaliers" pour le quartier détecté, sous forme de phrases concrètes (pas un score abstrait) générées par `backend/services/cavaliers_factors.py` à partir des colonnes `dist_*`/`nb_*_500m` de `master_immo_final.csv`. Utilisé par le frontend pour l'export PDF de l'estimation (bouton "Exporter en PDF", `POST /api/report/pdf`, ORA-121).
+
+`comparables` (ORA-122/ORA-128) : jusqu'à 3 biens réels du même quartier/type, les plus proches du prix moyen (`prix_moyen`) — pas un échantillon aléatoire. Vide si aucun bien ne correspond au filtre type demandé.
 
 - **Réponse `200`** (quartier trouvé mais aucun bien pour le type demandé) :
 

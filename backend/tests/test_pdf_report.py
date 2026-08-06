@@ -55,6 +55,44 @@ class BuildReportHtmlTest(unittest.TestCase):
 
         self.assertIn("size: A4", html)
 
+    def test_includes_the_price_history_when_present(self):
+        html = build_report_html({
+            "quartier": "Gerland",
+            "estimated_price": 950,
+            "historique": [
+                {"date": "2026-01-01T00:00:00+00:00", "prix_m2_moyen": 20, "count": 12},
+                {"date": "2026-02-01T00:00:00+00:00", "prix_m2_moyen": 21, "count": 14},
+            ],
+        })
+
+        self.assertIn("Historique du prix", html)
+        self.assertIn("20", html)
+        self.assertIn("21", html)
+
+    def test_omits_the_price_history_section_when_absent(self):
+        html = build_report_html({"quartier": "Gerland", "estimated_price": 950})
+
+        self.assertNotIn("Historique du prix", html)
+
+    def test_includes_the_comparables_when_present(self):
+        html = build_report_html({
+            "quartier": "Gerland",
+            "estimated_price": 950,
+            "comparables": [
+                {"type_local": "T2", "prix": 780, "surface": 45},
+                {"type_local": "T2", "prix": 810, "surface": 48},
+            ],
+        })
+
+        self.assertIn("Biens comparables", html)
+        self.assertIn("780", html)
+        self.assertIn("45", html)
+
+    def test_omits_the_comparables_section_when_absent(self):
+        html = build_report_html({"quartier": "Gerland", "estimated_price": 950})
+
+        self.assertNotIn("Biens comparables", html)
+
 
 class RenderEstimationPdfTest(unittest.TestCase):
     def test_returns_pdf_bytes(self):

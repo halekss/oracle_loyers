@@ -27,6 +27,27 @@ class ReportPdfRouteTest(unittest.TestCase):
         self.assertIn("attachment", response.headers.get("Content-Disposition", ""))
         self.assertTrue(response.data.startswith(b"%PDF"))
 
+    def test_route_accepts_historique_and_comparables(self):
+        """ORA-122 : enrichissement du rapport (historique de prix, biens comparables)."""
+        client = app.app.test_client()
+
+        response = client.post(
+            "/api/report/pdf",
+            json={
+                "quartier": "Gerland",
+                "estimated_price": 950,
+                "historique": [
+                    {"date": "2026-01-01T00:00:00+00:00", "prix_m2_moyen": 20, "count": 12},
+                ],
+                "comparables": [
+                    {"type_local": "T2", "prix": 780, "surface": 45},
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data.startswith(b"%PDF"))
+
     def test_route_rejects_blank_quartier_with_400(self):
         client = app.app.test_client()
 

@@ -64,9 +64,22 @@ class FacteurSchema(BaseModel):
     phrase: str
 
 
+class PriceHistoryPointSchema(BaseModel):
+    date: str
+    prix_m2_moyen: float
+    count: int
+
+
+class ComparableSchema(BaseModel):
+    type_local: Optional[str] = None
+    prix: Optional[float] = None
+    surface: Optional[float] = None
+
+
 class PdfReportRequestSchema(BaseModel):
-    # Reprend le résultat déjà affiché par ResultCard.jsx (ORA-121) : aucun
-    # recalcul côté serveur, seule la mise en page PDF est nouvelle.
+    # Reprend le résultat déjà affiché par ResultCard.jsx/PriceHistory.jsx
+    # (ORA-121/ORA-122) : aucun recalcul côté serveur, seule la mise en page
+    # PDF est nouvelle.
     quartier: str
     estimated_price: float
     prix_m2: Optional[float] = None
@@ -74,6 +87,8 @@ class PdfReportRequestSchema(BaseModel):
     count: Optional[int] = None
     type_local: Optional[str] = None
     facteurs: Optional[List[FacteurSchema]] = None
+    historique: Optional[List[PriceHistoryPointSchema]] = None
+    comparables: Optional[List[ComparableSchema]] = None
 
     @field_validator("quartier")
     @classmethod

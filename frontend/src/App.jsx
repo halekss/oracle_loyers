@@ -124,6 +124,7 @@ function App() {
         type: data.type_filtre,
         confiance,
         facteurs: data.facteurs || [],
+        comparables: data.comparables || [],
       });
       setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
       if (data.center?.lat && data.center?.lng) {
@@ -194,7 +195,7 @@ function App() {
           >
             {/* Résultat */}
             <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
-              <ResultCard data={result} loading={loading} />
+              <ResultCard data={result} loading={loading} priceHistory={priceHistory} />
               {result && (
                 <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
                   Données réelles ({result.count} biens)
