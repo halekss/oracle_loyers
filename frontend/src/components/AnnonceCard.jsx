@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { api } from '../services/api';
+import AnnonceDetailModal from './AnnonceDetailModal';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
 
@@ -67,6 +68,8 @@ function AnnonceIllustration({ titre, surface }) {
 }
 
 export default function AnnonceCard({ annonce }) {
+  const [detailOpen, setDetailOpen] = useState(false);
+
   if (!annonce) return null;
 
   const { id, titre, prix, surface, ville, quartier, url } = annonce;
@@ -119,10 +122,28 @@ export default function AnnonceCard({ annonce }) {
 
         {ville && <p className="mt-1 text-[10px] text-slate-500">{ville}</p>}
 
-        <p className="mt-2 text-[10px] uppercase tracking-widest font-bold text-purple-400 group-hover:text-purple-300">
-          Voir l'annonce ↗
-        </p>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-[10px] uppercase tracking-widest font-bold text-purple-400 group-hover:text-purple-300">
+            Voir l'annonce ↗
+          </p>
+          {id != null && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDetailOpen(true);
+              }}
+              className="text-[9px] uppercase tracking-widest font-bold text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2"
+            >
+              Détails
+            </button>
+          )}
+        </div>
       </div>
+
+      {detailOpen && (
+        <AnnonceDetailModal annonceId={id} onClose={() => setDetailOpen(false)} />
+      )}
     </div>
   );
 }

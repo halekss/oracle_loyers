@@ -8,7 +8,7 @@ vi.mock('../services/api', async () => {
   const actual = await vi.importActual('../services/api');
   return {
     ...actual,
-    api: { logAnnonceClick: vi.fn() },
+    api: { logAnnonceClick: vi.fn(), getAnnonceDetail: vi.fn() },
   };
 });
 
@@ -55,7 +55,7 @@ describe('AnnonceCard', () => {
     const user = userEvent.setup();
 
     render(<AnnonceCard annonce={baseAnnonce} />);
-    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByRole('button', { name: /voir l'annonce : t2 gerland/i }));
 
     expect(api.logAnnonceClick).toHaveBeenCalledWith(42);
     expect(openSpy).toHaveBeenCalledWith('https://example.com/annonce-42', '_blank', 'noopener,noreferrer');
@@ -67,7 +67,7 @@ describe('AnnonceCard', () => {
     const user = userEvent.setup();
 
     render(<AnnonceCard annonce={baseAnnonce} />);
-    screen.getByRole('button').focus();
+    screen.getByRole('button', { name: /voir l'annonce : t2 gerland/i }).focus();
     await user.keyboard('{Enter}');
 
     expect(openSpy).toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe('AnnonceCard', () => {
     const user = userEvent.setup();
 
     render(<AnnonceCard annonce={baseAnnonce} />);
-    await user.click(screen.getByRole('button'));
+    await user.click(screen.getByRole('button', { name: /voir l'annonce : t2 gerland/i }));
 
     expect(openSpy).toHaveBeenCalled();
     openSpy.mockRestore();
@@ -91,6 +91,20 @@ describe('AnnonceCard', () => {
 
     expect(container.querySelector('img')).not.toBeInTheDocument();
     expect(container.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('opens the detail view on "Détails" click without triggering the external redirect (ORA-131)', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {});
+    api.getAnnonceDetail = vi.fn().mockResolvedValue(baseAnnonce);
+    const user = userEvent.setup();
+
+    render(<AnnonceCard annonce={baseAnnonce} />);
+    await user.click(screen.getByRole('button', { name: /détails/i }));
+
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(api.getAnnonceDetail).toHaveBeenCalledWith(42);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    openSpy.mockRestore();
   });
 
   it.each([
