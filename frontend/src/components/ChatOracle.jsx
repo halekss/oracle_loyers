@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api, ApiError } from '../services/api';
+import { loadChatHistory, saveChatHistory } from '../services/chatHistoryStorage';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -21,15 +22,18 @@ const describeChatError = (error) => {
   return "**Service indisponible.** Immotep est en pause café. Réessaie dans quelques instants.";
 };
 
+const DEFAULT_MESSAGES = [
+  {
+    sender: 'oracle',
+    text: "**Immotep est en ligne.** Pose une question sur un quartier, un prix ou une surface; il répondra sans vendre du rêve au mètre carré."
+  }
+];
+
 export default function ChatOracle({ analysis, context, quartier, onInsight }) {
-  // Message d'accueil par défaut
-  const [messages, setMessages] = useState([
-    { 
-      sender: 'oracle', 
-      text: "**Immotep est en ligne.** Pose une question sur un quartier, un prix ou une surface; il répondra sans vendre du rêve au mètre carré."
-    }
-  ]);
-  
+  // ORA-117 : restaure l'historique de la session (sessionStorage) au
+  // montage — vide dans un nouvel onglet, conservé au refresh de page.
+  const [messages, setMessages] = useState(() => loadChatHistory() || DEFAULT_MESSAGES);
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [latestInsight, setLatestInsight] = useState(null);
@@ -45,6 +49,11 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
   // 2. Scroll automatique vers le bas à chaque nouveau message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // 3. Persistance de l'historique à chaque changement (ORA-117)
+  useEffect(() => {
+    saveChatHistory(messages);
   }, [messages]);
 
   // 3. Envoi du message utilisateur

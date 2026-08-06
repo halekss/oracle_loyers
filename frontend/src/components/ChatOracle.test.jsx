@@ -18,11 +18,43 @@ import { api } from '../services/api';
 describe('ChatOracle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   it('renders the welcome message on mount', () => {
     render(<ChatOracle />);
     expect(screen.getByText(/Immotep est en ligne/)).toBeInTheDocument();
+  });
+
+  it('restores a previously saved conversation from sessionStorage on mount (ORA-117)', () => {
+    sessionStorage.setItem(
+      'oracle-loyers:chat-history',
+      JSON.stringify([
+        { sender: 'oracle', text: "**Immotep est en ligne.**" },
+        { sender: 'user', text: 'Un T2 à Gerland ?' },
+        { sender: 'oracle', text: 'Ça tourne autour de 780 EUR.' },
+      ]),
+    );
+
+    render(<ChatOracle />);
+
+    expect(screen.getByText('Un T2 à Gerland ?')).toBeInTheDocument();
+    expect(screen.getByText('Ça tourne autour de 780 EUR.')).toBeInTheDocument();
+  });
+
+  it('persists new messages to sessionStorage so a page refresh keeps them (ORA-117)', async () => {
+    api.sendChatMessage.mockResolvedValue({ response: 'Gerland tourne autour de 780 EUR pour un T2.' });
+    const user = userEvent.setup();
+
+    render(<ChatOracle />);
+    await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Quel prix a Gerland ?');
+    await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+    await waitFor(() => {
+      const stored = JSON.parse(sessionStorage.getItem('oracle-loyers:chat-history'));
+      expect(stored.some((m) => m.text === 'Quel prix a Gerland ?')).toBe(true);
+      expect(stored.some((m) => m.text.includes('780 EUR pour un T2'))).toBe(true);
+    });
   });
 
   it('sends a message and displays the oracle response', async () => {
