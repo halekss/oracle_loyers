@@ -160,6 +160,8 @@ def build_bridge_message_script(map_js_var_name):
             }}
         }} else if (e.data.type === 'FLY_TO') {{
             {map_js_var_name}.flyTo([e.data.lat, e.data.lng], e.data.zoom || {map_js_var_name}.getZoom());
+        }} else if (e.data.type === 'FLY_TO_BOUNDS') {{
+            {map_js_var_name}.flyToBounds(e.data.bounds);
         }}
     }});
     """

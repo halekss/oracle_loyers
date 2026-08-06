@@ -5,7 +5,9 @@ import { api, describeApiError } from '../services/api';
 // `compact` : variante utilisée dans la colonne Oracle en desktop (peu de
 // place, scroll interne borné) ; en plein écran (onglet mobile "Annonces"),
 // on charge une page plus large.
-export default function AnnoncesList({ compact = false }) {
+// `onItemsChange` (optionnel) : notifie le parent des annonces actuellement
+// affichées, pour recentrer la carte sur leur bounding-box (ORA-105).
+export default function AnnoncesList({ compact = false, onItemsChange }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -26,6 +28,7 @@ export default function AnnoncesList({ compact = false }) {
         if (cancelled) return;
         setItems(data.items || []);
         setTotalPages(data.total_pages || 0);
+        onItemsChange?.(data.items || []);
       } catch (err) {
         if (cancelled) return;
         console.error(err);

@@ -30,6 +30,20 @@ Recentre/zoome la carte Leaflet sur des coordonnées données, avec la transitio
 
 **Traité par** : `build_bridge_message_script` → `<map>.flyTo([lat, lng], zoom)`.
 
+### `FLY_TO_BOUNDS`
+
+Recentre/zoome la carte sur une bounding-box (transition animée, `flyToBounds`), plutôt que sur un point unique.
+
+**Émis par** : `MapComponent.jsx`, sur changement de la prop `bounds` — calculée par `App.jsx` à partir des quartiers des annonces actuellement affichées dans `AnnoncesList` (colonne Oracle desktop, ORA-105). `bounds` vaut `null` quand ces annonces n'ont aucune coordonnée exploitable ; dans ce cas `MapComponent.jsx` envoie un `FLY_TO` de repli vers le centre-ville plutôt qu'un `FLY_TO_BOUNDS` vide.
+
+```json
+{ "type": "FLY_TO_BOUNDS", "bounds": [[45.72, 4.80], [45.78, 4.87]] }
+```
+
+* `bounds` : `[[latMin, lngMin], [latMax, lngMax]]`, format attendu par `L.Map#flyToBounds`.
+
+**Traité par** : `build_bridge_message_script` → `<map>.flyToBounds(bounds)`.
+
 ### `TOGGLE_LAYER`
 
 Active/désactive un calque Folium (`LayerControl`) depuis le panneau de contrôle React, sans dupliquer ce panneau dans la carte elle-même (masqué via CSS).

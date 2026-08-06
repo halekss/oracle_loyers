@@ -3,6 +3,10 @@ import { useState, useEffect, useRef } from 'react';
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
 // (générée par backend/scripts/generate_map.py) : voir MAP_CONTRACT.md (ORA-125).
 
+// Centre par défaut de la carte Folium (backend/scripts/generate_map.py) —
+// repli quand la bounding-box des résultats filtrés est vide (ORA-105).
+const LYON_CENTER = { lat: 45.7640, lng: 4.8357, zoom: 13 };
+
 // --- CONFIGURATION DES CALQUES ---
 const LAYER_MAPPING = {
   'Studio': 'Immo Studio/T1',
@@ -39,7 +43,7 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   </div>
 );
 
-export default function MapComponent({ center }) {
+export default function MapComponent({ center, bounds }) {
   const [mapUrl] = useState(() => `/data/map_pings_lyon_calques.html?t=${Date.now()}`);
   const iframeRef = useRef(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -66,6 +70,28 @@ export default function MapComponent({ center }) {
       }, window.location.origin);
     }
   }, [center]);
+
+  // ORA-105 : recentrage/zoom sur les résultats filtrés (bounding-box).
+  // `bounds` vaut undefined tant qu'aucun calcul n'a eu lieu (rien à faire),
+  // null quand le calcul n'a trouvé aucune coordonnée exploitable (repli
+  // explicite sur le centre-ville plutôt qu'un saut brutal ou une absence
+  // de réaction).
+  useEffect(() => {
+    if (bounds === undefined || !iframeRef.current || !iframeRef.current.contentWindow) {
+      return;
+    }
+    if (bounds === null) {
+      iframeRef.current.contentWindow.postMessage({
+        type: 'FLY_TO',
+        lat: LYON_CENTER.lat, lng: LYON_CENTER.lng, zoom: LYON_CENTER.zoom
+      }, window.location.origin);
+      return;
+    }
+    iframeRef.current.contentWindow.postMessage({
+      type: 'FLY_TO_BOUNDS',
+      bounds
+    }, window.location.origin);
+  }, [bounds]);
 
   const sendLayerCommand = (layerKey, show) => {
     if (iframeRef.current && iframeRef.current.contentWindow) {

@@ -77,4 +77,54 @@ describe('MapComponent', () => {
       window.location.origin,
     );
   });
+
+  it('sends FLY_TO_BOUNDS to the page origin when bounds are provided (ORA-105)', () => {
+    const { rerender } = render(<MapComponent center={null} bounds={undefined} />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    const bounds = [
+      [45.72, 4.83],
+      [45.74, 4.86],
+    ];
+    rerender(<MapComponent center={null} bounds={bounds} />);
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'FLY_TO_BOUNDS', bounds },
+      window.location.origin,
+    );
+  });
+
+  it('falls back to a FLY_TO on the city center when bounds is explicitly empty (ORA-105)', () => {
+    const { rerender } = render(<MapComponent center={null} bounds={undefined} />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    rerender(<MapComponent center={null} bounds={null} />);
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'FLY_TO' }),
+      window.location.origin,
+    );
+  });
+
+  it('does not send any bounds-related message while bounds has not been computed yet (ORA-105)', () => {
+    render(<MapComponent center={null} bounds={undefined} />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    expect(postMessage).not.toHaveBeenCalled();
+  });
 });

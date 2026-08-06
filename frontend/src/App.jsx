@@ -6,6 +6,7 @@ import MapComponent from './components/MapComponent';
 import ChatOracle from './components/ChatOracle';
 import AnnoncesList from './components/AnnoncesList';
 import { api, describeApiError } from './services/api';
+import { computeBoundsForQuartiers } from './services/mapBounds';
 
 // Correspond au breakpoint `md` de Tailwind : au-delà, les deux panneaux
 // (carte + oracle) restent visibles simultanément, donc la carte doit
@@ -36,6 +37,12 @@ function App() {
   const [error, setError] = useState(null);
   const [chatContext, setChatContext] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
+  // ORA-105 : bounding-box des annonces actuellement affichées dans
+  // AnnoncesList (colonne Oracle desktop). undefined = pas encore calculée
+  // (la carte ne réagit pas) ; null = calculée mais sans coordonnée
+  // exploitable (repli explicite sur le centre-ville dans MapComponent).
+  const [mapBounds, setMapBounds] = useState(undefined);
+  const [listings, setListings] = useState([]);
   const [activeTab, setActiveTab] = useState('oracle');
   // Chat en bulle flottante superposée à l'écran (pas de fenêtre/page à
   // part) : fermé par défaut pour laisser "Détails du quartier" toute la
@@ -44,6 +51,27 @@ function App() {
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
   const facteurs = result?.facteurs || [];
+
+  // ORA-105 : chargé une fois, sert à résoudre les coordonnées des quartiers
+  // des annonces affichées (AnnoncesList n'a pas de latitude/longitude).
+  useEffect(() => {
+    let cancelled = false;
+
+    api.getListings()
+      .then((data) => {
+        if (!cancelled) setListings(data || []);
+      })
+      .catch((err) => console.error("Listings indisponibles pour le recentrage carte :", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleAnnoncesItemsChange = (items) => {
+    const quartiers = [...new Set(items.map((item) => item.quartier).filter(Boolean))];
+    setMapBounds(computeBoundsForQuartiers(listings, quartiers));
+  };
 
   const handleScan = async (quartier, typeLocal, surfaceInput) => {
     setLoading(true);
@@ -130,7 +158,7 @@ function App() {
           aria-labelledby="tab-carte"
           className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-slate-800`}
         >
-          {shouldMountMap && <MapComponent center={mapCenter} />}
+          {shouldMountMap && <MapComponent center={mapCenter} bounds={mapBounds} />}
         </div>
 
         {/* COLONNE DROITE — Oracle (40% desktop, plein écran mobile) */}
@@ -216,7 +244,7 @@ function App() {
                   <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
                     Annonces récentes
                   </p>
-                  <AnnoncesList compact />
+                  <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} />
                 </div>
               </div>
             </details>

@@ -192,6 +192,14 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("e.data.lat", script)
         self.assertIn("e.data.lng", script)
 
+    def test_handles_fly_to_bounds_by_calling_flytobounds_on_the_map_instance(self):
+        """ORA-105 : recentrage sur la bounding-box des résultats filtrés."""
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("FLY_TO_BOUNDS", script)
+        self.assertIn("map_abc123.flyToBounds(", script)
+        self.assertIn("e.data.bounds", script)
+
 
 if __name__ == "__main__":
     unittest.main()

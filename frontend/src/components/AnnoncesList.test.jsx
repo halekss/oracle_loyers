@@ -91,4 +91,19 @@ describe('AnnoncesList', () => {
       expect.objectContaining({ page: 2 })
     );
   });
+
+  it('reports the fetched items via onItemsChange (ORA-105)', async () => {
+    api.getAnnonces.mockResolvedValue({
+      items: [makeAnnonce(1), makeAnnonce(2)],
+      page: 1,
+      total_pages: 1,
+    });
+    const onItemsChange = vi.fn();
+
+    render(<AnnoncesList onItemsChange={onItemsChange} />);
+
+    await waitFor(() => {
+      expect(onItemsChange).toHaveBeenCalledWith([makeAnnonce(1), makeAnnonce(2)]);
+    });
+  });
 });

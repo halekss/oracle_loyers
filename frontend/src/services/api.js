@@ -94,6 +94,19 @@ export const api = {
     }
   },
 
+  // Annonces avec coordonnées (toutes, non paginées) — GET /api/listings.
+  // Utilisé pour calculer la bounding-box carte des résultats filtrés (ORA-105).
+  getListings: async () => {
+    try {
+      const response = await fetchWithClassification(`${API_URL}/listings`);
+
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Erreur Listings:", error);
+      throw error;
+    }
+  },
+
   // Journalise un clic sortant vers l'annonce source — POST /api/annonces/:id/click (ORA-91)
   logAnnonceClick: async (annonceId) => {
     try {
