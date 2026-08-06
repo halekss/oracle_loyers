@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
+import { api, describeApiError } from "../services/api";
+import { downloadBlob } from "../services/downloadBlob";
 
 export default function ResultCard({ data, loading }) {
 
@@ -11,12 +13,41 @@ export default function ResultCard({ data, loading }) {
   const quartier = safeData.quartier;
   const facteurs = safeData.facteurs || [];
 
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(null);
+
   const formatPrice = (p) => p ? Math.round(p).toLocaleString('fr-FR') : "--";
 
   const confidenceStyles = {
     'Élevée': 'bg-green-900/40 text-green-400 border-green-700/50',
     'Moyenne': 'bg-amber-900/40 text-amber-400 border-amber-700/50',
     'Faible': 'bg-red-900/40 text-red-400 border-red-700/50',
+  };
+
+  // ORA-121 : génération PDF côté serveur (WeasyPrint) + téléchargement
+  // direct, plus de window.print()/sélecteur d'impression système.
+  const handleExportPdf = async () => {
+    setExporting(true);
+    setExportError(null);
+
+    try {
+      const blob = await api.exportEstimationPdf({
+        quartier,
+        estimated_price: estimatedPrice,
+        prix_m2: m2PriceRaw,
+        confiance,
+        count: safeData.count,
+        type_local: safeData.type,
+        facteurs,
+      });
+      const slug = (quartier || 'estimation').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      downloadBlob(blob, `rapport-oracle-${slug}.pdf`);
+    } catch (err) {
+      console.error(err);
+      setExportError(describeApiError(err));
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) {
@@ -32,14 +63,14 @@ export default function ResultCard({ data, loading }) {
 
   return (
     <div className="w-full animate-fade-in">
-      
+
       {/* SECTION PRIX PRINCIPALE */}
       <div className="flex gap-3">
-        
+
         {/* GROS BLOC : LOYER */}
         <div className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 p-4 rounded-xl border border-purple-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.2)] relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-2 opacity-5 text-6xl font-black text-white pointer-events-none">€</div>
-          
+
           <div className="flex justify-between items-start">
             <div>
                 <p className="text-[10px] uppercase text-purple-400 font-bold tracking-widest mb-1">Estimation Loyer</p>
@@ -70,37 +101,20 @@ export default function ResultCard({ data, loading }) {
 
       {data && (
         <>
-          {/* Les 4 Cavaliers ne sont plus affichés ici à l'écran : regroupés
-              avec l'historique et les annonces dans le dropdown "Détails du
-              quartier" (App.jsx), pour ne garder qu'un seul repli à gérer.
-              Toujours repris ci-dessous dans le rapport imprimable. */}
-
           <button
             type="button"
-            onClick={() => window.print()}
-            className="print:hidden mt-3 w-full text-[10px] uppercase tracking-widest font-bold text-purple-400 border border-purple-500/30 rounded-lg py-2 hover:bg-purple-500/10 transition-colors"
+            onClick={handleExportPdf}
+            disabled={exporting}
+            className="mt-3 w-full text-[10px] uppercase tracking-widest font-bold text-purple-400 border border-purple-500/30 rounded-lg py-2 hover:bg-purple-500/10 transition-colors disabled:opacity-50"
           >
-            Exporter en PDF
+            {exporting ? 'Génération du PDF...' : 'Exporter en PDF'}
           </button>
 
-          {/* RAPPORT IMPRIMABLE — masqué à l'écran, seul élément visible à l'impression (voir index.css) */}
-          <div id="printable-report" className="hidden print:block text-black">
-            <h1 className="text-2xl font-black mb-1">Oracle des Loyers — Rapport d'estimation</h1>
-            {quartier && <p className="text-sm mb-4">Quartier : {quartier}</p>}
-            <p className="text-xl font-bold mb-1">Estimation : {formatPrice(estimatedPrice)} € / mois</p>
-            <p className="text-sm mb-4">Prix moyen au m² : {formatPrice(m2PriceRaw)} €</p>
-            {facteurs.length > 0 && (
-              <>
-                <h2 className="text-lg font-bold mb-2">Les 4 Cavaliers du quartier</h2>
-                <ul className="space-y-1 text-sm list-disc list-inside">
-                  {facteurs.map((f) => (
-                    <li key={f.categorie}><strong>{f.categorie}</strong> — {f.phrase}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-            <p className="text-[10px] text-gray-500 mt-6">Estimation générée par l'Oracle des Loyers, à titre indicatif — non contractuelle.</p>
-          </div>
+          {exportError && (
+            <p className="mt-2 text-[10px] text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
+              Erreur lors de l'export PDF : {exportError}
+            </p>
+          )}
         </>
       )}
     </div>

@@ -172,6 +172,20 @@ export const api = {
     }
   },
 
+  // Export PDF du rapport d'estimation — POST /api/report/pdf (ORA-121)
+  exportEstimationPdf: async (payload) => {
+    try {
+      const response = await fetchWithClassification(`${API_URL}/report/pdf`, {
+        ...apiFetchOptions(payload),
+      });
+
+      return await response.blob();
+    } catch (error) {
+      console.error("❌ Erreur Export PDF:", error);
+      throw error;
+    }
+  },
+
   // Chatbot Immotep
   sendChatMessage: async (message, context = null) => {
     try {

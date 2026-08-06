@@ -26,3 +26,7 @@ google-genai
 
 # Recherche/matching quartier avec tolérance aux fautes de frappe (ORA-109) ---
 rapidfuzz
+
+# Export PDF du rapport d'estimation (ORA-121) — dépend des libs système
+# libpango/libcairo/libgdk-pixbuf (voir Dockerfile) ---
+weasyprint

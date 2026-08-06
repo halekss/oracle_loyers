@@ -27,6 +27,7 @@ Toutes les routes exposées par `backend/app.py` sont en lecture seule ou de sim
 | `POST /api/quartier-historique` | Lecture — historique des snapshots (aucune écriture) |
 | `POST /api/predict` | Lecture — inférence du modèle ML déjà chargé en mémoire (aucune écriture, aucun ré-entraînement) |
 | `POST /api/chat` | Lecture — chatbot RAG groundé sur les données existantes (aucune écriture) |
+| `POST /api/report/pdf` | Lecture — génère un PDF à partir d'un résultat déjà calculé, aucun recalcul ni écriture |
 
 Aucune de ces routes ne supprime ou ne modifie de données, ne déclenche de ré-entraînement, ni n'expose de logs ou d'informations d'administration. Le ré-entraînement du modèle est piloté exclusivement par le DAG Airflow (hors périmètre HTTP, protégé par l'authentification Airflow elle-même via `AIRFLOW_ADMIN_USERNAME`/`AIRFLOW_ADMIN_PASSWORD`). Il n'existe aujourd'hui **aucune route d'administration ou de déclenchement manuel exposée via Flask**.
 
@@ -408,4 +409,46 @@ Exemple :
 curl -X POST http://localhost:5000/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Que vaut un T2 à Gerland ?","context":"Quartier: Gerland, Type: T2"}'
+```
+
+---
+
+## `POST /api/report/pdf`
+
+Génère le rapport PDF d'une estimation (ORA-121), via WeasyPrint côté serveur — remplace `window.print()`. Ne recalcule rien : reprend tel quel le résultat déjà affiché par `ResultCard.jsx`.
+
+- **Payload d'entrée** :
+
+| Champ | Type | Obligatoire | Description |
+|---|---|---|---|
+| `quartier` | string | oui | — |
+| `estimated_price` | number | oui | — |
+| `prix_m2` | number | non | — |
+| `confiance` | string | non | `"Faible"` \| `"Moyenne"` \| `"Élevée"` |
+| `count` | integer | non | Nombre de biens comparés |
+| `type_local` | string | non | — |
+| `facteurs` | array | non | `[{ "categorie", "phrase" }, ...]` (Les 4 Cavaliers, cf. `/api/quartier-stats`) |
+
+```json
+{
+  "quartier": "Gerland",
+  "estimated_price": 950,
+  "prix_m2": 21,
+  "confiance": "Élevée",
+  "facteurs": [{ "categorie": "Vice", "phrase": "2 bar(s) à moins de 500m..." }]
+}
+```
+
+- **Réponse `200`** : fichier `application/pdf`, `Content-Disposition: attachment; filename="rapport-oracle-<quartier>.pdf"`.
+- **Codes d'erreur** :
+  - `400` si `quartier` est vide ou `estimated_price` absent : `{ "error": "Payload invalide" }`
+  - `500` si WeasyPrint échoue (ex. dépendances système manquantes, cf. Dockerfile) : `{ "error": "Erreur lors de la génération du PDF" }`
+
+Exemple :
+
+```bash
+curl -X POST http://localhost:5000/api/report/pdf \
+  -H "Content-Type: application/json" \
+  -d '{"quartier":"Gerland","estimated_price":950,"prix_m2":21}' \
+  --output rapport.pdf
 ```

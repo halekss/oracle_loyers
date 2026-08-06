@@ -1,13 +1,13 @@
 """
 Schémas de validation des payloads pour les routes Flask actives
-(/api/chat, /api/quartier-stats, /api/predict).
+(/api/chat, /api/quartier-stats, /api/predict, /api/report/pdf).
 
 Valident la forme (types) des champs avant tout traitement métier, sans
 dupliquer les règles sémantiques déjà bien couvertes par les routes elles-
 mêmes (ex : plage de valeurs pour /api/predict, gérée par services/predictor.py).
 """
 
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ValidationError, field_validator
 
@@ -15,6 +15,7 @@ __all__ = [
     "ChatRequestSchema",
     "QuartierStatsRequestSchema",
     "PredictRequestSchema",
+    "PdfReportRequestSchema",
     "ValidationError",
 ]
 
@@ -56,3 +57,27 @@ class PredictRequestSchema(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     code_postal: Optional[float] = None
+
+
+class FacteurSchema(BaseModel):
+    categorie: str
+    phrase: str
+
+
+class PdfReportRequestSchema(BaseModel):
+    # Reprend le résultat déjà affiché par ResultCard.jsx (ORA-121) : aucun
+    # recalcul côté serveur, seule la mise en page PDF est nouvelle.
+    quartier: str
+    estimated_price: float
+    prix_m2: Optional[float] = None
+    confiance: Optional[str] = None
+    count: Optional[int] = None
+    type_local: Optional[str] = None
+    facteurs: Optional[List[FacteurSchema]] = None
+
+    @field_validator("quartier")
+    @classmethod
+    def quartier_must_not_be_blank(cls, value):
+        if not value or not value.strip():
+            raise ValueError("quartier vide")
+        return value

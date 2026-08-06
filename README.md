@@ -10,7 +10,7 @@ Au-delà des données classiques (surface, prix), l'Oracle croise les données a
 3.   **Nuisance** (Bars de nuit, Voies ferrées, Urgences) -> *Fait baisser les prix.*
 4.   **Superstition** (Cimetières, Pompes funèbres) -> *Impact psychologique à la baisse.*
 
-Ces facteurs, jusqu'ici uniquement internes au modèle (features `dist_*`/`nb_*_500m`), sont désormais aussi résumés en phrases lisibles pour l'utilisateur (`backend/services/cavaliers_factors.py`, exposées par `/api/quartier-stats`) et exportables en PDF (ORA-73, voir section Contrat API).
+Ces facteurs, jusqu'ici uniquement internes au modèle (features `dist_*`/`nb_*_500m`), sont désormais aussi résumés en phrases lisibles pour l'utilisateur (`backend/services/cavaliers_factors.py`, exposées par `/api/quartier-stats`) et exportables en PDF (ORA-73, généré côté serveur via WeasyPrint depuis ORA-121 — `POST /api/report/pdf`, voir section Contrat API).
 
 ---
 

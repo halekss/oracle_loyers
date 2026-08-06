@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import pandas as pd
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -14,8 +14,15 @@ from services.predictor import build_feature_row, estimate_confidence
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
 from services.text_matching import match_quartier
+from services.pdf_report import render_estimation_pdf
 from services import annonces_store
-from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
+from schemas import (
+    ChatRequestSchema,
+    QuartierStatsRequestSchema,
+    PredictRequestSchema,
+    PdfReportRequestSchema,
+    ValidationError,
+)
 import joblib
 
 # Observabilité (ORA-63) : logging structuré + tracking d'erreurs Sentry,
@@ -719,6 +726,89 @@ def chat():
             type(e).__name__, e, exc_info=True,
         )
         return jsonify({"response": "Erreur interne côté serveur. Immotep revient dès que l'API répond correctement."}), 500
+
+
+@app.route('/api/report/pdf', methods=['POST'])
+def report_pdf():
+    """
+    Génère le rapport PDF d'une estimation (ORA-121), en remplacement de
+    window.print() côté frontend. Ne recalcule rien : reprend le résultat
+    déjà affiché par ResultCard.jsx (estimation, quartier, facteurs).
+    ---
+    tags:
+      - Rapport
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - quartier
+            - estimated_price
+          properties:
+            quartier:
+              type: string
+              example: Gerland
+            estimated_price:
+              type: number
+              example: 950
+            prix_m2:
+              type: number
+              example: 21
+            confiance:
+              type: string
+              example: Élevée
+            count:
+              type: integer
+            type_local:
+              type: string
+              example: T2
+            facteurs:
+              type: array
+              items:
+                type: object
+                properties:
+                  categorie:
+                    type: string
+                  phrase:
+                    type: string
+    responses:
+      200:
+        description: Fichier PDF (application/pdf), téléchargeable directement.
+      400:
+        description: Payload invalide (quartier vide ou estimated_price manquant)
+      500:
+        description: Erreur lors de la génération du PDF
+    """
+    try:
+        raw_payload = get_request_json()
+    except Exception:
+        return jsonify({"error": "Payload JSON invalide"}), 400
+
+    try:
+        payload = PdfReportRequestSchema(**raw_payload)
+    except (ValidationError, TypeError):
+        return jsonify({"error": "Payload invalide"}), 400
+
+    try:
+        pdf_bytes = render_estimation_pdf(payload.model_dump())
+    except Exception as e:
+        logger.error(
+            "Erreur endpoint /api/report/pdf : %s - %s",
+            type(e).__name__, e, exc_info=True,
+        )
+        return jsonify({"error": "Erreur lors de la génération du PDF"}), 500
+
+    quartier_slug = "".join(c if c.isalnum() else "-" for c in payload.quartier.strip().lower())
+    filename = f"rapport-oracle-{quartier_slug}.pdf"
+
+    return Response(
+        pdf_bytes,
+        mimetype='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
 
 if __name__ == '__main__':
     app.run(debug=os.environ.get('FLASK_DEBUG') == '1', host='0.0.0.0', port=get_server_port())
