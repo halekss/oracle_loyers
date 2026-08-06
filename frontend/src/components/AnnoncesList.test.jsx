@@ -8,7 +8,7 @@ vi.mock('../services/api', async () => {
   const actual = await vi.importActual('../services/api');
   return {
     ...actual,
-    api: { getAnnonces: vi.fn(), logAnnonceClick: vi.fn() },
+    api: { getAnnonces: vi.fn(), logAnnonceClick: vi.fn(), getListings: vi.fn() },
   };
 });
 
@@ -27,6 +27,12 @@ const makeAnnonce = (id) => ({
 describe('AnnoncesList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getListings.mockResolvedValue([
+      { quartier: 'Gerland' },
+      { quartier: 'Confluence' },
+      { quartier: 'Gerland' },
+      { quartier: 'Vieux Lyon' },
+    ]);
   });
 
   it('renders a loading skeleton while fetching', () => {
@@ -105,5 +111,41 @@ describe('AnnoncesList', () => {
     await waitFor(() => {
       expect(onItemsChange).toHaveBeenCalledWith([makeAnnonce(1), makeAnnonce(2)]);
     });
+  });
+
+  it('offers a quartier filter with the distinct quartiers from /api/listings (ORA-115)', async () => {
+    api.getAnnonces.mockResolvedValue({ items: [makeAnnonce(1)], page: 1, total_pages: 1 });
+
+    render(<AnnoncesList />);
+
+    await waitFor(() => expect(screen.getByLabelText(/quartier/i)).toBeInTheDocument());
+    const select = screen.getByLabelText(/quartier/i);
+    const optionLabels = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+    expect(optionLabels).toEqual(['Tous les quartiers', 'Confluence', 'Gerland', 'Vieux Lyon']);
+  });
+
+  it('refetches with the selected quartier and resets to page 1 (ORA-115)', async () => {
+    api.getAnnonces.mockResolvedValue({ items: [makeAnnonce(1)], page: 1, total_pages: 1 });
+    const user = userEvent.setup();
+
+    render(<AnnoncesList />);
+
+    await waitFor(() => expect(screen.getByLabelText(/quartier/i)).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText(/quartier/i), 'Gerland');
+
+    await waitFor(() => {
+      expect(api.getAnnonces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ quartier: 'Gerland', page: 1 })
+      );
+    });
+  });
+
+  it('keeps the filter usable when the filtered result is empty (ORA-115)', async () => {
+    api.getAnnonces.mockResolvedValue({ items: [], page: 1, total_pages: 0 });
+
+    render(<AnnoncesList />);
+
+    await waitFor(() => expect(screen.getByText(/aucune annonce disponible/i)).toBeInTheDocument());
+    expect(screen.getByLabelText(/quartier/i)).toBeInTheDocument();
   });
 });

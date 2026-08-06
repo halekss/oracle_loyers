@@ -13,8 +13,29 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [quartierFilter, setQuartierFilter] = useState('');
+  // ORA-115 : options dérivées de /api/listings (même liste de quartiers
+  // canoniques que celle écrite dans annonces.db par clean_immo.py) —
+  // annonces.db n'a pas d'endpoint dédié pour lister les quartiers connus.
+  const [quartierOptions, setQuartierOptions] = useState([]);
 
   const perPage = compact ? 4 : 12;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api.getListings()
+      .then((data) => {
+        if (cancelled) return;
+        const uniqueSorted = [...new Set((data || []).map((item) => item.quartier).filter(Boolean))].sort();
+        setQuartierOptions(uniqueSorted);
+      })
+      .catch((err) => console.error("Quartiers indisponibles pour le filtre AnnoncesList :", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,7 +45,7 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
       setError(null);
 
       try {
-        const data = await api.getAnnonces({ page, perPage });
+        const data = await api.getAnnonces({ page, perPage, quartier: quartierFilter || undefined });
         if (cancelled) return;
         setItems(data.items || []);
         setTotalPages(data.total_pages || 0);
@@ -43,32 +64,68 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
     return () => {
       cancelled = true;
     };
-  }, [page, perPage]);
+  }, [page, perPage, quartierFilter]);
+
+  const handleQuartierChange = (e) => {
+    setQuartierFilter(e.target.value);
+    setPage(1);
+  };
+
+  const filterId = compact ? 'annonces-quartier-filter-compact' : 'annonces-quartier-filter';
+
+  const quartierFilterControl = quartierOptions.length > 0 && (
+    <div className="mb-2">
+      <label htmlFor={filterId} className="sr-only">Filtrer par quartier</label>
+      <select
+        id={filterId}
+        value={quartierFilter}
+        onChange={handleQuartierChange}
+        className="w-full bg-slate-900 border border-slate-700 text-slate-300 text-[10px] uppercase tracking-widest font-bold px-2 py-1.5 rounded-lg focus:outline-none focus:border-purple-500"
+      >
+        <option value="">Tous les quartiers</option>
+        {quartierOptions.map((q) => (
+          <option key={q} value={q}>{q}</option>
+        ))}
+      </select>
+    </div>
+  );
 
   if (loading) {
     return (
-      <div className="animate-pulse grid grid-cols-2 gap-3">
-        {Array.from({ length: compact ? 2 : 4 }).map((_, i) => (
-          <div key={i} className="h-32 bg-slate-800 rounded-xl" />
-        ))}
+      <div>
+        {quartierFilterControl}
+        <div className="animate-pulse grid grid-cols-2 gap-3">
+          {Array.from({ length: compact ? 2 : 4 }).map((_, i) => (
+            <div key={i} className="h-32 bg-slate-800 rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <p className="text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
-        {error}
-      </p>
+      <div>
+        {quartierFilterControl}
+        <p className="text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
+          {error}
+        </p>
+      </div>
     );
   }
 
   if (items.length === 0) {
-    return <p className="text-xs text-slate-500 text-center py-4">Aucune annonce disponible pour le moment.</p>;
+    return (
+      <div>
+        {quartierFilterControl}
+        <p className="text-xs text-slate-500 text-center py-4">Aucune annonce disponible pour le moment.</p>
+      </div>
+    );
   }
 
   return (
     <div className={compact ? 'max-h-72 overflow-y-auto pr-1' : ''}>
+      {quartierFilterControl}
       <div className="grid grid-cols-2 gap-3">
         {items.map((annonce) => (
           <AnnonceCard key={annonce.id} annonce={annonce} />
