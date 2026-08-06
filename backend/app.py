@@ -13,6 +13,7 @@ from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
+from services.text_matching import resolve_quartier
 from services import annonces_store
 from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
@@ -411,16 +412,19 @@ def get_quartier_stats():
 
         # Nettoyage pour éviter les erreurs sur NaN
         df_clean = df.dropna(subset=['quartier', 'prix', 'surface'])
-        
-        # Recherche insensible à la casse
-        mask_quartier = df_clean['quartier'].str.contains(quartier_input, case=False, na=False)
-        filtered_df = df_clean[mask_quartier]
 
-        if filtered_df.empty:
+        # Résolution du quartier saisi (accents/casse/tirets + tolérance aux
+        # fautes de frappe partagées avec le chat et /api/predict, ORA-110)
+        known_quartiers = df_clean['quartier'].unique().tolist()
+        resolved_quartier = resolve_quartier(quartier_input, known_quartiers)
+
+        if resolved_quartier is None:
             return jsonify({
                 "found": False,
                 "message": f"Aucun bien trouvé pour le secteur '{quartier_input}'"
             }), 200
+
+        filtered_df = df_clean[df_clean['quartier'] == resolved_quartier]
 
         # 2. Filtrage par Type de bien (Si pas 'Tout')
         mapping_types = {
@@ -456,8 +460,8 @@ def get_quartier_stats():
 
         count = len(filtered_df)
         
-        # Nom officiel le plus fréquent pour l'affichage (ex: "Gerland" au lieu de "gerland")
-        nom_officiel = filtered_df['quartier'].mode()[0] if not filtered_df['quartier'].empty else quartier_input
+        # Libellé canonique déjà résolu (ex: "Gerland" au lieu de "greland")
+        nom_officiel = resolved_quartier
         center = None
         if {'latitude', 'longitude'}.issubset(filtered_df.columns):
             coords = filtered_df.dropna(subset=['latitude', 'longitude'])

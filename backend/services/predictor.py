@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 
+from services.text_matching import resolve_quartier
+
 EARTH_RADIUS_M = 6371000
 
 TYPE_LOCAL_ALIASES = {
@@ -32,20 +34,6 @@ def normalize_type_bien(value):
         return "Appartement"
     candidate = str(value).strip().capitalize()
     return candidate if candidate in TYPE_BIEN_CANONICAL else "Appartement"
-
-
-def resolve_quartier(quartier_input, known_quartiers):
-    """Résout un nom de quartier saisi vers son libellé canonique (recherche textuelle souple)."""
-    if not quartier_input:
-        return None
-    needle = str(quartier_input).strip().lower()
-    if not needle:
-        return None
-    for candidate in known_quartiers:
-        candidate_lower = str(candidate).lower()
-        if needle in candidate_lower or candidate_lower in needle:
-            return candidate
-    return None
 
 
 def haversine_distance_m(lat1, lon1, lat2, lon2):

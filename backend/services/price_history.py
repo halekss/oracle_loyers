@@ -2,6 +2,8 @@ import os
 
 import pandas as pd
 
+from services.text_matching import resolve_quartier
+
 # Même mapping que /api/quartier-stats (app.py), dupliqué ici volontairement :
 # ce module lit des snapshots historiques indépendamment du DataLoader en
 # mémoire utilisé par la route quartier-stats.
@@ -15,8 +17,15 @@ TYPE_LOCAL_ALIASES = {
 
 def _filter_quartier(df, quartier, type_local):
     df_clean = df.dropna(subset=['quartier', 'prix', 'surface'])
-    mask = df_clean['quartier'].str.contains(quartier, case=False, na=False)
-    filtered = df_clean[mask]
+
+    # Même matching partagé (normalisation + tolérance aux fautes de frappe)
+    # que /api/quartier-stats, résolu indépendamment par snapshot puisque les
+    # quartiers connus peuvent varier d'un snapshot à l'autre (ORA-110).
+    resolved_quartier = resolve_quartier(quartier, df_clean['quartier'].unique().tolist())
+    if resolved_quartier is None:
+        return df_clean.iloc[0:0]
+
+    filtered = df_clean[df_clean['quartier'] == resolved_quartier]
 
     if type_local and type_local != 'Tout':
         types_cibles = TYPE_LOCAL_ALIASES.get(type_local, [type_local])
@@ -27,8 +36,8 @@ def _filter_quartier(df, quartier, type_local):
 
 def compute_price_history(quartier, type_local, snapshots_dir, manifest_path):
     """Calcule l'évolution du prix moyen/m² pour `quartier` à travers tous les
-    snapshots de données enregistrés (ORA-72), recherche textuelle insensible
-    à la casse comme `/api/quartier-stats`.
+    snapshots de données enregistrés (ORA-72), avec le même matching partagé
+    (normalisation + fuzzy) que `/api/quartier-stats` (ORA-110).
 
     Renvoie (historique, status) :
     - status == "insufficient_history" (historique == []) si moins de 2

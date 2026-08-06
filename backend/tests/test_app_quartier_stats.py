@@ -28,6 +28,21 @@ class QuartierStatsRouteTest(unittest.TestCase):
             self.assertIn("categorie", facteur)
             self.assertIn("phrase", facteur)
 
+    def test_route_tolerates_a_typo_in_the_quartier_name(self):
+        """ORA-110 : le endpoint utilise désormais le matching partagé
+        (fuzzy) au lieu d'un str.contains naïf."""
+        client = app.app.test_client()
+
+        response = client.post(
+            "/api/quartier-stats",
+            json={"quartier": "greland", "type_local": "Tout"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["found"])
+        self.assertEqual(data["quartier_detecte"], "Gerland")
+
     def test_route_rejects_blank_quartier_with_400(self):
         client = app.app.test_client()
 

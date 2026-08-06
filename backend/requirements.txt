@@ -23,3 +23,6 @@ requests
 tqdm
 folium
 google-genai
+
+# Recherche/matching quartier avec tolérance aux fautes de frappe (ORA-109) ---
+rapidfuzz

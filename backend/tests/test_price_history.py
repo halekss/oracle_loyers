@@ -97,6 +97,31 @@ class ComputePriceHistoryTest(unittest.TestCase):
             self.assertEqual(len(historique), 1)
             self.assertEqual(historique[0]["date"], "2026-01-08T00:00:00+00:00")
 
+    def test_tolerates_a_typo_in_the_quartier_name(self):
+        """ORA-110 : même matching partagé (fuzzy) que /api/quartier-stats,
+        au lieu d'un str.contains naïf par snapshot."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            snapshots_dir = os.path.join(tmp_dir, "snapshots")
+            os.makedirs(snapshots_dir)
+
+            pd.DataFrame({
+                'quartier': ['Gerland', 'Gerland'], 'prix': [800, 900], 'surface': [40, 45],
+                'prix_m2': [20, 20], 'type_local': ['T2', 'T2'],
+            }).to_csv(os.path.join(snapshots_dir, "snap1.csv"), index=False)
+            pd.DataFrame({
+                'quartier': ['Gerland', 'Gerland', 'Gerland'], 'prix': [850, 950, 1000], 'surface': [40, 45, 48],
+                'prix_m2': [21.25, 21.1, 20.8], 'type_local': ['T2', 'T2', 'T2'],
+            }).to_csv(os.path.join(snapshots_dir, "snap2.csv"), index=False)
+            manifest_path = _write_manifest(snapshots_dir, [
+                {"timestamp": "2026-01-01T00:00:00+00:00", "sha256": "a", "snapshot_file": "snap1.csv", "row_count": 2},
+                {"timestamp": "2026-01-08T00:00:00+00:00", "sha256": "b", "snapshot_file": "snap2.csv", "row_count": 3},
+            ])
+
+            historique, status = compute_price_history("greland", "Tout", snapshots_dir, manifest_path)
+
+            self.assertEqual(status, "ok")
+            self.assertEqual(len(historique), 2)
+
     def test_filters_by_type_local(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             snapshots_dir = os.path.join(tmp_dir, "snapshots")

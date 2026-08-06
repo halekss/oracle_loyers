@@ -452,5 +452,25 @@ class ChatServiceTest(unittest.TestCase):
         self.assertIn("indisponible", response)
 
 
+class ExtractLocationsFuzzyMatchingTest(unittest.TestCase):
+    """ORA-109 : la recherche de quartier tolère les fautes de frappe."""
+
+    def setUp(self):
+        self.df = pd.DataFrame(
+            {"quartier": ["Gerland", "Part-Dieu", "Vieux Lyon", "Croix-Rousse", "Confluence"]}
+        )
+        self.service = ChatService()
+
+    def test_recovers_a_misspelled_quartier(self):
+        matches = self.service._extract_locations("je cherche un t2 a greland stp", "", self.df)
+
+        self.assertIn("Gerland", matches)
+
+    def test_does_not_fuzzy_match_an_unrelated_message(self):
+        matches = self.service._extract_locations("bonjour, quel temps fait-il ?", "", self.df)
+
+        self.assertEqual(matches, [])
+
+
 if __name__ == "__main__":
     unittest.main()

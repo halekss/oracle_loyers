@@ -1,9 +1,10 @@
 import logging
 import os
 import re
-import unicodedata
 
 from google.genai import errors as genai_errors
+
+from services.text_matching import compact_text, match_quartier, normalize_text, searchable_text
 
 logger = logging.getLogger(__name__)
 
@@ -67,17 +68,6 @@ Règles de réponse:
             return None
 
     @staticmethod
-    def _normalize_text(value):
-        normalized = unicodedata.normalize("NFKD", str(value or ""))
-        return "".join(char for char in normalized if not unicodedata.combining(char)).lower()
-
-    def _compact_text(self, value):
-        return re.sub(r"[^a-z0-9]+", "", self._normalize_text(value))
-
-    def _searchable_text(self, value):
-        return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", self._normalize_text(value))).strip()
-
-    @staticmethod
     def _has_word_sequence(source, target, min_words=2):
         words = [word for word in source.split() if len(word) > 1]
         if len(words) < min_words:
@@ -94,7 +84,7 @@ Règles de réponse:
 
     def _extract_postal_codes(self, *texts):
         combined = " ".join(str(text or "") for text in texts)
-        normalized = self._normalize_text(combined)
+        normalized = normalize_text(combined)
         codes = []
 
         for postal_match in re.finditer(r"\b6900([1-9])\b", normalized):
@@ -135,8 +125,8 @@ Règles de réponse:
         return normalized.str.contains(type_local.lower(), regex=False)
 
     def parse_query(self, user_message, context_str="", df=None):
-        query = self._normalize_text(user_message)
-        context = self._normalize_text(context_str)
+        query = normalize_text(user_message)
+        context = normalize_text(context_str)
         combined = f"{context} {query}"
 
         intent = "search"
@@ -210,12 +200,12 @@ Règles de réponse:
 
     @staticmethod
     def _has_shop_evidence(row):
-        description = ChatService._normalize_text(row.get("description", ""))
+        description = normalize_text(row.get("description", ""))
         return any(term in description for term in ["commerce", "commerces", "superu", "super u", "supermarch"])
 
     def _extract_locations(self, user_message, context_str="", df=None):
-        combined = self._normalize_text(f"{context_str} {user_message}")
-        searchable_combined = self._searchable_text(f"{context_str} {user_message}")
+        combined = normalize_text(f"{context_str} {user_message}")
+        searchable_combined = searchable_text(f"{context_str} {user_message}")
         matches = []
 
         if df is not None and "quartier" in df.columns:
@@ -225,10 +215,10 @@ Règles de réponse:
                 if str(value).strip()
             ]
             for quartier in sorted(quartiers, key=len, reverse=True):
-                normalized = self._normalize_text(quartier)
-                searchable = self._searchable_text(quartier)
-                compact = self._compact_text(quartier)
-                compact_combined = self._compact_text(combined)
+                normalized = normalize_text(quartier)
+                searchable = searchable_text(quartier)
+                compact = compact_text(quartier)
+                compact_combined = compact_text(combined)
                 if (
                     len(normalized) >= 3
                     and (
@@ -240,6 +230,11 @@ Règles de réponse:
                     and quartier not in matches
                 ):
                     matches.append(quartier)
+
+            if not matches and quartiers:
+                fuzzy = match_quartier(searchable_combined, quartiers)
+                if fuzzy["found"]:
+                    matches.append(fuzzy["match"])
 
         postal_codes = self._extract_postal_codes(context_str, user_message)
         if postal_codes:
@@ -263,9 +258,9 @@ Règles de réponse:
 
         if parsed.get("locations") and "quartier" in filtered.columns:
             location_masks = []
-            normalized_quartiers = filtered["quartier"].astype(str).map(self._normalize_text)
+            normalized_quartiers = filtered["quartier"].astype(str).map(normalize_text)
             for location in parsed["locations"]:
-                normalized_location = self._normalize_text(location)
+                normalized_location = normalize_text(location)
                 if normalized_location.startswith("lyon "):
                     continue
                 location_masks.append(normalized_quartiers.str.contains(re.escape(normalized_location), na=False))
@@ -325,7 +320,7 @@ Règles de réponse:
         comparisons = []
         for location in parsed["locations"]:
             location_df = df
-            normalized_location = self._normalize_text(location)
+            normalized_location = normalize_text(location)
 
             if normalized_location.startswith("lyon "):
                 arrondissement_match = re.search(r"\blyon\s*([1-9])\b", normalized_location)
@@ -333,7 +328,7 @@ Règles de réponse:
                 postal_values = location_df["code_postal"].astype(str).str.extract(r"(\d+)")[0]
                 location_df = location_df[postal_values == str(postal_code)]
             elif "quartier" in location_df.columns:
-                normalized_quartiers = location_df["quartier"].astype(str).map(self._normalize_text)
+                normalized_quartiers = location_df["quartier"].astype(str).map(normalize_text)
                 location_df = location_df[normalized_quartiers.str.contains(re.escape(normalized_location), na=False)]
 
             type_filter = parsed.get("type_locals") or parsed.get("type_local")
@@ -416,7 +411,7 @@ Règles de réponse:
             if not filtered.empty:
                 listings = filtered
 
-        query = self._normalize_text(user_message)
+        query = normalize_text(user_message)
         quality_keywords = [
             "calme",
             "supermarche",
@@ -431,8 +426,8 @@ Règles de réponse:
 
         def score(row):
             value = 0
-            description = self._normalize_text(row.get("description", ""))
-            quartier = self._normalize_text(row.get("quartier", ""))
+            description = normalize_text(row.get("description", ""))
+            quartier = normalize_text(row.get("quartier", ""))
 
             for keyword in quality_keywords:
                 if keyword in query and keyword in description:
