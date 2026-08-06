@@ -158,7 +158,7 @@ function App() {
           aria-labelledby="tab-carte"
           className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-slate-800`}
         >
-          {shouldMountMap && <MapComponent center={mapCenter} bounds={mapBounds} />}
+          {shouldMountMap && <MapComponent center={mapCenter} bounds={mapBounds} chatOpen={isChatOpen} />}
         </div>
 
         {/* COLONNE DROITE — Oracle (40% desktop, plein écran mobile) */}

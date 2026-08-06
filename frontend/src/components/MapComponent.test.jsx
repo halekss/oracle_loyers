@@ -133,6 +133,29 @@ describe('MapComponent', () => {
     expect(screen.getByText('Quartiers')).toBeInTheDocument();
   });
 
+  it('collapses the layer control panel when the chat opens (ORA-116)', () => {
+    const { rerender } = render(<MapComponent center={null} chatOpen={false} />);
+    expect(screen.getByText('Contrôle des Calques')).toBeInTheDocument();
+
+    rerender(<MapComponent center={null} chatOpen={true} />);
+
+    expect(screen.queryByText('Contrôle des Calques')).not.toBeInTheDocument();
+  });
+
+  it('does not offer to reopen the layer panel while the chat is open (ORA-116)', () => {
+    render(<MapComponent center={null} chatOpen={true} />);
+
+    expect(screen.queryByTitle('Ouvrir les filtres')).not.toBeInTheDocument();
+  });
+
+  it('offers to reopen the layer panel again once the chat is closed (ORA-116)', () => {
+    const { rerender } = render(<MapComponent center={null} chatOpen={true} />);
+
+    rerender(<MapComponent center={null} chatOpen={false} />);
+
+    expect(screen.getByTitle('Ouvrir les filtres')).toBeInTheDocument();
+  });
+
   it('syncs Quartiers as off by default when the iframe loads (ORA-104)', () => {
     render(<MapComponent center={null} />);
     const iframe = screen.getByTitle('Carte Oracle');

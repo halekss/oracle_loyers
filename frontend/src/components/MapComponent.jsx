@@ -44,10 +44,19 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   </div>
 );
 
-export default function MapComponent({ center, bounds }) {
+export default function MapComponent({ center, bounds, chatOpen = false }) {
   const [mapUrl] = useState(() => `/data/map_pings_lyon_calques.html?t=${Date.now()}`);
   const iframeRef = useRef(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+
+  // ORA-116 : sur mobile (onglet "Carte"), le panneau de calques et le chat
+  // ouvert se chevauchent entièrement (panneau ~256x444px, chat quasi plein
+  // écran) — le chat, ouvert après, passe au-dessus et rend le panneau
+  // totalement inatteignable. On le replie tant que le chat est ouvert,
+  // plutôt que de laisser un élément interactif durablement masqué.
+  useEffect(() => {
+    if (chatOpen) setIsPanelOpen(false);
+  }, [chatOpen]);
   
   // --- ETATS ---
   const [layers, setLayers] = useState({
@@ -139,9 +148,10 @@ export default function MapComponent({ center, bounds }) {
         <span className="text-[10px] font-mono text-purple-200 uppercase tracking-widest font-bold">Oracle Live</span>
       </div>
 
-      {/* --- BOUTON POUR OUVRIR LES FILTRES (Visible quand fermé) --- */}
-      {!isPanelOpen && (
-        <button 
+      {/* --- BOUTON POUR OUVRIR LES FILTRES (Visible quand fermé, masqué
+          tant que le chat est ouvert — ORA-116) --- */}
+      {!isPanelOpen && !chatOpen && (
+        <button
           onClick={() => setIsPanelOpen(true)}
           className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-3 rounded-full border border-slate-700/50 shadow-2xl hover:scale-110 transition-transform duration-200 group"
           title="Ouvrir les filtres"
