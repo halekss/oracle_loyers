@@ -25,6 +25,7 @@ __all__ = [
     "get_annonce_by_id",
     "log_click",
     "count_clicks",
+    "delete_annonce",
 ]
 
 DEFAULT_DB_PATH = os.path.join(
@@ -221,6 +222,32 @@ def count_clicks(annonce_id, db_path=DEFAULT_DB_PATH):
     finally:
         conn.close()
     return row[0]
+
+
+def delete_annonce(url=None, annonce_id=None, db_path=DEFAULT_DB_PATH):
+    """Retire une annonce (et ses clics associés) du store, par `url` ou `annonce_id`
+    (ORA-134 : nettoyage des annonces confirmées mortes/introuvables sur le site source).
+
+    Exactement un des deux doit être fourni. Renvoie True si une ligne a été supprimée,
+    False si aucune annonce ne correspondait (suppression déjà faite / url inconnue).
+    """
+    if (url is None) == (annonce_id is None):
+        raise ValueError("fournir exactement un de url ou annonce_id")
+
+    conn = get_connection(db_path)
+    try:
+        if annonce_id is None:
+            row = conn.execute("SELECT id FROM annonces WHERE url = ?", (url,)).fetchone()
+            if row is None:
+                return False
+            annonce_id = row["id"]
+
+        conn.execute("DELETE FROM clics WHERE annonce_id = ?", (annonce_id,))
+        cursor = conn.execute("DELETE FROM annonces WHERE id = ?", (annonce_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
 
 
 def _row_to_dict(row):

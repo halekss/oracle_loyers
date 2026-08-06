@@ -123,6 +123,48 @@ class AnnoncesStoreTest(unittest.TestCase):
         self.assertEqual(annonces_store.count_clicks(annonce_a["id"], db_path=self.db_path), 1)
         self.assertEqual(annonces_store.count_clicks(annonce_b["id"], db_path=self.db_path), 0)
 
+    def test_delete_annonce_by_url_removes_it(self):
+        annonces_store.upsert_annonce(url="https://example.com/dead", db_path=self.db_path)
+
+        deleted = annonces_store.delete_annonce(url="https://example.com/dead", db_path=self.db_path)
+
+        self.assertTrue(deleted)
+        self.assertEqual(annonces_store.list_annonces(db_path=self.db_path)["total"], 0)
+
+    def test_delete_annonce_by_id_removes_it(self):
+        created = annonces_store.upsert_annonce(url="https://example.com/dead-2", db_path=self.db_path)
+
+        deleted = annonces_store.delete_annonce(annonce_id=created["id"], db_path=self.db_path)
+
+        self.assertTrue(deleted)
+        self.assertIsNone(annonces_store.get_annonce_by_id(created["id"], db_path=self.db_path))
+
+    def test_delete_annonce_unknown_url_returns_false(self):
+        deleted = annonces_store.delete_annonce(url="https://example.com/never-existed", db_path=self.db_path)
+
+        self.assertFalse(deleted)
+
+    def test_delete_annonce_requires_exactly_one_identifier(self):
+        with self.assertRaises(ValueError):
+            annonces_store.delete_annonce(db_path=self.db_path)
+        with self.assertRaises(ValueError):
+            annonces_store.delete_annonce(url="https://example.com/x", annonce_id=1, db_path=self.db_path)
+
+    def test_delete_annonce_also_removes_its_clicks(self):
+        created = annonces_store.upsert_annonce(url="https://example.com/h", db_path=self.db_path)
+        annonces_store.log_click(created["id"], db_path=self.db_path)
+
+        annonces_store.delete_annonce(annonce_id=created["id"], db_path=self.db_path)
+
+        conn = annonces_store.get_connection(self.db_path)
+        try:
+            remaining_clics = conn.execute(
+                "SELECT COUNT(*) FROM clics WHERE annonce_id = ?", (created["id"],)
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(remaining_clics, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
