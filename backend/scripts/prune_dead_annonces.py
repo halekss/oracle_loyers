@@ -7,14 +7,18 @@ retirée/louée/expirée sur le site source reste indéfiniment dans annonces.db
 juste de la fraîcheur de données). Ce script vérifie en direct chaque url
 encore en base et retire celles confirmées introuvables sur le site source.
 
-Volontairement conservateur : seul un 404/410 HTTP explicite déclenche une
-suppression. Un statut ambigu (403 anti-bot, timeout, 5xx, redirection vers
-autre chose) est laissé tel quel plutôt que de risquer de supprimer à tort une
-annonce encore active à cause d'un blocage anti-scraping — voir
-`DEAD_STATUS_CODES` ci-dessous. Ne détecte donc pas les "soft 404" (page HTTP
-200 avec un message "annonce non disponible") : hors périmètre de cette
-première passe, trop spécifique à chaque site pour être fiable sans plus de
-maintenance.
+Volontairement conservateur : un 404/410 HTTP explicite, ou un "soft 404"
+(page HTTP 200 mais contenant un texte type "annonce n'est plus disponible",
+cf. `SOFT_404_PATTERNS` — approximatif par construction, mots-clés génériques
+plutôt qu'un sélecteur par site) déclenchent une suppression. Un statut
+vraiment ambigu (403 anti-bot, timeout, 5xx) est laissé tel quel plutôt que de
+risquer de supprimer à tort une annonce encore active à cause d'un blocage
+anti-scraping. Pour les urls qui restent ambiguës à cause d'un blocage
+anti-bot (ex: SeLoger renvoie systématiquement 403 aux clients HTTP basiques),
+voir `scripts/recheck_dead_annonces.py` (navigateur furtif, scripts/.venv) en
+complément — volontairement un script séparé, Selenium/undetected_chromedriver
+ne font pas partie des dépendances backend pour ne pas alourdir son image de
+déploiement.
 
 C'est un nettoyage ponctuel du stock déjà accumulé ; le correctif structurel
 qui évite que le problème ne revienne (TTL par re-scraping) est dans
@@ -55,11 +59,36 @@ REQUEST_HEADERS = {
 DEFAULT_TIMEOUT_SECONDS = 10
 DEFAULT_DELAY_RANGE = (0.4, 0.9)
 
+# Détection approximative des "soft 404" : une page servie en HTTP 200 mais
+# dont le contenu indique que l'annonce n'est plus disponible. Mots-clés
+# génériques (pas de sélecteur par site) : peut produire de faux positifs sur
+# une page qui mentionnerait incidemment l'une de ces expressions hors
+# contexte, accepté comme compromis plutôt que de maintenir un sélecteur par
+# site pour un script de nettoyage ponctuel.
+SOFT_404_PATTERNS = (
+    "n'est plus disponible",
+    "n'existe plus",
+    "annonce n'est plus en ligne",
+    "a été retirée",
+    "a été supprimée",
+    "annonce expirée",
+    "page introuvable",
+    "bien n'est plus disponible",
+    "cette page n'existe pas",
+)
+
+
+def looks_like_soft_404(html_text):
+    """True si `html_text` contient un des `SOFT_404_PATTERNS` (insensible à la casse)."""
+    lowered = (html_text or "").lower()
+    return any(pattern in lowered for pattern in SOFT_404_PATTERNS)
+
 
 def check_url_status(url, session, timeout=DEFAULT_TIMEOUT_SECONDS):
-    """Vérifie une url en direct. Renvoie True (confirmée morte), False (vivante),
-    ou None (statut ambigu : ni l'un ni l'autre ne peut être affirmé, à conserver
-    par prudence plutôt que de risquer une suppression à tort)."""
+    """Vérifie une url en direct. Renvoie True (confirmée morte : 404/410, ou
+    soft-404 détecté en 200), False (vivante), ou None (statut ambigu : ni l'un
+    ni l'autre ne peut être affirmé, à conserver par prudence plutôt que de
+    risquer une suppression à tort)."""
     try:
         response = session.get(
             url, headers=REQUEST_HEADERS, timeout=timeout, allow_redirects=True
@@ -71,6 +100,9 @@ def check_url_status(url, session, timeout=DEFAULT_TIMEOUT_SECONDS):
     if response.status_code in DEAD_STATUS_CODES:
         return True
     if response.status_code == 200:
+        if looks_like_soft_404(response.text):
+            logger.info("Soft 404 détecté (200 avec texte 'indisponible') pour %s", url)
+            return True
         return False
 
     logger.warning(

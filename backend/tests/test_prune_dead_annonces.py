@@ -12,12 +12,40 @@ from scripts import prune_dead_annonces
 from services import annonces_store
 
 
+class LooksLikeSoft404Test(unittest.TestCase):
+    def test_detects_known_pattern_case_insensitively(self):
+        self.assertTrue(prune_dead_annonces.looks_like_soft_404("<h1>Cette Annonce N'Est Plus Disponible</h1>"))
+
+    def test_detects_pattern_among_unrelated_content(self):
+        html = "<html><body><nav>...</nav><p>Oups, cette annonce a été retirée par l'agence.</p></body></html>"
+        self.assertTrue(prune_dead_annonces.looks_like_soft_404(html))
+
+    def test_returns_false_for_normal_listing_page(self):
+        html = "<h1>T2 Gerland</h1><p>850 € - 45 m2 - Disponible immédiatement</p>"
+        self.assertFalse(prune_dead_annonces.looks_like_soft_404(html))
+
+    def test_handles_none_gracefully(self):
+        self.assertFalse(prune_dead_annonces.looks_like_soft_404(None))
+
+
 class CheckUrlStatusTest(unittest.TestCase):
     def test_returns_true_on_404(self):
         session = Mock()
         session.get.return_value = Mock(status_code=404)
 
         self.assertTrue(prune_dead_annonces.check_url_status("https://example.com/x", session))
+
+    def test_returns_true_on_soft_404_with_200_status(self):
+        session = Mock()
+        session.get.return_value = Mock(status_code=200, text="<h1>Annonce expirée</h1>")
+
+        self.assertTrue(prune_dead_annonces.check_url_status("https://example.com/x", session))
+
+    def test_returns_false_on_normal_200_page(self):
+        session = Mock()
+        session.get.return_value = Mock(status_code=200, text="<h1>T2 Gerland</h1><p>850 €</p>")
+
+        self.assertFalse(prune_dead_annonces.check_url_status("https://example.com/x", session))
 
     def test_returns_true_on_410(self):
         session = Mock()
@@ -27,7 +55,7 @@ class CheckUrlStatusTest(unittest.TestCase):
 
     def test_returns_false_on_200(self):
         session = Mock()
-        session.get.return_value = Mock(status_code=200)
+        session.get.return_value = Mock(status_code=200, text="<h1>T2 Gerland</h1>")
 
         self.assertFalse(prune_dead_annonces.check_url_status("https://example.com/x", session))
 
