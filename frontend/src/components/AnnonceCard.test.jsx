@@ -93,6 +93,17 @@ describe('AnnonceCard', () => {
     expect(container.querySelector('svg')).toBeInTheDocument();
   });
 
+  it('does not open a javascript: url on click (ORA-126)', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    render(<AnnonceCard annonce={{ ...baseAnnonce, url: 'javascript:alert(1)' }} />);
+    await user.click(screen.getByRole('button', { name: /voir l'annonce : t2 gerland/i }));
+
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
+
   it('opens the detail view on "Détails" click without triggering the external redirect (ORA-131)', async () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {});
     api.getAnnonceDetail = vi.fn().mockResolvedValue(baseAnnonce);

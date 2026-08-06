@@ -86,6 +86,19 @@ describe('AnnonceDetailModal', () => {
     openSpy.mockRestore();
   });
 
+  it('does not open a javascript: url when "Voir l\'annonce" is clicked (ORA-126)', async () => {
+    api.getAnnonceDetail.mockResolvedValue({ ...detail, url: 'javascript:alert(1)' });
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    render(<AnnonceDetailModal annonceId={42} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText('T2 Gerland')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /voir l'annonce/i }));
+
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
+
   it('does not render an image, only text fields (ORA-133 : pas de photo tierce)', async () => {
     api.getAnnonceDetail.mockResolvedValue(detail);
     const { container } = render(<AnnonceDetailModal annonceId={42} onClose={() => {}} />);

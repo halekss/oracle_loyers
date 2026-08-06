@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
+import { sanitizeListingUrl } from '../services/sanitizeUrl';
 import AnnonceDetailModal from './AnnonceDetailModal';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
@@ -82,8 +83,9 @@ export default function AnnonceCard({ annonce }) {
         console.error('❌ Erreur tracking clic annonce:', error);
       });
     }
-    if (url) {
-      window.open(url, '_blank', 'noopener,noreferrer');
+    const safeUrl = sanitizeListingUrl(url);
+    if (safeUrl) {
+      window.open(safeUrl, '_blank', 'noopener,noreferrer');
     }
   };
 

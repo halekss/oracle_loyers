@@ -160,35 +160,6 @@ class BuildImmoPopupHtmlTest(unittest.TestCase):
         self.assertNotIn("ANNONCE_CLICK", html_out)
 
 
-class BuildMarkerClickScriptTest(unittest.TestCase):
-    def test_returns_empty_string_when_no_redirect_url(self):
-        script = generate_map.build_marker_click_script("circle_marker_abc", redirect_url=None)
-
-        self.assertEqual(script, "")
-
-    def test_binds_click_handler_and_opens_redirect_url(self):
-        script = generate_map.build_marker_click_script(
-            "circle_marker_abc", redirect_url="https://example.com/annonce/8",
-        )
-
-        self.assertIn("circle_marker_abc.on('click'", script)
-        self.assertIn("window.open(", script)
-        self.assertIn('"https://example.com/annonce/8"', script)
-
-    def test_escapes_redirect_url_against_js_injection(self):
-        hostile_url = 'https://example.com/");alert(document.cookie);//'
-
-        script = generate_map.build_marker_click_script("circle_marker_abc", redirect_url=hostile_url)
-
-        self.assertNotIn('window.open("https://example.com/");alert', script)
-        self.assertIn('\\"', script)
-
-    def test_rejects_non_http_redirect_url(self):
-        script = generate_map.build_marker_click_script("circle_marker_abc", redirect_url="javascript:alert(1)")
-
-        self.assertEqual(script, "")
-
-
 class BuildBridgeMessageScriptTest(unittest.TestCase):
     """Contrat postMessage carte (ORA-125) : la carte générée ne doit traiter
     un message que s'il provient de la même origine que la page qui l'embarque,

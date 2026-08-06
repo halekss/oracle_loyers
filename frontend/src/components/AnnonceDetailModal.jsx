@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api, describeApiError } from '../services/api';
+import { sanitizeListingUrl } from '../services/sanitizeUrl';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
 
@@ -51,8 +52,9 @@ export default function AnnonceDetailModal({ annonceId, onClose }) {
     api.logAnnonceClick(annonceId).catch((err) => {
       console.error('❌ Erreur tracking clic annonce:', err);
     });
-    if (annonce?.url) {
-      window.open(annonce.url, '_blank', 'noopener,noreferrer');
+    const safeUrl = sanitizeListingUrl(annonce?.url);
+    if (safeUrl) {
+      window.open(safeUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
