@@ -203,10 +203,20 @@ Airflow/dags/oracle_cavaliers_dag.py — cadence mensuelle
   api_overpass.py ──→ enrich_cavaliers_cp.py
 
 Airflow/dags/oracle_annonces_dag.py — cadence hebdomadaire
-  data_fusion.py ──→ clean_immo.py ──→ train_model.py ──→ generate_map.py
+  data_fusion.py ──→ clean_immo.py ──┬──→ master_immo_final.csv ──→ train_model.py ──→ generate_map.py
+                                      └──→ annonces.db (SQLite)
 ```
 
 `clean_immo.py` (côté annonces) lit simplement le `cavaliers_lyon.csv` le plus récent sur disque, produit indépendamment par le DAG cavaliers — aucune dépendance inter-DAG.
+
+Deux sources de vérité distinctes sortent de `clean_immo.py`, pour deux usages différents :
+
+| Source | Alimente | Consommée par |
+| --- | --- | --- |
+| `master_immo_final.csv` | `/api/listings`, la carte (`generate_map.py`), l'entraînement du modèle | `MapComponent.jsx`, `train_model.py` |
+| `annonces.db` (SQLite) | `/api/annonces` (liste "Annonces récentes") + tracking de clics (`/api/annonces/:id/click`) | `AnnoncesList.jsx`/`AnnonceCard.jsx` |
+
+Les deux sont écrites à partir du **même dataframe final** en fin de `clean_immo.py` (étape 6 ci-dessous) : pas de divergence de comptage attendue entre les deux après un run, `url` étant déjà un champ obligatoire en amont dans les CSV scrapés (ORA-82) — la seule ligne exclue de `annonces.db` serait une annonce dont l'`url` serait vide malgré cette contrainte (garde-fou défensif, cf. `step_sync_annonces_store`).
 
 1.  **`api_overpass.py`**
     * Récupère ~1 668 lieux répartis sur 21 catégories de POI ("cavaliers") via l'API Overpass (OpenStreetMap), pour la ville active lue dans `scripts/scraping_config.json` (`resolve_active_city_name()` — même config que les 6 scrapers, pas de nom de ville en dur dans le code, voir ORA-71 ci-dessous).
@@ -227,7 +237,8 @@ Airflow/dags/oracle_annonces_dag.py — cadence hebdomadaire
       3. **Classification du type de bien** (Studio/T1, T2, T3, Grand T4+) à partir du texte de l'annonce ou, à défaut, de la surface.
       4. **Calcul des features de distance** — pour chaque annonce, distance au cavalier le plus proche et densité à 500 m, pour chacune des 21 catégories (BallTree/haversine).
       5. **Réindexation des IDs**.
-    * *Input :* `base_de_donnees_immo_lyon_complet.csv` + `cavaliers_lyon.csv` -> *Output :* le fichier "Gold Standard" `master_immo_final.csv`.
+      6. **Synchronisation du store SQLite `annonces.db`** (ORA-112) — même dataframe final, upserté (dédoublonné par `url`) dans la table `annonces` consommée par `GET /api/annonces` (liste "Annonces récentes", tracking de clics). Avant cette étape, `annonces.db` n'était peuplée que par les tests unitaires : ce n'est plus le cas, les deux sources sont désormais synchronisées à chaque run de `clean_immo.py`.
+    * *Input :* `base_de_donnees_immo_lyon_complet.csv` + `cavaliers_lyon.csv` -> *Output :* le fichier "Gold Standard" `master_immo_final.csv` **et** `annonces.db` à jour.
 
 5.  **`train_model.py`**
     * Entraîne le modèle XGBoost sur `master_immo_final.csv`.
