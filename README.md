@@ -279,12 +279,20 @@ python backend/scripts/prune_dead_annonces.py --dry-run   # vérifie et logue sa
 python backend/scripts/prune_dead_annonces.py              # supprime les 404/410/soft-404 confirmés
 ```
 
-**Résidu bloqué par l'anti-bot** : certains sites (SeLoger notamment) renvoient systématiquement 403 aux clients HTTP basiques, y compris pour des annonces réellement mortes — ces urls restent "ambiguës" et ne sont pas supprimées par le script ci-dessus. `scripts/recheck_dead_annonces.py` (tourne sous `scripts/.venv`, qui a Selenium/undetected_chromedriver — volontairement absents des dépendances backend) re-teste chaque url en HTTP puis escalade au navigateur furtif celles restées ambiguës, avec les mêmes garde-fous conservateurs :
+**Résidu bloqué par l'anti-bot** : certains sites (SeLoger notamment) renvoient systématiquement 403 aux clients HTTP basiques, y compris pour des annonces réellement mortes — ces urls restent "ambiguës" et ne sont pas supprimées par le script ci-dessus. `scripts/recheck_dead_annonces.py` (tourne sous `scripts/.venv`, qui a Selenium/undetected_chromedriver — volontairement absents des dépendances backend) re-teste chaque url en HTTP puis escalade au navigateur furtif (`headless=True`, cf. `get_chrome_driver`) celles restées ambiguës, avec trois signaux dans l'ordre : redirection vers la page d'accueil, `looks_like_soft_404` (même détection que ci-dessus), et en dernier recours `looks_like_valid_listing` — absence de tout signal de prix sur la page rendue, plus généraliste qu'une liste de formulations d'erreur mais aussi plus susceptible de faux positif (mitigé pour le cas "prix sur demande") :
 
 ```bash
 cd scripts && source .venv/bin/activate
 python recheck_dead_annonces.py --dry-run   # vérifie et logue sans rien supprimer
 python recheck_dead_annonces.py             # supprime les annonces confirmées mortes via navigateur
+```
+
+**`master_immo_final.csv` (carte) n'est pas concerné par ce qui précède** : c'est un fichier différent de `annonces.db`, généré indépendamment par `clean_immo.py`, sans colonne `date_dernier_scan` (généré avant le correctif TTL) — ni le TTL structurel ni les deux scripts ci-dessus ne le nettoient. `scripts/prune_dead_map_listings.py` applique la même stratégie de vérification (réutilise `check_url_status`/`check_url_status_browser`) directement sur ce CSV, puis régénère la carte (`generate_map.py`) après une purge réelle. N'affecte pas le modèle ML — les lignes retirées restent des points de prix historiques valables pour l'entraînement même si le lien source a expiré :
+
+```bash
+cd scripts && source .venv/bin/activate
+python prune_dead_map_listings.py --dry-run   # vérifie et logue sans rien modifier
+python prune_dead_map_listings.py             # purge master_immo_final.csv + régénère la carte
 ```
 
 ### 🌍 Généricité multi-ville (ORA-71) — état actuel

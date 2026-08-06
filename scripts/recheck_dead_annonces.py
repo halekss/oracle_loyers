@@ -31,6 +31,7 @@ Usage :
 import argparse
 import os
 import random
+import re
 import sys
 import time
 from urllib.parse import urlparse
@@ -64,22 +65,78 @@ logger = get_scraper_logger("recheck_dead_annonces")
 BROWSER_PAGE_LOAD_TIMEOUT = 20
 BROWSER_DELAY_RANGE = (2, 4)
 
+# Signal positif de dernier recours : une fiche d'annonce immobilière affiche
+# quasi toujours un prix ("850 €"). Plus robuste qu'une liste de formulations
+# d'erreur à deviner par site (looks_like_soft_404), mais avec un vrai risque
+# de faux positif — d'où PRICE_ON_REQUEST_PATTERNS pour ne pas confondre
+# "prix sur demande" (annonce active, juste sans chiffre affiché) avec une
+# annonce disparue.
+PRICE_PATTERN = re.compile(r"\d[\d\s]{1,6}\s?€")
+PRICE_ON_REQUEST_PATTERNS = ("prix sur demande", "loyer sur demande", "nous consulter")
+
+# Certains sites (SeLoger via DataDome, constaté en pratique) servent une page
+# de challenge anti-bot (CAPTCHA) au lieu du vrai contenu quand ils détectent
+# un navigateur headless — vide de tout signal de prix ou de texte "annonce
+# indisponible", ce qui ferait passer looks_like_valid_listing à tort pour
+# "morte" alors qu'on n'a en réalité aucune information exploitable. À traiter
+# comme un statut ambigu (None), pas comme une confirmation de mort.
+CHALLENGE_PAGE_INDICATORS = (
+    "captcha-delivery.com",
+    "datadome",
+    "hcaptcha.com",
+    "recaptcha",
+    "checking your browser",
+    "please verify you are a human",
+)
+
+
+def looks_like_challenge_page(html_text):
+    """True si `html_text` correspond à une page de challenge anti-bot
+    (CAPTCHA) plutôt qu'au vrai contenu de la page demandée."""
+    lowered = (html_text or "").lower()
+    return any(indicator in lowered for indicator in CHALLENGE_PAGE_INDICATORS)
+
+
+def looks_like_valid_listing(html_text):
+    """True si `html_text` contient un signal de prix exploitable (montant
+    chiffré, ou mention explicite "prix sur demande" assimilée à une annonce
+    active). Utilisé en dernier recours par `check_url_status_browser` : son
+    absence totale sur une page de détail est un signal fort que la fiche n'y
+    est plus, sans dépendre du message d'erreur précis de chaque site."""
+    text = html_text or ""
+    if PRICE_PATTERN.search(text):
+        return True
+    lowered = text.lower()
+    return any(pattern in lowered for pattern in PRICE_ON_REQUEST_PATTERNS)
+
 
 def check_url_status_browser(url, driver, page_load_timeout=BROWSER_PAGE_LOAD_TIMEOUT):
     """Vérifie une url via un vrai navigateur furtif. Renvoie True (confirmée
     morte), False (vivante), ou None si même le navigateur ne permet pas de
     trancher (à conserver par prudence).
 
-    Deux signaux, dans cet ordre :
+    Vérifie d'abord qu'on n'est pas face à une page de challenge anti-bot
+    (`looks_like_challenge_page`) : dans ce cas, aucun des signaux suivants
+    n'est fiable (page vide de tout contenu réel), le statut reste ambigu.
+
+    Puis trois signaux, dans cet ordre :
     - Redirection vers la page d'accueil (`/`) : plusieurs sites redirigent
       une annonce expirée vers leur accueil plutôt que d'afficher un message.
     - `looks_like_soft_404` appliqué au contenu rendu (même détection que
       `check_url_status`, réutilisée pour une seule source de vérité).
+    - Absence de tout signal de prix (`looks_like_valid_listing`) : dernier
+      recours, plus généraliste mais aussi plus susceptible de faux positif
+      qu'un vrai message d'erreur détecté explicitement.
     """
     try:
         driver.set_page_load_timeout(page_load_timeout)
         driver.get(url)
-        time.sleep(1.5)  # laisse le temps aux éventuelles redirections JS de s'exécuter
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
+        time.sleep(2.5)  # laisse le temps aux éventuelles redirections JS / contenu lazy de se charger
+
+        if looks_like_challenge_page(driver.page_source):
+            logger.warning("Page de challenge anti-bot (CAPTCHA) détectée pour %s : conservée par prudence.", url)
+            return None
 
         final_path = urlparse(driver.current_url).path
         original_path = urlparse(url).path
@@ -89,6 +146,10 @@ def check_url_status_browser(url, driver, page_load_timeout=BROWSER_PAGE_LOAD_TI
 
         if looks_like_soft_404(driver.page_source):
             logger.info("Soft 404 détecté (navigateur) pour %s", url)
+            return True
+
+        if not looks_like_valid_listing(driver.page_source):
+            logger.info("Aucun signal de prix détecté sur la page pour %s", url)
             return True
 
         return False
