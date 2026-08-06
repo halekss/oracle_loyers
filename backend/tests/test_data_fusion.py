@@ -1,17 +1,21 @@
 import os
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
+import data_fusion
 from data_fusion import (
     clean_price_integer,
     clean_surface,
     extract_postal_code,
     extract_type,
     format_description,
+    run_fusion,
 )
 
 
@@ -94,6 +98,47 @@ class FormatDescriptionTest(unittest.TestCase):
 
     def test_returns_empty_string_for_nan(self):
         self.assertEqual(format_description(pd.NA), "")
+
+
+class RunFusionDateDernierScanTest(unittest.TestCase):
+    """ORA-134 : la colonne DerniereVue des scrapers doit survivre à la fusion
+    sous le nom date_dernier_scan, exploitée ensuite par clean_immo.py pour la
+    purge par TTL."""
+
+    def _write_century21_csv(self, data_dir, rows):
+        path = os.path.join(data_dir, "annonces_lyon_century21.csv")
+        pd.DataFrame(
+            rows, columns=["Titre", "Prix", "Lieu_Surface", "Lien", "Image", "DerniereVue"]
+        ).to_csv(path, index=False)
+
+    def test_propagates_derniere_vue_as_date_dernier_scan(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self._write_century21_csv(tmp_dir, [
+                ["T2 Lyon 69003 45 m2", "700 €", "45 m2", "https://example.test/1", "", "2026-08-06"],
+            ])
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_lyon_complet.csv"))
+
+        self.assertIn("date_dernier_scan", result.columns)
+        self.assertEqual(result.loc[0, "date_dernier_scan"], "2026-08-06")
+
+    def test_missing_derniere_vue_column_does_not_crash(self):
+        # Compat rétroactive : CSV écrit avant l'ajout de la colonne DerniereVue.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "annonces_lyon_century21.csv")
+            pd.DataFrame(
+                [["T2 Lyon 69003 45 m2", "700 €", "45 m2", "https://example.test/1", ""]],
+                columns=["Titre", "Prix", "Lieu_Surface", "Lien", "Image"],
+            ).to_csv(path, index=False)
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_lyon_complet.csv"))
+
+        self.assertIn("date_dernier_scan", result.columns)
+        self.assertTrue(result["date_dernier_scan"].isna().all())
 
 
 if __name__ == "__main__":

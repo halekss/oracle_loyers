@@ -93,6 +93,9 @@ def run_fusion():
             new_df['site'] = [config['site']] * len(df)
             new_df['url'] = df[config['col_url']]
             new_df['image'] = df['Image'] if 'Image' in df.columns else ''
+            # ORA-134 (TTL par re-scraping) : absente des CSV écrits avant l'ajout
+            # de cette colonne aux 6 scrapers, d'où le fallback défensif.
+            new_df['date_dernier_scan'] = df['DerniereVue'] if 'DerniereVue' in df.columns else None
             new_df['prix'] = df[config['col_prix']].apply(clean_price_integer)
             
             full_desc = df[config['text_cols'][0]].fillna('')
@@ -136,6 +139,7 @@ def run_fusion():
         v_df['site'] = ['Vizzit'] * len(df_v)
         v_df['url'] = df_v['Lien']
         v_df['image'] = df_v['Image'] if 'Image' in df_v.columns else ''
+        v_df['date_dernier_scan'] = df_v['DerniereVue'] if 'DerniereVue' in df_v.columns else None
         v_df['prix'] = df_v['Prix'].apply(clean_price_integer)
         
         # Mapping spécifique Vizzit
@@ -187,7 +191,7 @@ def run_fusion():
         master_df = master_df.rename(columns={'index': 'id_annonce'})
 
         # ORDRE DES COLONNES (Avec Latitude/Longitude)
-        cols = ['id_annonce', 'site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'latitude', 'longitude', 'url', 'image']
+        cols = ['id_annonce', 'site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'latitude', 'longitude', 'url', 'image', 'date_dernier_scan']
         master_df = master_df[cols]
 
         output_file = os.path.join(data_dir, 'base_de_donnees_immo_lyon_complet.csv')

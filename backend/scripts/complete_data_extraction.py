@@ -101,8 +101,10 @@ if __name__ == "__main__":
                 found_count += 1
         
         # Sélection des colonnes demandées + Sauvegarde
-        # On garde Adresse_Extraite car c'est utile pour vérifier
-        cols = ['Lieu', 'Prix', 'Details', 'Lien', 'Lat', 'Lon', 'Adresse_Extraite']
+        # On garde Adresse_Extraite car c'est utile pour vérifier. DerniereVue
+        # (ORA-134, TTL par re-scraping) doit survivre à cette étape intermédiaire
+        # pour rester exploitable par data_fusion.py.
+        cols = ['Lieu', 'Prix', 'Details', 'Lien', 'DerniereVue', 'Lat', 'Lon', 'Adresse_Extraite']
         # Si des colonnes manquent dans le fichier source, on ne plante pas
         final_cols = [c for c in cols if c in df.columns]
         

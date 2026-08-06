@@ -9,6 +9,58 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from scripts import clean_immo
 
 
+class StepPruneExpiredTest(unittest.TestCase):
+    def test_keeps_recently_seen_annonces(self):
+        reference = pd.Timestamp("2026-08-06", tz="UTC")
+        df = pd.DataFrame([{"url": "https://example.com/1", "date_dernier_scan": "2026-08-01"}])
+
+        result = clean_immo.step_prune_expired(df, ttl_days=14, reference_date=reference)
+
+        self.assertEqual(len(result), 1)
+
+    def test_drops_annonces_not_seen_within_ttl(self):
+        reference = pd.Timestamp("2026-08-06", tz="UTC")
+        df = pd.DataFrame([{"url": "https://example.com/1", "date_dernier_scan": "2026-07-01"}])
+
+        result = clean_immo.step_prune_expired(df, ttl_days=14, reference_date=reference)
+
+        self.assertEqual(len(result), 0)
+
+    def test_keeps_rows_with_missing_date_conservatively(self):
+        reference = pd.Timestamp("2026-08-06", tz="UTC")
+        df = pd.DataFrame([
+            {"url": "https://example.com/1", "date_dernier_scan": None},
+            {"url": "https://example.com/2", "date_dernier_scan": ""},
+        ])
+
+        result = clean_immo.step_prune_expired(df, ttl_days=14, reference_date=reference)
+
+        self.assertEqual(len(result), 2)
+
+    def test_missing_column_returns_dataframe_unchanged(self):
+        df = pd.DataFrame([{"url": "https://example.com/1"}])
+
+        result = clean_immo.step_prune_expired(df)
+
+        self.assertEqual(len(result), 1)
+        self.assertNotIn("date_dernier_scan", result.columns)
+
+    def test_mixed_batch_keeps_only_fresh_and_unknown(self):
+        reference = pd.Timestamp("2026-08-06", tz="UTC")
+        df = pd.DataFrame([
+            {"url": "https://example.com/fresh", "date_dernier_scan": "2026-08-05"},
+            {"url": "https://example.com/expired", "date_dernier_scan": "2026-07-01"},
+            {"url": "https://example.com/unknown", "date_dernier_scan": None},
+        ])
+
+        result = clean_immo.step_prune_expired(df, ttl_days=14, reference_date=reference)
+
+        self.assertEqual(
+            set(result["url"]),
+            {"https://example.com/fresh", "https://example.com/unknown"},
+        )
+
+
 class StepQuartiersTest(unittest.TestCase):
     def test_known_code_postal_and_coordinates_returns_named_quartier(self):
         df = pd.DataFrame([

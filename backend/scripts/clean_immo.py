@@ -39,6 +39,12 @@ RADIUS_METERS = 500
 # des features de distance et un modèle identiques). Ne pas changer sans
 # ré-entraîner et recommitter price_predictor.pkl.
 GEOCODING_JITTER_SEED = 42
+# Nombre de jours au-delà duquel une annonce non re-confirmée par le scraping
+# est considérée expirée et exclue du pipeline (ORA-134 : le pipeline n'avait
+# auparavant aucun mécanisme de suppression, les annonces retirées/louées sur
+# le site source restaient indéfiniment). ~2 runs hebdomadaires de marge pour
+# absorber un run manqué/en échec sans purger à tort une annonce encore active.
+TTL_JOURS_DERNIER_SCAN = 14
 FALLBACK_ZONES = {
     "69001": {"lat": 45.7705, "lon": 4.8306, "radius": 0.005},
     "69002": {"lat": 45.7533, "lon": 4.8327, "radius": 0.008},
@@ -111,6 +117,40 @@ def clean_zipcode(val):
         return str(int(float(val))).strip()
     except:
         return str(val).strip()
+
+def step_prune_expired(df, ttl_days=TTL_JOURS_DERNIER_SCAN, reference_date=None):
+    """Exclut les annonces dont `date_dernier_scan` dépasse `ttl_days` (ORA-134) :
+    une annonce non revue par le scraping depuis trop longtemps est considérée
+    disparue du site source (louée, expirée, retirée) plutôt que de rester
+    indéfiniment dans `master_immo_final.csv`/`annonces.db`.
+
+    Conservateur par construction : une ligne sans `date_dernier_scan` exploitable
+    (colonne absente du CSV d'entrée, ou valeur manquante/invalide — cas des
+    lignes écrites avant l'ajout de cette colonne aux 6 scrapers) est conservée
+    plutôt que purgée, faute d'information pour trancher. Le stock déjà
+    accumulé avant ce correctif n'est donc nettoyé qu'au fil des prochains runs
+    de scraping, pas rétroactivement ici (cf. le nettoyage ponctuel
+    `prune_dead_annonces.py`, basé sur une vérification HTTP directe, pour le
+    stock déjà en place au moment de ce correctif).
+    """
+    print("\n🗑️  ETAPE 0 : Purge des annonces expirées (TTL)...")
+
+    if 'date_dernier_scan' not in df.columns:
+        print("   ⚠️  Colonne 'date_dernier_scan' absente (CSV antérieur à ORA-134) : purge ignorée.")
+        return df
+
+    reference_date = reference_date or pd.Timestamp.now(tz='UTC').normalize()
+    dernier_scan = pd.to_datetime(df['date_dernier_scan'], errors='coerce', utc=True)
+    age_jours = (reference_date - dernier_scan).dt.days
+
+    # NaN (date manquante/invalide) : comparaison pandas -> False -> conservée.
+    expiree = age_jours > ttl_days
+    if expiree.any():
+        print(f"   ✅ {int(expiree.sum())} annonce(s) expirée(s) (non revue(s) depuis >{ttl_days}j) exclue(s).")
+    else:
+        print("   ✅ Aucune annonce expirée.")
+    return df[~expiree].reset_index(drop=True)
+
 
 def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_SEED):
     print("\n📍 ETAPE 1 : Géocodage & Jitter...")
@@ -332,6 +372,7 @@ def main():
     df_cavaliers = load_cavaliers(CAVALIERS_CSV)
 
     # 2. Exécution séquentielle en mémoire (orchestration pure, pas de logique métier ici)
+    df = step_prune_expired(df)
     df = step_geocoding(df, CAVALIERS_CSV)
     df = step_quartiers(df)
     df = step_types(df)
