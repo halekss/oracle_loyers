@@ -340,6 +340,52 @@ class GetChromeDriverOptionsTest(unittest.TestCase):
         self.assertIn("--user-agent=Mozilla/5.0 Test", captured["options"].arguments)
         self.assertIn("--proxy-server=http://127.0.0.1:8080", captured["options"].arguments)
 
+    def test_headless_adds_expected_argument(self):
+        captured = {}
+
+        class FakeChromeOptions:
+            def __init__(self):
+                self.arguments = []
+
+            def add_argument(self, arg):
+                self.arguments.append(arg)
+
+            def add_experimental_option(self, name, value):
+                pass
+
+        def fake_chrome(options=None, version_main=None):
+            captured["options"] = options
+            return MagicMock()
+
+        with patch.object(scraper_utils.uc, "ChromeOptions", FakeChromeOptions), \
+             patch.object(scraper_utils.uc, "Chrome", fake_chrome):
+            scraper_utils.get_chrome_driver(headless=True)
+
+        self.assertIn("--headless=new", captured["options"].arguments)
+
+    def test_not_headless_by_default(self):
+        captured = {}
+
+        class FakeChromeOptions:
+            def __init__(self):
+                self.arguments = []
+
+            def add_argument(self, arg):
+                self.arguments.append(arg)
+
+            def add_experimental_option(self, name, value):
+                pass
+
+        def fake_chrome(options=None, version_main=None):
+            captured["options"] = options
+            return MagicMock()
+
+        with patch.object(scraper_utils.uc, "ChromeOptions", FakeChromeOptions), \
+             patch.object(scraper_utils.uc, "Chrome", fake_chrome):
+            scraper_utils.get_chrome_driver()
+
+        self.assertNotIn("--headless=new", captured["options"].arguments)
+
     def test_no_user_agent_or_proxy_by_default(self):
         captured = {}
 

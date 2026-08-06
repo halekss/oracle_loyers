@@ -196,6 +196,7 @@ def get_chrome_driver(
     user_agent=None,
     proxy=None,
     page_load_timeout=30,
+    headless=False,
 ):
     """
     Factory undetected_chromedriver commune aux scrapers.
@@ -208,8 +209,15 @@ def get_chrome_driver(
     Combiné à retry_with_backoff (déjà en place autour de driver.get() dans les
     6 scrapers), un dépassement lève une TimeoutException qui est retentée puis
     loggée en ERROR sans planter le run (ORA-25).
+    `headless` (False par défaut, comportement inchangé pour les 6 scrapers en
+    production : une fenêtre visible est historiquement plus difficile à
+    distinguer d'un vrai navigateur pour l'anti-bot) — à passer explicitement
+    à True pour un usage ponctuel dans un environnement sans session
+    d'affichage graphique disponible (ORA-134, `recheck_dead_annonces.py`).
     """
     options = uc.ChromeOptions()
+    if headless:
+        options.add_argument("--headless=new")
     if ignore_certificate_errors:
         options.add_argument("--ignore-certificate-errors")
     if block_images:

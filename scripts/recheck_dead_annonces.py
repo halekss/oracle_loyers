@@ -9,6 +9,12 @@ là que vivent Selenium/undetected_chromedriver, volontairement absents des
 dépendances backend pour ne pas alourdir son image de déploiement (voir
 README, section "Annonces mortes : TTL par re-scraping + nettoyage ponctuel").
 
+Tourne en `headless=True` (contrairement aux 6 scrapers, qui gardent une
+fenêtre visible par défaut pour l'anti-détection) : ce script s'exécute dans
+des environnements sans session d'affichage graphique disponible (CI,
+sandbox), où `undetected_chromedriver` ne peut pas ouvrir de vraie fenêtre
+(`SessionNotCreatedException: unable to discover open pages`).
+
 Stratégie en deux passes :
   1. Re-teste chaque url encore en base via `check_url_status` (HTTP simple,
      rapide) — le statut peut avoir changé depuis le dernier run de
@@ -110,7 +116,7 @@ def recheck_ambiguous(
     db_path = db_path or annonces_store.DEFAULT_DB_PATH
     annonces = _fetch_all_annonces(db_path)
     driver_factory = driver_factory or (
-        lambda: get_chrome_driver(user_agent=pick_user_agent(), proxy=pick_proxy())
+        lambda: get_chrome_driver(user_agent=pick_user_agent(), proxy=pick_proxy(), headless=True)
     )
 
     session = requests.Session()
