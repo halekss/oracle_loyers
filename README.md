@@ -45,7 +45,20 @@ Quelles données personnelles sont collectées (messages du chatbot, adresse IP 
 
 Le chatbot ("Immotep") utilise **Google AI / Gemini** via `backend/services/chat_service.py` — c'est aujourd'hui le seul backend LLM implémenté dans le code. Il évite le serveur GPU/local, s'intègre simplement côté backend et le free tier suffit généralement pour une démonstration à trafic modéré.
 
-> Un mode **LM Studio en local** (self-hosted, sans dépendre d'un provider externe) a été envisagé mais n'a jamais été implémenté — il n'existe aucune abstraction de provider dans le code actuel. À considérer comme une piste future plutôt qu'un mode disponible.
+### Décision (ORA-119) : Gemini cloud + logique déterministe, pas de RAG local
+
+Le brief initial du projet (V2) mentionnait un chatbot **"RAG Mistral 7B"**. Ce n'est pas ce qui est implémenté : le code utilise Gemini (cloud) et le "RAG" désigné dans ce README est en réalité un filtrage déterministe du DataFrame (règles/regex sur quartier, type, budget dans `chat_service.parse_query`), pas une recherche par similarité d'embeddings sur un vector store.
+
+**Décision : conserver Gemini + le filtrage déterministe actuel plutôt que d'investir dans un vrai RAG local (Mistral via LM Studio, embeddings, vector store).**
+
+Justification :
+- Un RAG local nécessite un serveur avec GPU (ou un CPU suffisamment puissant) tournant en permanence pour héberger Mistral — incompatible avec un hébergement de démo portfolio classique (Render, sans GPU dédié) sans coût d'infra disproportionné par rapport à l'usage réel.
+- Le filtrage déterministe actuel **grounde déjà** les réponses sur les données réelles (annonces, quartiers, facteurs) avant l'appel à Gemini : le risque d'hallucination qu'un vrai RAG viserait à réduire est déjà largement couvert pour ce cas d'usage (questions sur un quartier/type de bien connu, pas une recherche sémantique libre sur un corpus large).
+- Ajouter une pipeline d'embeddings + vector store est un chantier à part entière (choix du modèle d'embedding, indexation, mise à jour à chaque nouveau scraping) sans commune mesure avec le bénéfice attendu sur ce volume de données (quelques centaines à quelques milliers d'annonces).
+
+**Cette décision doit être réévaluée si** : le trafic ou la diversité des questions posées au chatbot dépasse ce que le filtrage par règles peut couvrir correctement (ex. besoin réel de recherche sémantique libre plutôt que par critères structurés), ou si un hébergement avec GPU devient disponible pour ce projet à coût raisonnable.
+
+> Un mode **LM Studio en local** (self-hosted, sans dépendre d'un provider externe) reste une piste future si cette décision est révisée — il n'existe aujourd'hui aucune abstraction de provider dans le code, Gemini est appelé directement.
 
 Le backend actif garde la clé API uniquement côté serveur via `GEMINI_API_KEY`. Le modèle par défaut est `gemini-2.5-flash`, avec des réponses courtes et un contexte RAG borné pour limiter les coûts et les délais.
 
