@@ -3,11 +3,21 @@ import { api } from '../services/api';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
 
-// Mêmes seuils que `determine_type_local` dans backend/scripts/clean_immo.py,
-// utilisés ici uniquement pour varier le style de l'illustration générique :
-// `annonces.db` ne stocke pas de colonne `type_local` séparée, seule `surface`
-// est disponible côté API.
-const getTypeCategory = (surface) => {
+// `annonces.db` ne stocke pas de colonne `type_local` séparée, mais
+// `build_titre` (clean_immo.py) préfixe déjà le titre avec elle
+// ("T3 — Monplaisir / Bachut") : on la lit là en priorité, pour rester
+// cohérent avec le type réellement affiché dans le titre de la carte (basé
+// sur le texte de l'annonce, plus fiable que la seule surface). Fallback sur
+// les seuils de surface de `determine_type_local` si le titre ne la contient
+// pas (annonce sans quartier, titre de repli sur la description...).
+const KNOWN_CATEGORIES = ['Studio/T1', 'T2', 'T3', 'Grand (T4+)'];
+
+const getTypeCategory = (titre, surface) => {
+  if (typeof titre === 'string') {
+    const prefix = titre.split(' — ')[0].trim();
+    if (KNOWN_CATEGORIES.includes(prefix)) return prefix;
+  }
+
   const s = Number(surface);
   if (!Number.isFinite(s)) return null;
   if (s < 35) return 'Studio/T1';
@@ -29,8 +39,8 @@ const DEFAULT_ILLUSTRATION_CLASSES = 'from-slate-800 to-slate-900 text-slate-500
 // ou du site source (ORA-133 ; contrainte légale documentée dans
 // LEGAL_DECISIONS.md, section ORA-94 : AnnonceCard ne doit afficher aucune
 // image provenant de l'annonce elle-même, y compris via hotlink).
-function AnnonceIllustration({ surface }) {
-  const category = getTypeCategory(surface);
+function AnnonceIllustration({ titre, surface }) {
+  const category = getTypeCategory(titre, surface);
   const classes = ILLUSTRATION_BY_CATEGORY[category] || DEFAULT_ILLUSTRATION_CLASSES;
 
   return (
@@ -90,7 +100,7 @@ export default function AnnonceCard({ annonce }) {
       onKeyDown={handleKeyDown}
       className="animate-fade-in text-left w-full bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-purple-500/20 overflow-hidden cursor-pointer hover:border-purple-500/50 transition-colors group"
     >
-      <AnnonceIllustration surface={surface} />
+      <AnnonceIllustration titre={titre} surface={surface} />
 
       <div className="p-3">
         <div className="flex justify-between items-start gap-2">

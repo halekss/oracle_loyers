@@ -98,8 +98,16 @@ describe('AnnonceCard', () => {
     [45, 'T2'],
     [65, 'T3'],
     [90, 'Grand (T4+)'],
-  ])('labels the illustration %s m² as %s', (surface, expectedLabel) => {
-    render(<AnnonceCard annonce={{ ...baseAnnonce, surface }} />);
+  ])('falls back to a surface-derived label (%s m² -> %s) when the titre has no known category prefix', (surface, expectedLabel) => {
+    render(<AnnonceCard annonce={{ ...baseAnnonce, titre: 'Sans préfixe connu', surface }} />);
     expect(screen.getByText(expectedLabel)).toBeInTheDocument();
+  });
+
+  it('prefers the category parsed from the titre over the surface-derived one', () => {
+    // 54 m² tomberait dans le seuil T2 par surface, mais le titre dit T3
+    // (classification texte, plus fiable) : le titre doit gagner.
+    render(<AnnonceCard annonce={{ ...baseAnnonce, titre: 'T3 — Monplaisir / Bachut', surface: 54 }} />);
+    expect(screen.getByText('T3')).toBeInTheDocument();
+    expect(screen.queryByText('T2')).not.toBeInTheDocument();
   });
 });
