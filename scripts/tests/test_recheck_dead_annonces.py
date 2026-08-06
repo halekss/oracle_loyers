@@ -25,6 +25,21 @@ class LooksLikeValidListingTest(unittest.TestCase):
         self.assertFalse(recheck_dead_annonces.looks_like_valid_listing(None))
 
 
+class LooksLikeChallengePageTest(unittest.TestCase):
+    def test_detects_datadome_captcha(self):
+        html = '<script>var dd={"host":"geo.captcha-delivery.com"}</script>'
+        self.assertTrue(recheck_dead_annonces.looks_like_challenge_page(html))
+
+    def test_detects_recaptcha(self):
+        self.assertTrue(recheck_dead_annonces.looks_like_challenge_page("<div class='g-recaptcha'></div>"))
+
+    def test_returns_false_for_normal_page(self):
+        self.assertFalse(recheck_dead_annonces.looks_like_challenge_page("<h1>T2 Gerland</h1><p>850 €</p>"))
+
+    def test_handles_none_gracefully(self):
+        self.assertFalse(recheck_dead_annonces.looks_like_challenge_page(None))
+
+
 class CheckUrlStatusBrowserTest(unittest.TestCase):
     def _driver(self, current_url, page_source=""):
         driver = MagicMock()
@@ -76,6 +91,21 @@ class CheckUrlStatusBrowserTest(unittest.TestCase):
         )
 
         self.assertTrue(result)
+
+    def test_returns_none_on_challenge_page_even_without_price(self):
+        # Garde-fou central (bug réel constaté : DataDome sur SeLoger bloquait le
+        # headless et servait une page CAPTCHA vide, classée "morte" à tort par
+        # le seul signal prix avant l'ajout de cette vérification).
+        driver = self._driver(
+            "https://example.com/annonce/123",
+            page_source='<script>var dd={"host":"geo.captcha-delivery.com"}</script>',
+        )
+
+        result = recheck_dead_annonces.check_url_status_browser(
+            "https://example.com/annonce/123", driver
+        )
+
+        self.assertIsNone(result)
 
     def test_returns_false_for_price_on_request_listing(self):
         driver = self._driver(

@@ -74,6 +74,28 @@ BROWSER_DELAY_RANGE = (2, 4)
 PRICE_PATTERN = re.compile(r"\d[\d\s]{1,6}\s?€")
 PRICE_ON_REQUEST_PATTERNS = ("prix sur demande", "loyer sur demande", "nous consulter")
 
+# Certains sites (SeLoger via DataDome, constaté en pratique) servent une page
+# de challenge anti-bot (CAPTCHA) au lieu du vrai contenu quand ils détectent
+# un navigateur headless — vide de tout signal de prix ou de texte "annonce
+# indisponible", ce qui ferait passer looks_like_valid_listing à tort pour
+# "morte" alors qu'on n'a en réalité aucune information exploitable. À traiter
+# comme un statut ambigu (None), pas comme une confirmation de mort.
+CHALLENGE_PAGE_INDICATORS = (
+    "captcha-delivery.com",
+    "datadome",
+    "hcaptcha.com",
+    "recaptcha",
+    "checking your browser",
+    "please verify you are a human",
+)
+
+
+def looks_like_challenge_page(html_text):
+    """True si `html_text` correspond à une page de challenge anti-bot
+    (CAPTCHA) plutôt qu'au vrai contenu de la page demandée."""
+    lowered = (html_text or "").lower()
+    return any(indicator in lowered for indicator in CHALLENGE_PAGE_INDICATORS)
+
 
 def looks_like_valid_listing(html_text):
     """True si `html_text` contient un signal de prix exploitable (montant
@@ -93,7 +115,11 @@ def check_url_status_browser(url, driver, page_load_timeout=BROWSER_PAGE_LOAD_TI
     morte), False (vivante), ou None si même le navigateur ne permet pas de
     trancher (à conserver par prudence).
 
-    Trois signaux, dans cet ordre :
+    Vérifie d'abord qu'on n'est pas face à une page de challenge anti-bot
+    (`looks_like_challenge_page`) : dans ce cas, aucun des signaux suivants
+    n'est fiable (page vide de tout contenu réel), le statut reste ambigu.
+
+    Puis trois signaux, dans cet ordre :
     - Redirection vers la page d'accueil (`/`) : plusieurs sites redirigent
       une annonce expirée vers leur accueil plutôt que d'afficher un message.
     - `looks_like_soft_404` appliqué au contenu rendu (même détection que
@@ -107,6 +133,10 @@ def check_url_status_browser(url, driver, page_load_timeout=BROWSER_PAGE_LOAD_TI
         driver.get(url)
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
         time.sleep(2.5)  # laisse le temps aux éventuelles redirections JS / contenu lazy de se charger
+
+        if looks_like_challenge_page(driver.page_source):
+            logger.warning("Page de challenge anti-bot (CAPTCHA) détectée pour %s : conservée par prudence.", url)
+            return None
 
         final_path = urlparse(driver.current_url).path
         original_path = urlparse(url).path
