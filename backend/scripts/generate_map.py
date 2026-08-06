@@ -2,6 +2,7 @@ import folium
 import pandas as pd
 import os
 import random
+import sys
 import json
 import html
 import logging
@@ -25,6 +26,15 @@ METRO_JSON = os.path.join(DATA_DIR, 'metro_lyon.json')
 # Limites des 9 arrondissements de Lyon (OSM/Nominatim), récupérées une fois
 # par scripts/fetch_lyon_arrondissements.py et versionnées ici (ORA-104).
 QUARTIERS_GEOJSON = os.path.join(DATA_DIR, 'lyon_arrondissements.geojson')
+ANNONCES_DB_PATH = os.path.join(DATA_DIR, 'annonces.db')
+
+# backend/services (annonces_store) n'est pas sur sys.path par défaut quand ce
+# script est lancé depuis backend/scripts/ (ex: `python generate_map.py`, ou
+# l'étape DAG Airflow `generate_map`) plutôt que depuis backend/ (comme app.py).
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+from services import annonces_store  # noqa: E402 (après le sys.path.insert nécessaire)
 
 # --- 2. DATA & COULEURS ---
 COLORS = {
@@ -68,13 +78,20 @@ def sanitize_image_url(url):
     return None
 
 
-def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_url=None):
+def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_url=None, annonce_id=None):
     """Contenu du popup affiché au clic sur un marker d'annonce (ORA-90).
 
     Affiche la photo d'annonce scrapée telle quelle (hotlink direct vers le
     site source, jamais téléchargée ni re-hébergée sur notre infra) : décision
     ORA-94 (LEGAL_DECISIONS.md) explicitement révisée pour autoriser ce mode
     d'affichage, cf. section "SUPERSEDED" du document.
+
+    `annonce_id` (id SQLite dans annonces.db, résolu par url dans main() via
+    annonces_store.get_annonce_by_url) : si connu, le clic sur le lien
+    notifie le parent React via postMessage (contrat ANNONCE_CLICK,
+    MAP_CONTRACT.md) plutôt que d'appeler directement l'API backend depuis ce
+    HTML statique, qui n'a pas connaissance de son URL (ORA-107/ORA-126) —
+    React appelle ensuite le même api.logAnnonceClick que AnnonceCard.jsx.
     """
     safe_type = html.escape(str(type_local))
     safe_prix = html.escape(str(prix))
@@ -83,8 +100,14 @@ def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_ur
     link_html = ""
     if listing_url:
         safe_link_url = html.escape(listing_url, quote=True)
+        onclick_html = ""
+        if annonce_id is not None:
+            onclick_html = (
+                " onclick=\"parent.postMessage({type: 'ANNONCE_CLICK', "
+                f"id: {int(annonce_id)}}}, window.location.origin)\""
+            )
         link_html = (
-            f"<a href='{safe_link_url}' target='_blank' rel='noopener noreferrer' "
+            f"<a href='{safe_link_url}' target='_blank' rel='noopener noreferrer'{onclick_html} "
             "style='display:block; font-size:12px; color:#22c55e; margin-top:4px;'>Voir l'annonce &#8599;</a>"
         )
 
@@ -240,7 +263,19 @@ def main():
             listing_url = sanitize_listing_url(row.get('url'))
             image_url = row.get('image')
 
-            txt_popup = build_immo_popup_html(type_local, prix, row.get('quartier', 'Lyon'), listing_url, image_url)
+            # ORA-107 : résout l'id SQLite (annonces.db) à partir de l'URL pour
+            # que le clic sur le marker puisse être tracké (via ANNONCE_CLICK/
+            # React), comme AnnonceCard.jsx. None si l'annonce n'y est pas
+            # encore synchronisée (store pas encore peuplé pour ce run).
+            annonce_id = None
+            if listing_url:
+                existing = annonces_store.get_annonce_by_url(listing_url, db_path=ANNONCES_DB_PATH)
+                if existing:
+                    annonce_id = existing['id']
+
+            txt_popup = build_immo_popup_html(
+                type_local, prix, row.get('quartier', 'Lyon'), listing_url, image_url, annonce_id,
+            )
 
             target_group = None
             if type_local == 'Studio/T1': target_group = fg_studio

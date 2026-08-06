@@ -194,6 +194,19 @@ def get_annonce_by_id(annonce_id, db_path=DEFAULT_DB_PATH):
     return _row_to_dict(row)
 
 
+def get_annonce_by_url(url, db_path=DEFAULT_DB_PATH):
+    """Renvoie l'annonce correspondant à `url` (contrainte UNIQUE), ou None
+    si introuvable. Utilisé par generate_map.py (ORA-107) pour résoudre
+    l'id SQLite d'un marker carte à partir de l'URL déjà présente dans le
+    CSV, sans dupliquer le tracking de clic entre React et la carte."""
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute("SELECT * FROM annonces WHERE url = ?", (url,)).fetchone()
+    finally:
+        conn.close()
+    return _row_to_dict(row)
+
+
 def log_click(annonce_id, clicked_at=None, db_path=DEFAULT_DB_PATH):
     """Journalise un clic sortant vers l'annonce `annonce_id` (ORA-91).
 

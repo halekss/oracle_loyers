@@ -101,6 +101,19 @@ class AnnoncesStoreTest(unittest.TestCase):
 
         self.assertEqual(fetched["titre"], "T3 Confluence")
 
+    def test_get_annonce_by_url_returns_none_when_missing(self):
+        self.assertIsNone(annonces_store.get_annonce_by_url("https://example.com/nope", db_path=self.db_path))
+
+    def test_get_annonce_by_url_returns_the_annonce(self):
+        created = annonces_store.upsert_annonce(
+            titre="T3 Confluence", url="https://example.com/annonce-3", db_path=self.db_path,
+        )
+
+        fetched = annonces_store.get_annonce_by_url("https://example.com/annonce-3", db_path=self.db_path)
+
+        self.assertEqual(fetched["id"], created["id"])
+        self.assertEqual(fetched["titre"], "T3 Confluence")
+
     def test_count_clicks_is_zero_when_no_click_logged(self):
         created = annonces_store.upsert_annonce(url="https://example.com/d", db_path=self.db_path)
 

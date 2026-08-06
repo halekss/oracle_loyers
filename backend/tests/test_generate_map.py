@@ -137,6 +137,28 @@ class BuildImmoPopupHtmlTest(unittest.TestCase):
 
         self.assertNotIn("<script>alert(1)</script>", html_out)
 
+    def test_tracks_the_click_via_postmessage_when_annonce_id_is_known(self):
+        """ORA-107 : parité avec AnnonceCard.jsx (api.logAnnonceClick), sans
+        dupliquer la connaissance de l'URL backend dans le HTML statique
+        généré — la carte notifie le parent React via le contrat postMessage
+        (ORA-125/126), qui appelle le même api.logAnnonceClick que React."""
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache",
+            listing_url="https://example.com/annonce/7", annonce_id=42,
+        )
+
+        self.assertIn("ANNONCE_CLICK", html_out)
+        self.assertIn("id: 42", html_out)
+        self.assertIn("window.location.origin", html_out)
+
+    def test_omits_click_tracking_when_annonce_id_is_unknown(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache",
+            listing_url="https://example.com/annonce/7", annonce_id=None,
+        )
+
+        self.assertNotIn("ANNONCE_CLICK", html_out)
+
 
 class BuildMarkerClickScriptTest(unittest.TestCase):
     def test_returns_empty_string_when_no_redirect_url(self):

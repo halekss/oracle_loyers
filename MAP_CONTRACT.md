@@ -1,6 +1,6 @@
 # Contrat postMessage — Carte (React ↔ HTML généré)
 
-Ce document est la source de vérité des messages échangés via `postMessage` entre `frontend/src/components/MapComponent.jsx` (React, émetteur) et la carte Folium statique embarquée en iframe (`frontend/public/data/map_pings_lyon_calques.html`, générée par `backend/scripts/generate_map.py`, récepteur). Tout nouveau type de message doit être ajouté ici, dans `MapComponent.jsx` **et** dans `generate_map.build_bridge_message_script`.
+Ce document est la source de vérité des messages échangés via `postMessage` entre `frontend/src/components/MapComponent.jsx` (React) et la carte Folium statique embarquée en iframe (`frontend/public/data/map_pings_lyon_calques.html`, générée par `backend/scripts/generate_map.py`). Le contrat est **bidirectionnel** : React → iframe (piloter la carte : `FLY_TO`, `FLY_TO_BOUNDS`, `TOGGLE_LAYER`) et iframe → React (notifier une interaction utilisateur sur la carte : `ANNONCE_CLICK`). Tout nouveau type de message doit être ajouté ici, dans `MapComponent.jsx` **et** dans `generate_map.build_bridge_message_script` (React → iframe) ou dans le popup HTML généré (iframe → React).
 
 L'iframe est servie depuis la même origine que l'application React (fichier statique de `frontend/public/data/`) : c'est un prérequis du contrat, pas un détail d'implémentation — c'est ce qui permet une vérification d'origine simple des deux côtés (voir Sécurité ci-dessous).
 
@@ -8,8 +8,8 @@ L'iframe est servie depuis la même origine que l'application React (fichier sta
 
 ## Sécurité (ORA-125)
 
-* **Émetteur** (`MapComponent.jsx`) : cible `window.location.origin` plutôt que `'*'` sur chaque `postMessage`, pour ne jamais livrer de commande carte à un autre document si l'iframe venait à naviguer ailleurs.
-* **Récepteur** (`generate_map.build_bridge_message_script`) : ignore tout message dont `e.origin !== window.location.origin`, avant même de lire `e.data.type`.
+* **React → iframe** : `MapComponent.jsx` cible `window.location.origin` plutôt que `'*'` sur chaque `postMessage` ; `generate_map.build_bridge_message_script` (iframe) ignore tout message dont `e.origin !== window.location.origin`, avant même de lire `e.data.type`.
+* **iframe → React** : le popup HTML généré (`build_immo_popup_html`) cible `window.location.origin` sur son `postMessage` ; `MapComponent.jsx` valide de même `e.origin === window.location.origin` avant de traiter un message reçu (`ANNONCE_CLICK`).
 
 Sans ces deux garde-fous, n'importe quelle page tierce capable d'obtenir une référence vers l'iframe (ou l'iframe elle-même si elle naviguait vers un contenu hostile) pourrait piloter la carte (recentrage, activation de calques) — surface d'attaque mineure ici, mais le principe reste : ne jamais faire confiance à un message sans vérifier son origine.
 
@@ -58,6 +58,20 @@ Active/désactive un calque Folium (`LayerControl`) depuis le panneau de contrô
 * `show` : état cible (`true`/`false`).
 
 **Traité par** : `build_bridge_message_script` → simule un clic sur la case à cocher Leaflet correspondante si son état diverge de `show` (Folium n'expose pas d'API JS directe pour piloter `LayerControl` par nom).
+
+### `ANNONCE_CLICK` (iframe → React, ORA-107)
+
+Notifie React qu'un utilisateur a cliqué sur le lien "Voir l'annonce" d'un popup marker, pour tracker le clic exactement comme `AnnonceCard.jsx` (`api.logAnnonceClick`). Le HTML statique généré par `generate_map.py` n'a pas connaissance de l'URL du backend (pas de build Vite, donc pas de `VITE_API_URL`) : plutôt que de dupliquer cette configuration dans du Python généré, la carte délègue l'appel API à React via ce message.
+
+**Émis par** : l'attribut `onclick` du lien généré par `build_immo_popup_html`, uniquement si l'id SQLite (`annonces.db`) de l'annonce a pu être résolu par URL (`annonces_store.get_annonce_by_url`) au moment de la génération de la carte — silencieux sinon (pas de régression bloquante si le store n'est pas encore synchronisé pour cette annonce).
+
+```json
+{ "type": "ANNONCE_CLICK", "id": 42 }
+```
+
+* `id` : id SQLite de l'annonce dans `annonces.db`.
+
+**Traité par** : `MapComponent.jsx`, un listener `message` dédié (distinct du contrat React → iframe ci-dessus) qui appelle `api.logAnnonceClick(id)` — même fonction que `AnnonceCard.jsx`, donc même comportement (fire-and-forget, ne bloque jamais la navigation vers l'annonce qui s'ouvre via le `<a href>` natif du popup, indépendant de ce message).
 
 ## Ajouter un nouveau type de message
 

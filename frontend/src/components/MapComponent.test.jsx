@@ -1,10 +1,24 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+vi.mock('../services/api', async () => {
+  const actual = await vi.importActual('../services/api');
+  return {
+    ...actual,
+    api: { logAnnonceClick: vi.fn() },
+  };
+});
+
+import { api } from '../services/api';
 import MapComponent from './MapComponent';
 
 describe('MapComponent', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.logAnnonceClick.mockResolvedValue({ logged: true, views: 1 });
+  });
+
   it('renders an iframe pointing to the static generated map', () => {
     render(<MapComponent center={null} />);
     const iframe = screen.getByTitle('Carte Oracle');
@@ -189,5 +203,38 @@ describe('MapComponent', () => {
       { type: 'TOGGLE_LAYER', name: 'Quartiers', show: true },
       window.location.origin,
     );
+  });
+
+  it('logs the click when the iframe reports an ANNONCE_CLICK from the same origin (ORA-107)', () => {
+    render(<MapComponent center={null} />);
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'ANNONCE_CLICK', id: 42 },
+      origin: window.location.origin,
+    }));
+
+    expect(api.logAnnonceClick).toHaveBeenCalledWith(42);
+  });
+
+  it('ignores an ANNONCE_CLICK message from a different origin (ORA-107)', () => {
+    render(<MapComponent center={null} />);
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'ANNONCE_CLICK', id: 42 },
+      origin: 'https://attacker.example.com',
+    }));
+
+    expect(api.logAnnonceClick).not.toHaveBeenCalled();
+  });
+
+  it('ignores unrelated message events', () => {
+    render(<MapComponent center={null} />);
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'SOME_OTHER_MESSAGE' },
+      origin: window.location.origin,
+    }));
+
+    expect(api.logAnnonceClick).not.toHaveBeenCalled();
   });
 });

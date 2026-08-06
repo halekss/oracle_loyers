@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { api } from '../services/api';
 
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
 // (générée par backend/scripts/generate_map.py) : voir MAP_CONTRACT.md (ORA-125).
@@ -103,6 +104,21 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
       bounds
     }, window.location.origin);
   }, [bounds]);
+
+  // ORA-107 : réception du seul message iframe → React du contrat
+  // (ANNONCE_CLICK, MAP_CONTRACT.md) — clic sur un marker carte, tracké
+  // exactement comme AnnonceCard.jsx (même api.logAnnonceClick).
+  useEffect(() => {
+    const handleMessage = (e) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type !== 'ANNONCE_CLICK') return;
+      api.logAnnonceClick(e.data.id).catch((err) => {
+        console.error('❌ Erreur tracking clic annonce (carte) :', err);
+      });
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const sendLayerCommand = (layerKey, show) => {
     if (iframeRef.current && iframeRef.current.contentWindow) {
