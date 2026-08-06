@@ -53,4 +53,37 @@ describe('SearchForm', () => {
     render(<SearchForm onScan={() => {}} isLoading={true} />);
     expect(screen.getByRole('button', { name: '...' })).toBeDisabled();
   });
+
+  it('does not call onScan on submit when the quartier field has a single character (ORA-111)', async () => {
+    const onScan = vi.fn();
+    const user = userEvent.setup();
+
+    render(<SearchForm onScan={onScan} isLoading={false} />);
+    await user.type(screen.getByPlaceholderText(/entrez un quartier/i), 'G');
+    await user.click(screen.getByRole('button', { name: 'SCAN' }));
+
+    expect(onScan).not.toHaveBeenCalled();
+  });
+
+  it('does not re-trigger onScan on filter click when the quartier field has a single character (ORA-111)', async () => {
+    const onScan = vi.fn();
+    const user = userEvent.setup();
+
+    render(<SearchForm onScan={onScan} isLoading={false} />);
+    await user.type(screen.getByPlaceholderText(/entrez un quartier/i), 'G');
+    await user.click(screen.getByRole('button', { name: 'T2' }));
+
+    expect(onScan).not.toHaveBeenCalled();
+  });
+
+  it('calls onScan on submit once the quartier field reaches two characters (ORA-111)', async () => {
+    const onScan = vi.fn();
+    const user = userEvent.setup();
+
+    render(<SearchForm onScan={onScan} isLoading={false} />);
+    await user.type(screen.getByPlaceholderText(/entrez un quartier/i), 'Ge');
+    await user.click(screen.getByRole('button', { name: 'SCAN' }));
+
+    expect(onScan).toHaveBeenCalledWith('Ge', 'Tout', '');
+  });
 });

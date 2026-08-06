@@ -13,7 +13,7 @@ from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
-from services.text_matching import resolve_quartier
+from services.text_matching import match_quartier
 from services import annonces_store
 from schemas import ChatRequestSchema, QuartierStatsRequestSchema, PredictRequestSchema, ValidationError
 import joblib
@@ -385,8 +385,9 @@ def get_quartier_stats():
       200:
         description: >
           Statistiques du quartier (found=true, avec count/prix_moyen/
-          prix_m2_moyen/center), ou found=false avec un message si aucun bien
-          ne correspond au quartier demandé.
+          prix_m2_moyen/center), ou found=false avec un message si aucun
+          quartier connu n'est raisonnablement proche (ambiguous=false) ou si
+          plusieurs le sont (ambiguous=true, avec suggestions, ORA-111).
       400:
         description: Le nom du quartier est manquant ou vide
       500:
@@ -416,14 +417,28 @@ def get_quartier_stats():
         # Résolution du quartier saisi (accents/casse/tirets + tolérance aux
         # fautes de frappe partagées avec le chat et /api/predict, ORA-110)
         known_quartiers = df_clean['quartier'].unique().tolist()
-        resolved_quartier = resolve_quartier(quartier_input, known_quartiers)
+        match = match_quartier(quartier_input, known_quartiers)
 
-        if resolved_quartier is None:
+        if not match["found"]:
+            # ORA-111 : message différencié — plusieurs quartiers assez proches
+            # ("ambigu", avec suggestions) vs rien de raisonnablement proche.
+            if match["suggestions"]:
+                suggestions_label = ", ".join(match["suggestions"])
+                message = (
+                    f"Quartier ambigu pour '{quartier_input}' — "
+                    f"vouliez-vous dire : {suggestions_label} ?"
+                )
+            else:
+                message = f"Aucun bien trouvé pour le secteur '{quartier_input}'"
+
             return jsonify({
                 "found": False,
-                "message": f"Aucun bien trouvé pour le secteur '{quartier_input}'"
+                "ambiguous": bool(match["suggestions"]),
+                "suggestions": match["suggestions"],
+                "message": message,
             }), 200
 
+        resolved_quartier = match["match"]
         filtered_df = df_clean[df_clean['quartier'] == resolved_quartier]
 
         # 2. Filtrage par Type de bien (Si pas 'Tout')

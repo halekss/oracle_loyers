@@ -195,7 +195,7 @@ Calcule des statistiques réelles (prix moyen, prix/m², nombre de biens) à par
 
 | Champ | Type | Obligatoire | Défaut | Description |
 |---|---|---|---|---|
-| `quartier` | string | oui | — | Recherche textuelle insensible à la casse dans la colonne `quartier` |
+| `quartier` | string | oui | — | Résolu vers le quartier connu le plus proche : insensible à la casse/accents/tirets, tolère les fautes de frappe (`backend/services/text_matching.py`, ORA-109/ORA-110) |
 | `type_local` | string | non | `"Tout"` | Un de `"Tout"`, `"T1"`, `"T2"`, `"T3"`, `"T4+"` |
 
 ```json
@@ -237,10 +237,21 @@ Calcule des statistiques réelles (prix moyen, prix/m², nombre de biens) à par
 }
 ```
 
-- **Réponse `200`** (aucun bien pour le quartier) :
+- **Réponse `200`** (aucun quartier connu n'est raisonnablement proche) :
 
 ```json
-{ "found": false, "message": "Aucun bien trouvé pour le secteur 'xyz'" }
+{ "found": false, "ambiguous": false, "suggestions": [], "message": "Aucun bien trouvé pour le secteur 'xyz'" }
+```
+
+- **Réponse `200`** (saisie ambiguë — plusieurs quartiers assez proches, ORA-111) :
+
+```json
+{
+  "found": false,
+  "ambiguous": true,
+  "suggestions": ["Croix-Rousse Plateau", "Pentes Croix-Rousse"],
+  "message": "Quartier ambigu pour 'croiss' — vouliez-vous dire : Croix-Rousse Plateau, Pentes Croix-Rousse ?"
+}
 ```
 
 - **Codes d'erreur** :

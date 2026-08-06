@@ -1,14 +1,21 @@
 import React, { useState } from 'react';
 
+// ORA-111 : en dessous de ce nombre de caractères, un scan ne peut rien
+// résoudre (le fuzzy matching a besoin d'un minimum de signal) — on évite
+// donc un aller-retour API inutile plutôt que de le déclencher à vide.
+const MIN_QUARTIER_LENGTH = 2;
+
 export default function SearchForm({ onScan, isLoading }) {
   const [input, setInput] = useState('');
   const [surface, setSurface] = useState('');
   const [currentFilter, setCurrentFilter] = useState('Tout');
 
+  const canScan = input.trim().length >= MIN_QUARTIER_LENGTH;
+
   // Soumission du formulaire (Bouton SCAN ou Entrée)
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (input.trim()) {
+    if (canScan) {
       onScan(input, currentFilter, surface);
     }
   };
@@ -16,8 +23,8 @@ export default function SearchForm({ onScan, isLoading }) {
   // Clic sur un bouton de filtre (T1, T2...)
   const handleFilterClick = (filterId) => {
     setCurrentFilter(filterId);
-    // Si l'utilisateur a déjà tapé un quartier, on relance le scan immédiatement
-    if (input.trim()) {
+    // Si l'utilisateur a déjà tapé un quartier exploitable, on relance le scan immédiatement
+    if (canScan) {
       onScan(input, filterId, surface);
     }
   };
