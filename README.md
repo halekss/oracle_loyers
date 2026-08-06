@@ -259,11 +259,19 @@ Les deux sont écrites à partir du **même dataframe final** en fin de `clean_i
 
 Complication prise en compte : chaque scraper arrêtait sa pagination dès la 1ère page entièrement déjà-connue, donc les annonces plus profondément paginées n'étaient jamais re-confirmées. `should_continue_pagination()` (`scripts/scraper_utils.py`) accorde désormais `GRACE_PAGES_SANS_NOUVEAUTE` (3) pages de marge sans nouvelle annonce avant d'arrêter réellement la pagination, pour laisser une chance de re-confirmer périodiquement les annonces déjà connues.
 
-**Nettoyage ponctuel du stock existant** : le TTL ne corrige le stock déjà accumulé qu'au fil des prochains runs (les annonces déjà en base n'ont pas de `date_dernier_scan` tant qu'elles n'ont pas été re-scrapées). `backend/scripts/prune_dead_annonces.py` vérifie en direct (HTTP) chaque url encore dans `annonces.db` et retire celles confirmées 404/410 — volontairement conservateur, un statut ambigu (403 anti-bot, timeout, 5xx) est laissé tel quel plutôt que de risquer une suppression à tort :
+**Nettoyage ponctuel du stock existant** : le TTL ne corrige le stock déjà accumulé qu'au fil des prochains runs (les annonces déjà en base n'ont pas de `date_dernier_scan` tant qu'elles n'ont pas été re-scrapées). `backend/scripts/prune_dead_annonces.py` vérifie en direct (HTTP) chaque url encore dans `annonces.db` et retire celles confirmées mortes — un vrai 404/410 HTTP, ou un "soft 404" (page 200 dont le texte indique que l'annonce n'est plus disponible, détection approximative par mots-clés génériques, cf. `SOFT_404_PATTERNS`). Volontairement conservateur au-delà de ça : un statut vraiment ambigu (403 anti-bot, timeout, 5xx) est laissé tel quel plutôt que de risquer une suppression à tort :
 
 ```bash
 python backend/scripts/prune_dead_annonces.py --dry-run   # vérifie et logue sans rien supprimer
-python backend/scripts/prune_dead_annonces.py              # supprime les 404/410 confirmés
+python backend/scripts/prune_dead_annonces.py              # supprime les 404/410/soft-404 confirmés
+```
+
+**Résidu bloqué par l'anti-bot** : certains sites (SeLoger notamment) renvoient systématiquement 403 aux clients HTTP basiques, y compris pour des annonces réellement mortes — ces urls restent "ambiguës" et ne sont pas supprimées par le script ci-dessus. `scripts/recheck_dead_annonces.py` (tourne sous `scripts/.venv`, qui a Selenium/undetected_chromedriver — volontairement absents des dépendances backend) re-teste chaque url en HTTP puis escalade au navigateur furtif celles restées ambiguës, avec les mêmes garde-fous conservateurs :
+
+```bash
+cd scripts && source .venv/bin/activate
+python recheck_dead_annonces.py --dry-run   # vérifie et logue sans rien supprimer
+python recheck_dead_annonces.py             # supprime les annonces confirmées mortes via navigateur
 ```
 
 ### 🌍 Généricité multi-ville (ORA-71) — état actuel
