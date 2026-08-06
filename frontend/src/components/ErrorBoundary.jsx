@@ -2,6 +2,12 @@ import { Component } from 'react';
 
 // Les Error Boundary React doivent être des composants classe : aucun
 // équivalent à base de hooks n'existe pour intercepter les erreurs de rendu.
+//
+// ORA-123 : `fallback` (optionnel) permet d'isoler un panneau précis
+// (carte, oracle, chat) plutôt que de faire planter tout l'écran — soit un
+// élément statique, soit une fonction `(reset) => élément` pour offrir un
+// "Réessayer" qui referme le boundary sans recharger toute la page. Sans
+// `fallback`, comportement inchangé (plein écran, reload).
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -20,8 +26,21 @@ export default class ErrorBoundary extends Component {
     window.location.reload();
   };
 
+  handleReset = () => {
+    this.setState({ hasError: false });
+  };
+
   render() {
     if (this.state.hasError) {
+      const { fallback } = this.props;
+
+      if (typeof fallback === 'function') {
+        return fallback(this.handleReset);
+      }
+      if (fallback) {
+        return fallback;
+      }
+
       return (
         <div className="flex flex-col items-center justify-center h-screen w-screen bg-slate-950 text-slate-200 gap-4 p-6 text-center">
           <h1 className="text-xl font-black tracking-tighter text-white">

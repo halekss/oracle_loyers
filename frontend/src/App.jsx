@@ -5,8 +5,30 @@ import PriceHistory from './components/PriceHistory';
 import MapComponent from './components/MapComponent';
 import ChatOracle from './components/ChatOracle';
 import AnnoncesList from './components/AnnoncesList';
+import ErrorBoundary from './components/ErrorBoundary';
 import { api, describeApiError } from './services/api';
 import { computeBoundsForQuartiers } from './services/mapBounds';
+
+// ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
+// l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
+// (carte, oracle, chat) rencontre une erreur de rendu. Renvoie la fonction
+// (reset) => élément attendue par ErrorBoundary#fallback.
+function makePanelFallback(label) {
+  return (reset) => (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-6 text-center bg-slate-900/50">
+      <p className="text-xs text-slate-400 max-w-xs">
+        {label} a rencontré une erreur d'affichage.
+      </p>
+      <button
+        type="button"
+        onClick={reset}
+        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 text-[10px] uppercase tracking-widest font-bold transition-colors"
+      >
+        Réessayer
+      </button>
+    </div>
+  );
+}
 
 // Correspond au breakpoint `md` de Tailwind : au-delà, les deux panneaux
 // (carte + oracle) restent visibles simultanément, donc la carte doit
@@ -159,7 +181,11 @@ function App() {
           aria-labelledby="tab-carte"
           className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-slate-800`}
         >
-          {shouldMountMap && <MapComponent center={mapCenter} bounds={mapBounds} chatOpen={isChatOpen} />}
+          {shouldMountMap && (
+            <ErrorBoundary fallback={makePanelFallback('La carte')}>
+              <MapComponent center={mapCenter} bounds={mapBounds} chatOpen={isChatOpen} />
+            </ErrorBoundary>
+          )}
         </div>
 
         {/* COLONNE DROITE — Oracle (40% desktop, plein écran mobile) */}
@@ -193,6 +219,7 @@ function App() {
             id="oracle-info-panel"
             className="flex-1 min-h-0 overflow-y-auto custom-scrollbar"
           >
+          <ErrorBoundary fallback={makePanelFallback("Le panneau d'estimation")}>
             {/* Résultat */}
             <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
               <ResultCard data={result} loading={loading} priceHistory={priceHistory} />
@@ -249,6 +276,7 @@ function App() {
                 </div>
               </div>
             </details>
+          </ErrorBoundary>
           </div>
 
         </div>
@@ -294,15 +322,17 @@ function App() {
           </button>
         </div>
         <div className="flex-1 min-h-0">
-          <ChatOracle
-            analysis={result?.analysis}
-            context={chatContext}
-            onInsight={(insight) => {
-              if (insight?.map_focus?.lat && insight?.map_focus?.lng) {
-                setMapCenter([insight.map_focus.lat, insight.map_focus.lng, insight.map_focus.zoom || 15]);
-              }
-            }}
-          />
+          <ErrorBoundary fallback={makePanelFallback('Le chat Immotep')}>
+            <ChatOracle
+              analysis={result?.analysis}
+              context={chatContext}
+              onInsight={(insight) => {
+                if (insight?.map_focus?.lat && insight?.map_focus?.lng) {
+                  setMapCenter([insight.map_focus.lat, insight.map_focus.lng, insight.map_focus.zoom || 15]);
+                }
+              }}
+            />
+          </ErrorBoundary>
         </div>
       </div>
 
