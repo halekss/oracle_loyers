@@ -22,6 +22,9 @@ METADATA_JSON = os.path.join(FRONTEND_DATA_DIR, 'map_metadata.json')
 IMMO_CSV = os.path.join(DATA_DIR, 'master_immo_final.csv')
 POI_CSV = os.path.join(DATA_DIR, 'cavaliers_lyon.csv')
 METRO_JSON = os.path.join(DATA_DIR, 'metro_lyon.json')
+# Limites des 9 arrondissements de Lyon (OSM/Nominatim), récupérées une fois
+# par scripts/fetch_lyon_arrondissements.py et versionnées ici (ORA-104).
+QUARTIERS_GEOJSON = os.path.join(DATA_DIR, 'lyon_arrondissements.geojson')
 
 # --- 2. DATA & COULEURS ---
 COLORS = {
@@ -131,6 +134,20 @@ def write_map_metadata(metadata_path, output_html=None, extra=None):
 
     logger.info("Métadonnées de la carte écrites dans %s (generated_at=%s)", metadata_path, generated_at)
     return metadata
+
+
+def load_geojson_file(path):
+    """Charge un fichier GeoJSON versionné dans le repo (ex: limites des
+    arrondissements, ORA-104). Renvoie None si le fichier est absent ou
+    invalide plutôt que de faire planter la génération de la carte."""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("GeoJSON illisible (%s) : %s", path, e)
+        return None
 
 
 def build_bridge_message_script(map_js_var_name):
@@ -312,6 +329,26 @@ def main():
 
         except Exception as e:
             print(f"⚠️ Erreur lors du traitement de metro_lyon.json : {e}")
+
+    # --- 6bis. LIMITES DES QUARTIERS (ARRONDISSEMENTS), ORA-104 ---
+    quartiers_geojson = load_geojson_file(QUARTIERS_GEOJSON)
+    if quartiers_geojson:
+        folium.GeoJson(
+            quartiers_geojson,
+            name='Quartiers',
+            show=False,  # Off par défaut, cohérent avec Nuisance/Gentrification/Superstition
+            style_function=lambda feature: {
+                'fillColor': '#a78bfa',
+                'color': '#a78bfa',
+                'weight': 2,
+                'fillOpacity': 0.06,
+            },
+            highlight_function=lambda feature: {'fillOpacity': 0.18, 'weight': 3},
+            tooltip=folium.GeoJsonTooltip(fields=['nom'], aliases=['Quartier :']),
+        ).add_to(m)
+        print(f"🗺️ Quartiers chargés : {len(quartiers_geojson.get('features', []))} arrondissements tracés.")
+    else:
+        print(f"⚠️ GeoJSON des quartiers introuvable ou invalide ({QUARTIERS_GEOJSON}), couche ignorée.")
 
     # --- 7. CAVALIERS ---
     mapping_simple = {'vice': (fg_vice, COLORS['Vice']), 'gentrification': (fg_gentri, COLORS['Gentrification']), 'nuisance': (fg_nuisance, COLORS['Nuisance']), 'superstition': (fg_superstition, COLORS['Superstition'])}

@@ -288,13 +288,15 @@ Deux points du pipeline étaient en dur sur Lyon indépendamment de `scraping_co
 
 ### 🗺️ Génération de la carte
 
-Un seul pipeline fait foi : **`backend/scripts/generate_map.py`**. À partir de `master_immo_final.csv`, `cavaliers_lyon.csv` et `metro_lyon.json`, il génère la carte Folium interactive `frontend/public/data/map_pings_lyon_calques.html`, réellement servie par `MapComponent.jsx` (iframe). Comme pour le reste des données du projet, le fichier généré est **versionné dans git** ; régénérez-le après toute mise à jour des données sources :
+Un seul pipeline fait foi : **`backend/scripts/generate_map.py`**. À partir de `master_immo_final.csv`, `cavaliers_lyon.csv`, `metro_lyon.json` et `lyon_arrondissements.geojson`, il génère la carte Folium interactive `frontend/public/data/map_pings_lyon_calques.html`, réellement servie par `MapComponent.jsx` (iframe). Comme pour le reste des données du projet, le fichier généré est **versionné dans git** ; régénérez-le après toute mise à jour des données sources :
 
 ```bash
 python backend/scripts/generate_map.py
 ```
 
 (L'ancien second pipeline concurrent — `backend/services/map_generator.py` → `backend/static/map_lyon.html`, orphelin, sans route ni DAG l'appelant — a été supprimé ; voir ORA-50.)
+
+**Calque "Quartiers"** (ORA-104) : les limites des 9 arrondissements de Lyon (`backend/data/lyon_arrondissements.geojson`, © contributeurs OpenStreetMap, ODbL 1.0) sont dessinées en polygones (`folium.GeoJson`, off par défaut comme Nuisance/Gentrification/Superstition), avec libellé au survol. Données récupérées une fois via `backend/scripts/fetch_lyon_arrondissements.py` (Nominatim) et versionnées dans le repo — aucune dépendance réseau à runtime. Le fichier des messages postMessage échangés pour piloter les calques (`TOGGLE_LAYER`) est documenté dans [`MAP_CONTRACT.md`](./MAP_CONTRACT.md).
 
 ### 🧪 Tests frontend (Vitest + E2E Playwright)
 

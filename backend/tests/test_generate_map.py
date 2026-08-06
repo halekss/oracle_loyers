@@ -201,5 +201,33 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("e.data.bounds", script)
 
 
+class LoadGeojsonFileTest(unittest.TestCase):
+    """ORA-104 : chargement de la couche GeoJSON des quartiers, versionnée
+    dans le repo (pas de dépendance réseau à runtime)."""
+
+    def test_returns_none_when_the_file_does_not_exist(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_path = os.path.join(tmp_dir, "missing.geojson")
+
+            self.assertIsNone(generate_map.load_geojson_file(missing_path))
+
+    def test_loads_a_valid_geojson_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "quartiers.geojson")
+            geojson = {"type": "FeatureCollection", "features": [{"type": "Feature"}]}
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(geojson, f)
+
+            self.assertEqual(generate_map.load_geojson_file(path), geojson)
+
+    def test_returns_none_for_invalid_json(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "broken.geojson")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("{not valid json")
+
+            self.assertIsNone(generate_map.load_geojson_file(path))
+
+
 if __name__ == "__main__":
     unittest.main()

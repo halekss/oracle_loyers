@@ -127,4 +127,44 @@ describe('MapComponent', () => {
 
     expect(postMessage).not.toHaveBeenCalled();
   });
+
+  it('shows a Quartiers toggle', () => {
+    render(<MapComponent center={null} />);
+    expect(screen.getByText('Quartiers')).toBeInTheDocument();
+  });
+
+  it('syncs Quartiers as off by default when the iframe loads (ORA-104)', () => {
+    render(<MapComponent center={null} />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    iframe.dispatchEvent(new Event('load'));
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'TOGGLE_LAYER', name: 'Quartiers', show: false },
+      window.location.origin,
+    );
+  });
+
+  it('toggling Quartiers sends TOGGLE_LAYER with name Quartiers (ORA-104)', async () => {
+    const user = userEvent.setup();
+    render(<MapComponent center={null} />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    await user.click(screen.getByText('Quartiers'));
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'TOGGLE_LAYER', name: 'Quartiers', show: true },
+      window.location.origin,
+    );
+  });
 });

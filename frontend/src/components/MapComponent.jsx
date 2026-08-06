@@ -18,7 +18,8 @@ const LAYER_MAPPING = {
   'Vice': 'Vice',
   'Nuisance': 'Nuisance',
   'Gentrification': 'Gentrification',
-  'Superstition': 'Superstition'
+  'Superstition': 'Superstition',
+  'Quartiers': 'Quartiers' // Limites des arrondissements (ORA-104)
 };
 
 const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
@@ -59,7 +60,8 @@ export default function MapComponent({ center, bounds }) {
     'Vice': true,
     'Nuisance': false,
     'Gentrification': false,
-    'Superstition': false
+    'Superstition': false,
+    'Quartiers': false
   });
 
   useEffect(() => {
@@ -181,6 +183,7 @@ export default function MapComponent({ center, bounds }) {
             <ToggleItem label="Gentrification" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
             <ToggleItem label="Nuisance" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
             <ToggleItem label="Superstition" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
+            <ToggleItem label="Quartiers" color="#a78bfa" isActive={layers['Quartiers']} onToggle={() => toggleLayer('Quartiers')} />
           </details>
           
           <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Offres Immobilières</h3>
