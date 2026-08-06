@@ -61,6 +61,10 @@ logger = get_scraper_logger("prune_dead_map_listings")
 
 MASTER_CSV_PATH = os.path.join(backend_dir, "data", "master_immo_final.csv")
 GENERATE_MAP_SCRIPT = os.path.join(backend_dir, "scripts", "generate_map.py")
+# generate_map.py dépend de folium/pandas installés dans backend/.venv, pas
+# scripts/.venv (Selenium) : sys.executable pointerait vers le mauvais
+# interpréteur puisque ce script tourne sous scripts/.venv.
+BACKEND_PYTHON = os.path.join(backend_dir, ".venv", "bin", "python")
 
 
 def _write_csv_atomically(df, path):
@@ -84,6 +88,7 @@ def prune_dead_map_listings(
     browser_checker=check_url_status_browser,
     driver_factory=None,
     generate_map_script=GENERATE_MAP_SCRIPT,
+    map_python=BACKEND_PYTHON,
 ):
     """Vérifie chaque url de `csv_path` (HTTP puis navigateur headless pour les
     ambiguës) et retire les lignes confirmées mortes (sauf `dry_run=True`).
@@ -149,7 +154,7 @@ def prune_dead_map_listings(
 
         if regenerate_map:
             logger.info("Régénération de la carte (generate_map.py)...")
-            subprocess.run([sys.executable, generate_map_script], check=True)
+            subprocess.run([map_python, generate_map_script], check=True)
 
     logger.info(
         "Terminé : %s lignes vérifiées, %s mortes (%s supprimées%s), %s toujours ambiguës.",
