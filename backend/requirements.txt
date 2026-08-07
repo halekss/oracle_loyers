@@ -19,6 +19,7 @@ pydantic
 sentry-sdk[flask]
 
 # Utilitaires ---
+aiohttp
 requests
 tqdm
 folium
