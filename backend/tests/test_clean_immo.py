@@ -127,6 +127,67 @@ class StepFlagExpiredTest(unittest.TestCase):
         self.assertEqual(disparue["statut"], "a_verifier",
                          "Disparue from CSV without statut should default to a_verifier")
 
+    def test_inactive_row_missing_from_new_scrape_survives_as_inactive(self):
+        # Finding 1 (final review, critical): a url already confirmed
+        # `inactive` by verify_annonces_async.py that stops appearing in
+        # future scrapes (it's dead, that's the whole point) must NOT be
+        # dropped from the output of step_flag_expired. Before the fix, the
+        # disparues selection excluded already-inactive rows, so this url
+        # would silently vanish from master_immo_final.csv on the next
+        # weekly pipeline run -- exactly the destructive behaviour ORA-134
+        # bis exists to eliminate.
+        previous = pd.DataFrame({
+            "url": ["https://example.com/confirmed-dead"],
+            "statut": ["inactive"],
+            "derniere_verification_http": ["2026-08-01T00:00:00+00:00"],
+        })
+        previous.to_csv(self.csv_path, index=False)
+
+        # Fresh scrape does NOT contain this url at all (it's dead, so it no
+        # longer appears on the source site).
+        df = pd.DataFrame({
+            "url": ["https://example.com/other"],
+            "date_dernier_scan": [pd.Timestamp.now(tz="UTC").isoformat()],
+        })
+
+        result = step_flag_expired(df, previous_csv_path=self.csv_path)
+
+        urls = list(result["url"])
+        self.assertIn("https://example.com/confirmed-dead", urls,
+                       "an inactive row absent from the fresh scrape must survive, not be dropped")
+        row = result[result["url"] == "https://example.com/confirmed-dead"].iloc[0]
+        self.assertEqual(row["statut"], "inactive",
+                          "an inactive row that disappears from the scrape must stay inactive, not reset to a_verifier")
+
+    def test_recent_http_verification_keeps_active_despite_stale_scan(self):
+        # Finding 2 (final review, important): verify_annonces_async.py
+        # confirms a row active with a fresh derniere_verification_http.
+        # The next weekly clean_immo.py run should not downgrade it back to
+        # a_verifier just because date_dernier_scan is stale/missing this
+        # run -- that creates a permanent daily flip-flop loop with the
+        # nightly verifier.
+        recent_verif = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1)).isoformat()
+        previous = pd.DataFrame({
+            "url": ["https://example.com/http-verified"],
+            "statut": ["active"],
+            "derniere_verification_http": [recent_verif],
+        })
+        previous.to_csv(self.csv_path, index=False)
+
+        # Fresh scrape's date_dernier_scan for this row is stale (beyond
+        # ttl_days), simulating a scraper that didn't re-see the listing.
+        stale_scan = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=20)).isoformat()
+        df = pd.DataFrame({
+            "url": ["https://example.com/http-verified"],
+            "date_dernier_scan": [stale_scan],
+        })
+
+        result = step_flag_expired(df, previous_csv_path=self.csv_path, ttl_days=14)
+
+        row = result[result["url"] == "https://example.com/http-verified"].iloc[0]
+        self.assertEqual(row["statut"], "active",
+                          "a recent HTTP verification should keep the row active despite a stale/missing scan date")
+
     def test_derniere_verification_http_preserved_for_matched_rows(self):
         # Finding 2 fix: derniere_verification_http from previous CSV should be
         # merged into matched rows, not just for disparues. This preserves

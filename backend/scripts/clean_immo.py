@@ -92,6 +92,19 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
       scraping depuis trop longtemps), ou absente du scrape courant mais
       présente précédemment et pas déjà `inactive` : `statut='a_verifier'` —
       candidate pour `verify_annonces_async.py`, jamais supprimée ici.
+    - Exception à la règle précédente : si la ligne était `active` et que
+      `derniere_verification_http` (posée par `verify_annonces_async.py`) est
+      encore récente (<= ttl_days), elle reste `active` même si
+      `date_dernier_scan` est stale/absent ce run — la confirmation HTTP est
+      plus autoritaire que l'absence de re-scan, et l'écraser créerait une
+      boucle de flip-flop quotidienne active <-> a_verifier.
+    - Ligne absente du scrape courant (url introuvable dans `df`) : jamais
+      supprimée, quel que soit son statut précédent — y compris `inactive`
+      (une ligne `inactive` est, par construction, absente de tous les
+      scrapes futurs ; l'exclure ici la ferait disparaître silencieusement de
+      `master_immo_final.csv`, ce que cette fonction existe justement pour
+      empêcher). Elle est réinjectée via `disparues` ci-dessous, qui conserve
+      `inactive` tel quel et flague le reste en `a_verifier`.
 
     Conservateur par construction, comme l'ancien `step_prune_expired` : une
     ligne sans `date_dernier_scan` exploitable est traitée comme "non
@@ -117,6 +130,7 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
 
     previous_statut = {}
     previous_derniere_verif = {}
+    previous_verif_recente = {}
     previous_df = None
     if os.path.exists(previous_csv_path):
         previous_df = pd.read_csv(previous_csv_path)
@@ -124,6 +138,14 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
             previous_statut = dict(zip(previous_df['url'], previous_df['statut']))
         if 'derniere_verification_http' in previous_df.columns and 'url' in previous_df.columns:
             previous_derniere_verif = dict(zip(previous_df['url'], previous_df['derniere_verification_http']))
+            # Même pattern ttl_days/reference_date que `vue_recemment` ci-dessus,
+            # appliqué cette fois à `derniere_verification_http` (le signal de
+            # confirmation du vérificateur HTTP, plus autoritaire et parfois
+            # plus récent que `date_dernier_scan` du scraper — Finding 2).
+            verif_dates = pd.to_datetime(previous_df['derniere_verification_http'], errors='coerce', utc=True)
+            age_verif_jours = (reference_date - verif_dates).dt.days
+            recent_mask = age_verif_jours <= ttl_days
+            previous_verif_recente = dict(zip(previous_df['url'], recent_mask))
 
     nouveau_statut = []
     nouveau_derniere_verif = []
@@ -132,6 +154,12 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
         if ancien == 'inactive':
             nouveau_statut.append('inactive')
         elif deja_vu:
+            nouveau_statut.append('active')
+        elif ancien == 'active' and previous_verif_recente.get(url, False):
+            # date_dernier_scan est stale/absente ce run, mais le vérificateur
+            # HTTP (verify_annonces_async.py) a confirmé la ligne vivante plus
+            # récemment que ttl_days : on ne l'écrase pas en a_verifier (sinon
+            # boucle de flip-flop quotidienne active <-> a_verifier).
             nouveau_statut.append('active')
         elif ancien is not None:
             nouveau_statut.append('a_verifier')
@@ -143,25 +171,32 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
     df['statut'] = nouveau_statut
     df['derniere_verification_http'] = nouveau_derniere_verif
 
-    # Lignes disparues du scrape courant (url absente de `df`) mais connues
-    # précédemment et pas déjà inactive : conservées avec statut a_verifier
-    # plutôt que perdues (ORA-134 bis, étape 3.1 — "toute annonce absente du
-    # nouveau scrape passe en à vérifier, pas supprimée directement").
+    # Lignes disparues du scrape courant (url absente de `df`), quel que soit
+    # leur statut précédent (y compris `inactive` — Finding 1 : une ligne déjà
+    # inactive est PAR DÉFINITION absente de tous les scrapes futurs ; l'exclure
+    # ici la supprimerait silencieusement de master_immo_final.csv à chaque run
+    # hebdomadaire, exactement la destruction que ce correctif ORA-134 bis
+    # existe pour éliminer, et désynchroniserait annonces.db, qui n'est
+    # qu'upserté et ne serait jamais notifié de la suppression). Conservées
+    # toujours, jamais perdues (ORA-134 bis, étape 3.1 — "toute annonce absente
+    # du nouveau scrape passe en à vérifier, pas supprimée directement").
     if os.path.exists(previous_csv_path) and previous_df is not None and 'url' in previous_df.columns:
         urls_courantes = set(df['url'])
-        # Build properly-indexed statut series to avoid silent row drops when column is missing
-        statut_series = previous_df['statut'] if 'statut' in previous_df.columns else pd.Series('active', index=previous_df.index)
         disparues = previous_df[
             ~previous_df['url'].isin(urls_courantes)
-            & (statut_series != 'inactive')
         ].copy()
         if len(disparues):
-            # Ensure disparues has a statut column (default to a_verifier if missing)
+            # Ensure disparues has a statut column (default to a_verifier if missing).
+            # Le lambda ci-dessous n'est PAS du code mort malgré les apparences :
+            # il préserve `inactive` tel quel et ne flague en `a_verifier` que le
+            # reste, maintenant que le filtre ci-dessus laisse bien passer les
+            # lignes inactive jusqu'ici (avant le fix Finding 1, elles étaient
+            # déjà exclues plus haut et ce lambda ne voyait jamais 'inactive').
             if 'statut' not in disparues.columns:
                 disparues['statut'] = 'a_verifier'
             else:
                 disparues['statut'] = disparues['statut'].apply(lambda s: s if s == 'inactive' else 'a_verifier')
-            print(f"   ↩️  {len(disparues)} annonce(s) absente(s) du scrape courant, conservée(s) en a_verifier.")
+            print(f"   ↩️  {len(disparues)} annonce(s) absente(s) du scrape courant, conservée(s) (a_verifier ou inactive).")
             df = pd.concat([df, disparues], ignore_index=True, sort=False)
 
     counts = df['statut'].value_counts().to_dict()
@@ -429,15 +464,26 @@ def step_sync_annonces_store(df, db_path=ANNONCES_DB_PATH):
     annonces_store.init_db(db_path)
 
     synced = 0
-    skipped = 0
+    skipped_url = 0
+    skipped_autre = 0
     for _, row in df.iterrows():
         url = row.get('url')
         if not isinstance(url, str) or not url.strip():
-            skipped += 1
+            skipped_url += 1
             continue
 
         image = row.get('image')
         images = [image] if isinstance(image, str) and image.strip() else None
+
+        # Finding 5 : une valeur de statut corrompue/invalide ne doit pas se
+        # propager telle quelle jusqu'à upsert_annonce (qui lève ValueError
+        # pour un statut hors STATUTS_VALIDES) — sinon la ligne finit
+        # silencieusement ignorée et journalisée comme "url manquante", ce qui
+        # est faux et masque le vrai problème. On coerce vers 'a_verifier',
+        # la valeur par défaut prudente déjà utilisée ailleurs dans ce module
+        # (cf. step_flag_expired) pour un statut inconnu/indéterminé.
+        statut_brut = row.get('statut') or 'active'
+        statut = statut_brut if statut_brut in STATUTS_VALIDES else 'a_verifier'
 
         try:
             annonces_store.upsert_annonce(
@@ -448,17 +494,25 @@ def step_sync_annonces_store(df, db_path=ANNONCES_DB_PATH):
                 quartier=row.get('quartier') or None,
                 url=url,
                 images=images,
-                statut=row.get('statut') or 'active',
+                statut=statut,
                 derniere_verification=row.get('derniere_verification_http') or None,
                 db_path=db_path,
             )
             synced += 1
-        except ValueError:
-            # url vide/blanche après strip malgré le filtre ci-dessus (garde-fou) :
-            # upsert_annonce lève ValueError plutôt que d'insérer une ligne invalide.
-            skipped += 1
+        except ValueError as exc:
+            # Deux causes distinctes possibles malgré le filtre ci-dessus (garde-fou) :
+            # url vide/blanche après strip (le cas attendu), ou toute autre
+            # ValueError inattendue d'upsert_annonce (ex. contrainte future) —
+            # on les distingue pour ne pas mentir dans le log ci-dessous.
+            if "url" in str(exc).lower():
+                skipped_url += 1
+            else:
+                skipped_autre += 1
+                print(f"   ⚠️  Ligne ignorée (erreur upsert, pas url) : {exc}")
 
-    print(f"   ✅ {synced} annonces synchronisées, {skipped} ignorées (url manquante).")
+    skipped = skipped_url + skipped_autre
+    print(f"   ✅ {synced} annonces synchronisées, {skipped} ignorées "
+          f"({skipped_url} url manquante, {skipped_autre} autre erreur).")
     return df
 
 # =============================================================================

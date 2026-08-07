@@ -250,3 +250,102 @@ class VerifyAnnoncesTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(os.path.getmtime(self.csv_path), original_mtime)
+
+    async def test_ambiguous_result_does_not_stamp_verification_timestamp(self):
+        # Finding 3 (final review, important): an ambiguous (None) result must
+        # NOT be recorded as a successful verification. Stamping
+        # derniere_verification_http on an inconclusive result suppresses
+        # re-verification for the full ttl_days window based on a single
+        # failed attempt -- and given SeLoger's near-100% CAPTCHA/403 rate,
+        # ambiguous is the dominant case, not an edge case.
+        pd.DataFrame({
+            "url": ["https://example.com/ambiguous-only"],
+            "statut": ["a_verifier"],
+            "derniere_verification_http": [""],
+        }).to_csv(self.csv_path, index=False)
+
+        async def fake_checker(url, session, timeout=10):
+            return None
+
+        await verify_annonces_async.verify_annonces(
+            csv_path=self.csv_path, db_path=self.db_path, checker=fake_checker,
+        )
+
+        result_df = pd.read_csv(self.csv_path)
+        row = result_df[result_df["url"] == "https://example.com/ambiguous-only"].iloc[0]
+        self.assertTrue(
+            pd.isna(row["derniere_verification_http"]) or row["derniere_verification_http"] == "",
+            "ambiguous result must leave derniere_verification_http unchanged (still empty), not stamp a fresh timestamp",
+        )
+
+    async def test_stats_have_no_misleading_network_errors_key(self):
+        # Finding 6 (final review, important): network_errors always equalled
+        # still_ambiguous in lockstep (it never distinguished a genuine
+        # network failure from an ambiguous HTTP status), so the stat -- and
+        # the "(dont N erreurs réseau)" log clause -- actively misled
+        # operators. The fix removes it entirely rather than leave a fake
+        # distinction in place.
+        async def fake_checker(url, session, timeout=10):
+            return None
+
+        stats = await verify_annonces_async.verify_annonces(
+            csv_path=self.csv_path, db_path=self.db_path, checker=fake_checker,
+        )
+
+        self.assertNotIn("network_errors", stats)
+        self.assertEqual(stats["still_ambiguous"], 3)
+
+    async def test_malformed_url_does_not_crash_the_whole_batch(self):
+        # Finding 4 (final review, important): a NaN/non-string url mixed in
+        # among otherwise-valid eligible rows must not crash verify_annonces
+        # via an uncaught TypeError propagating out of asyncio.gather --
+        # which would discard results for every other successfully-checked
+        # row in the batch before any CSV write or DB sync happens.
+        pd.DataFrame({
+            "url": ["https://example.com/valid-dead", float("nan"), "https://example.com/valid-alive"],
+            "statut": ["a_verifier", "a_verifier", "a_verifier"],
+        }).to_csv(self.csv_path, index=False)
+
+        async def fake_checker(url, session, timeout=10):
+            return {"https://example.com/valid-dead": True,
+                    "https://example.com/valid-alive": False}[url]
+
+        stats = await verify_annonces_async.verify_annonces(
+            csv_path=self.csv_path, db_path=self.db_path, checker=fake_checker,
+        )
+
+        result_df = pd.read_csv(self.csv_path)
+        self.assertEqual(len(result_df), 3, "no row should be dropped, including the malformed-url one")
+        statuts = dict(zip(result_df["url"], result_df["statut"]))
+        self.assertEqual(statuts["https://example.com/valid-dead"], "inactive")
+        self.assertEqual(statuts["https://example.com/valid-alive"], "active")
+        self.assertEqual(stats["confirmed_dead"], 1)
+        self.assertEqual(stats["reconfirmed_alive"], 1)
+
+    async def test_checker_exception_treated_as_ambiguous_not_crash(self):
+        # Finding 4 defense-in-depth: even if a bad row slips past
+        # _rows_to_verify's url filter, an unexpected exception from the
+        # checker itself (e.g. TypeError from a malformed input) must not
+        # propagate out of asyncio.gather and abort the whole batch.
+        pd.DataFrame({
+            "url": ["https://example.com/boom", "https://example.com/valid-alive"],
+            "statut": ["a_verifier", "a_verifier"],
+        }).to_csv(self.csv_path, index=False)
+
+        async def flaky_checker(url, session, timeout=10):
+            if url == "https://example.com/boom":
+                raise TypeError("simulated malformed-url crash")
+            return False
+
+        stats = await verify_annonces_async.verify_annonces(
+            csv_path=self.csv_path, db_path=self.db_path, checker=flaky_checker,
+        )
+
+        result_df = pd.read_csv(self.csv_path)
+        self.assertEqual(len(result_df), 2)
+        statuts = dict(zip(result_df["url"], result_df["statut"]))
+        self.assertEqual(statuts["https://example.com/valid-alive"], "active")
+        self.assertEqual(statuts["https://example.com/boom"], "a_verifier",
+                          "row whose checker raised must be treated as ambiguous, staying a_verifier")
+        self.assertEqual(stats["reconfirmed_alive"], 1)
+        self.assertEqual(stats["still_ambiguous"], 1)

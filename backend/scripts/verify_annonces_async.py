@@ -82,7 +82,15 @@ async def check_url_status_async(url, session, timeout=DEFAULT_TIMEOUT_SECONDS):
 
 def _rows_to_verify(df, ttl_days, reference_date=None):
     """Sélectionne les lignes à vérifier : statut a_verifier, ou active avec
-    derniere_verification_http absente/dépassant ttl_days."""
+    derniere_verification_http absente/dépassant ttl_days.
+
+    Exclut aussi toute ligne dont `url` n'est pas une chaîne non vide
+    (Finding 4) : une url NaN/malformée provoque un TypeError dans
+    check_url_status_async (`aiohttp` construit une requête à partir de
+    l'url), qui n'est pas un cas couvert par le contrat True/False/None du
+    checker. Même garde que `step_sync_annonces_store` dans clean_immo.py
+    (`if not isinstance(url, str): skip`), qui rencontre déjà ce genre de
+    ligne malformée en pratique."""
     reference_date = reference_date or pd.Timestamp.now(tz='UTC')
     if 'derniere_verification_http' in df.columns:
         derniere_verif = pd.to_datetime(df['derniere_verification_http'], errors='coerce', utc=True)
@@ -90,7 +98,8 @@ def _rows_to_verify(df, ttl_days, reference_date=None):
         active_stale = (df['statut'] == 'active') & (age_jours.isna() | (age_jours > ttl_days))
     else:
         active_stale = df['statut'] == 'active'
-    return df[(df['statut'] == 'a_verifier') | active_stale].index
+    url_valide = df['url'].apply(lambda u: isinstance(u, str) and bool(u.strip()))
+    return df[((df['statut'] == 'a_verifier') | active_stale) & url_valide].index
 
 
 async def verify_annonces(
@@ -113,14 +122,23 @@ async def verify_annonces(
     to_check = _rows_to_verify(df, ttl_days)
     logger.info("%s annonce(s) éligible(s) à la vérification HTTP.", len(to_check))
 
-    stats = {"checked": 0, "confirmed_dead": 0, "reconfirmed_alive": 0, "still_ambiguous": 0, "network_errors": 0}
+    stats = {"checked": 0, "confirmed_dead": 0, "reconfirmed_alive": 0, "still_ambiguous": 0}
     semaphore = asyncio.Semaphore(concurrency)
     now_iso = pd.Timestamp.now(tz='UTC').isoformat()
 
     async def _check_one(idx, url):
         async with semaphore:
             await asyncio.sleep(random.uniform(0.1, 0.3))  # jitter, évite une rafale synchronisée
-            status = await checker(url, session)
+            try:
+                status = await checker(url, session)
+            except Exception as exc:
+                # Défense en profondeur (Finding 4) : une ligne inattendue (url
+                # malformée passée entre les mailles de _rows_to_verify, ou
+                # toute autre exception imprévue du checker) ne doit jamais
+                # faire échouer tout le batch via asyncio.gather -- traitée
+                # comme un résultat ambigu (None), au même titre qu'un 403/5xx.
+                logger.warning("Erreur inattendue pour %s (%s) : conservée par prudence.", url, exc)
+                status = None
             return idx, status
 
     async with aiohttp.ClientSession() as session:
@@ -139,14 +157,20 @@ async def verify_annonces(
             df.at[idx, 'derniere_verification_http'] = now_iso
             stats["reconfirmed_alive"] += 1
         else:
-            df.at[idx, 'derniere_verification_http'] = now_iso  # évite un re-check immédiat en boucle
+            # Finding 3 : résultat ambigu (403/5xx/timeout/exception imprévue) —
+            # on ne sait PAS si l'annonce est vivante ou morte, donc on ne
+            # touche pas derniere_verification_http. Le stamper à now_iso ici
+            # enregistrerait un "on ne sait pas" comme "vérifié à l'instant",
+            # ce qui suspendrait toute re-vérification d'une ligne active-stale
+            # pendant tout ttl_days sur la foi d'un seul essai raté -- le cas
+            # dominant, pas un cas limite, vu le taux de blocage anti-bot
+            # attendu sur SeLoger.
             stats["still_ambiguous"] += 1
-            stats["network_errors"] += 1
 
     logger.info(
-        "Terminé : %s vérifiées, %s confirmées mortes, %s re-confirmées vivantes, %s toujours ambiguës (dont %s erreurs réseau).",
+        "Terminé : %s vérifiées, %s confirmées mortes, %s re-confirmées vivantes, %s toujours ambiguës.",
         stats["checked"], stats["confirmed_dead"], stats["reconfirmed_alive"],
-        stats["still_ambiguous"], stats["network_errors"],
+        stats["still_ambiguous"],
     )
 
     if not dry_run and len(to_check) > 0:

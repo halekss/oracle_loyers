@@ -196,6 +196,35 @@ class StepSyncAnnoncesStoreTest(unittest.TestCase):
             annonces = annonces_store.list_annonces(db_path=db_path)
             self.assertEqual(annonces["total"], 0)
 
+    def test_invalid_statut_is_coerced_not_silently_dropped(self):
+        # Finding 5 (final review, important): a corrupted/invalid `statut`
+        # value used to propagate verbatim to upsert_annonce, which raises
+        # ValueError for any statut outside STATUTS_VALIDES -- caught by a
+        # bare `except ValueError` and mis-logged as "url manquante". The row
+        # should instead be coerced to the safe conservative default
+        # ('a_verifier') and actually synced to the store.
+        import tempfile
+
+        from services import annonces_store
+
+        df = pd.DataFrame([
+            {"type_local": "T2", "quartier": "Part-Dieu", "prix": 750, "surface": 45,
+             "ville": "Lyon", "url": "https://example.com/corrupted-statut", "image": None,
+             "statut": "garbage_value_not_in_statuts_valides"},
+        ])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = os.path.join(tmp_dir, "annonces.db")
+
+            clean_immo.step_sync_annonces_store(df, db_path=db_path)
+
+            annonce = annonces_store.get_annonce_by_url(
+                "https://example.com/corrupted-statut", db_path=db_path
+            )
+            self.assertIsNotNone(annonce, "row with invalid statut must still be synced, not silently dropped")
+            self.assertEqual(annonce["statut"], "a_verifier",
+                              "invalid statut must be coerced to the safe default, not passed through raw")
+
     def test_rerun_upserts_instead_of_duplicating(self):
         import tempfile
 
