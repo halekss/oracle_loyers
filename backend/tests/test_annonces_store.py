@@ -178,6 +178,84 @@ class AnnoncesStoreTest(unittest.TestCase):
             conn.close()
         self.assertEqual(remaining_clics, 0)
 
+    def test_new_annonce_defaults_to_active_status(self):
+        annonce = annonces_store.upsert_annonce(
+            titre="T2 Gerland", url="https://example.com/annonce-statut-1",
+            db_path=self.db_path,
+        )
+        self.assertEqual(annonce["statut"], "active")
+        self.assertIsNone(annonce["derniere_verification"])
+
+    def test_existing_db_without_statut_column_is_migrated(self):
+        # Simule une base créée avant l'ajout de la colonne (schéma pré-migration).
+        conn = annonces_store.get_connection(self.db_path)
+        conn.execute("DROP TABLE annonces")
+        conn.execute(
+            """
+            CREATE TABLE annonces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                titre TEXT, prix REAL, surface REAL, ville TEXT, quartier TEXT,
+                url TEXT NOT NULL UNIQUE, date_scraping TEXT NOT NULL, images TEXT
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO annonces (titre, url, date_scraping) VALUES (?, ?, ?)",
+            ("Annonce pré-migration", "https://example.com/pre-migration", "2026-01-01T00:00:00+00:00"),
+        )
+        conn.commit()
+        conn.close()
+
+        annonces_store.init_db(self.db_path)  # doit ALTER TABLE sans lever d'exception
+
+        annonce = annonces_store.get_annonce_by_url("https://example.com/pre-migration", db_path=self.db_path)
+        self.assertIsNotNone(annonce, "la ligne pré-migration doit être conservée")
+        self.assertEqual(annonce["statut"], "active", "défaut rétroactif sûr pour les lignes existantes")
+
+    def test_update_statut_by_url(self):
+        annonces_store.upsert_annonce(titre="T3", url="https://example.com/annonce-statut-2", db_path=self.db_path)
+        updated = annonces_store.update_statut(
+            url="https://example.com/annonce-statut-2", statut="inactive",
+            derniere_verification="2026-08-07T10:00:00+00:00", db_path=self.db_path,
+        )
+        self.assertTrue(updated)
+        annonce = annonces_store.get_annonce_by_url("https://example.com/annonce-statut-2", db_path=self.db_path)
+        self.assertEqual(annonce["statut"], "inactive")
+        self.assertEqual(annonce["derniere_verification"], "2026-08-07T10:00:00+00:00")
+
+    def test_update_statut_rejects_invalid_value(self):
+        annonces_store.upsert_annonce(titre="T3", url="https://example.com/annonce-statut-3", db_path=self.db_path)
+        with self.assertRaises(ValueError):
+            annonces_store.update_statut(
+                url="https://example.com/annonce-statut-3", statut="supprime", db_path=self.db_path,
+            )
+
+    def test_update_statut_unknown_url_returns_false(self):
+        updated = annonces_store.update_statut(
+            url="https://example.com/inconnue", statut="inactive", db_path=self.db_path,
+        )
+        self.assertFalse(updated)
+
+    def test_list_annonces_excludes_inactive_by_default(self):
+        annonces_store.upsert_annonce(titre="Active", url="https://example.com/a", db_path=self.db_path)
+        annonces_store.upsert_annonce(titre="Morte", url="https://example.com/b", db_path=self.db_path)
+        annonces_store.update_statut(url="https://example.com/b", statut="inactive", db_path=self.db_path)
+
+        result = annonces_store.list_annonces(db_path=self.db_path)
+
+        titres = [a["titre"] for a in result["items"]]
+        self.assertIn("Active", titres)
+        self.assertNotIn("Morte", titres)
+
+    def test_list_annonces_explicit_statut_filter(self):
+        annonces_store.upsert_annonce(titre="Morte", url="https://example.com/c", db_path=self.db_path)
+        annonces_store.update_statut(url="https://example.com/c", statut="inactive", db_path=self.db_path)
+
+        result = annonces_store.list_annonces(statut="inactive", db_path=self.db_path)
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["titre"], "Morte")
+
 
 if __name__ == "__main__":
     unittest.main()
