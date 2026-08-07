@@ -216,6 +216,10 @@ def main():
             df_immo.columns = df_immo.columns.str.strip().str.lower()
             for col in ['latitude', 'longitude']:
                 if col in df_immo.columns: df_immo[col] = pd.to_numeric(df_immo[col], errors='coerce')
+            if 'statut' in df_immo.columns:
+                avant = len(df_immo)
+                df_immo = df_immo[df_immo['statut'] != 'inactive']
+                print(f"   🧹 {avant - len(df_immo)} annonce(s) inactive(s) exclue(s) de la carte statique.")
         else: df_immo = pd.DataFrame()
     except: df_immo = pd.DataFrame()
 

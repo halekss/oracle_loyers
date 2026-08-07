@@ -41,6 +41,12 @@ if not os.path.exists(data_path):
     print(f"❌ Erreur : Fichier introuvable {data_path}")
     exit()
 
+# ORA-134 bis : les annonces marquées `statut='inactive'` (confirmées mortes
+# côté site source) restent dans master_immo_final.csv et donc dans ce
+# dataset d'entraînement — décision produit assumée : leur prix historique
+# reste statistiquement valable pour le modèle même si le lien source a
+# expiré. Seuls les endpoints d'affichage utilisateur (/api/listings,
+# generate_map.py, /api/annonces) filtrent les inactive.
 df = pd.read_csv(data_path)
 
 # CIBLE

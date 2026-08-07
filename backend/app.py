@@ -268,7 +268,13 @@ def get_listings():
     df = data_loader.get_data()
     if df is None:
         return jsonify([])
-    
+
+    # Une annonce confirmée morte par le nettoyage (ORA-134 bis) ne doit plus
+    # apparaître sur la carte, même si elle reste dans le dataset (gardée pour
+    # l'historique de prix côté entraînement — cf. train_model.py).
+    if 'statut' in df.columns:
+        df = df[df['statut'] != 'inactive']
+
     # On renvoie les colonnes nécessaires uniquement et on gère les NaN
     data = df[['latitude', 'longitude', 'prix', 'type_local', 'quartier']].fillna('').to_dict(orient='records')
     return jsonify(data)
