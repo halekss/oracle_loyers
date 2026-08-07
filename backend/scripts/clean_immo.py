@@ -116,13 +116,17 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
         vue_recemment = pd.Series(False, index=df.index)
 
     previous_statut = {}
+    previous_derniere_verif = {}
     previous_df = None
     if os.path.exists(previous_csv_path):
         previous_df = pd.read_csv(previous_csv_path)
         if 'statut' in previous_df.columns and 'url' in previous_df.columns:
             previous_statut = dict(zip(previous_df['url'], previous_df['statut']))
+        if 'derniere_verification_http' in previous_df.columns and 'url' in previous_df.columns:
+            previous_derniere_verif = dict(zip(previous_df['url'], previous_df['derniere_verification_http']))
 
     nouveau_statut = []
+    nouveau_derniere_verif = []
     for url, deja_vu in zip(df['url'], vue_recemment):
         ancien = previous_statut.get(url)
         if ancien == 'inactive':
@@ -133,8 +137,11 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
             nouveau_statut.append('a_verifier')
         else:
             nouveau_statut.append('active')
+        # Merge derniere_verification_http from previous CSV for matched rows
+        nouveau_derniere_verif.append(previous_derniere_verif.get(url, ''))
     df = df.copy()
     df['statut'] = nouveau_statut
+    df['derniere_verification_http'] = nouveau_derniere_verif
 
     # Lignes disparues du scrape courant (url absente de `df`) mais connues
     # précédemment et pas déjà inactive : conservées avec statut a_verifier
@@ -142,12 +149,18 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
     # nouveau scrape passe en à vérifier, pas supprimée directement").
     if os.path.exists(previous_csv_path) and previous_df is not None and 'url' in previous_df.columns:
         urls_courantes = set(df['url'])
+        # Build properly-indexed statut series to avoid silent row drops when column is missing
+        statut_series = previous_df['statut'] if 'statut' in previous_df.columns else pd.Series('active', index=previous_df.index)
         disparues = previous_df[
             ~previous_df['url'].isin(urls_courantes)
-            & (previous_df.get('statut', pd.Series(dtype=object)) != 'inactive')
+            & (statut_series != 'inactive')
         ].copy()
         if len(disparues):
-            disparues['statut'] = disparues['statut'].apply(lambda s: s if s == 'inactive' else 'a_verifier')
+            # Ensure disparues has a statut column (default to a_verifier if missing)
+            if 'statut' not in disparues.columns:
+                disparues['statut'] = 'a_verifier'
+            else:
+                disparues['statut'] = disparues['statut'].apply(lambda s: s if s == 'inactive' else 'a_verifier')
             print(f"   ↩️  {len(disparues)} annonce(s) absente(s) du scrape courant, conservée(s) en a_verifier.")
             df = pd.concat([df, disparues], ignore_index=True, sort=False)
 

@@ -100,3 +100,52 @@ class StepFlagExpiredTest(unittest.TestCase):
         self.assertIn("https://example.com/disparue", urls)
         disparue = result[result["url"] == "https://example.com/disparue"].iloc[0]
         self.assertEqual(disparue["statut"], "a_verifier")
+
+    def test_previous_csv_without_statut_column_preserves_disparues(self):
+        # Finding 1 fix: When previous CSV lacks a statut column entirely,
+        # the disparues logic should still work (not drop rows silently).
+        # This represents the real state of backend/data/master_immo_final.csv
+        # before Task 1 ran.
+        previous = pd.DataFrame({
+            "url": ["https://example.com/disparue"],
+            "price": [900],
+            # NO statut column
+        })
+        previous.to_csv(self.csv_path, index=False)
+
+        df = pd.DataFrame({
+            "url": ["https://example.com/autre"],
+            "date_dernier_scan": [pd.Timestamp.now(tz="UTC").isoformat()],
+        })
+
+        result = step_flag_expired(df, previous_csv_path=self.csv_path)
+
+        urls = list(result["url"])
+        self.assertIn("https://example.com/disparue", urls,
+                      "Disparue from CSV without statut column must be preserved")
+        disparue = result[result["url"] == "https://example.com/disparue"].iloc[0]
+        self.assertEqual(disparue["statut"], "a_verifier",
+                         "Disparue from CSV without statut should default to a_verifier")
+
+    def test_derniere_verification_http_preserved_for_matched_rows(self):
+        # Finding 2 fix: derniere_verification_http from previous CSV should be
+        # merged into matched rows, not just for disparues. This preserves
+        # verification metadata that verify_annonces_async.py needs.
+        previous = pd.DataFrame({
+            "url": ["https://example.com/verified"],
+            "statut": ["inactive"],
+            "derniere_verification_http": ["2026-08-01T10:30:45+00:00"],
+        })
+        previous.to_csv(self.csv_path, index=False)
+
+        df = pd.DataFrame({
+            "url": ["https://example.com/verified"],
+            "date_dernier_scan": [pd.Timestamp.now(tz="UTC").isoformat()],
+        })
+
+        result = step_flag_expired(df, previous_csv_path=self.csv_path)
+
+        matched = result[result["url"] == "https://example.com/verified"].iloc[0]
+        self.assertEqual(matched["derniere_verification_http"],
+                         "2026-08-01T10:30:45+00:00",
+                         "derniere_verification_http from previous CSV must be merged for matched rows")
