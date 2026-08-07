@@ -59,6 +59,103 @@ FALLBACK_ZONES = {
 }
 
 # =============================================================================
+# CONSTANTS (statuts valides)
+# =============================================================================
+STATUTS_VALIDES = {"active", "a_verifier", "inactive"}
+
+# =============================================================================
+# ETAPE 0 : FUSION PRESERVANTE DU STATUT (ORA-134 bis)
+# =============================================================================
+def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=None):
+    """Fusionne `df` (résultat frais de data_fusion.py) avec le `master_immo_final.csv`
+    du run précédent pour calculer/préserver la colonne `statut` (ORA-134 bis).
+
+    Remplace l'ancien `step_prune_expired`, qui excluait purement et simplement
+    du dataframe les lignes dont `date_dernier_scan` dépassait `ttl_days` — un
+    ré-entraînement hebdomadaire du pipeline complet aurait alors effacé le
+    travail du DAG de nettoyage quotidien (`verify_annonces_async.py`, qui
+    marque `inactive` sans jamais supprimer de ligne). Ici, aucune ligne n'est
+    supprimée : on ne fait que calculer/reporter le `statut`.
+
+    Règles de fusion (clé = `url`, seul identifiant stable inter-runs — voir
+    Global Constraints du plan ORA-134 bis) :
+    - Ligne absente du CSV précédent (première apparition) : `statut='active'`.
+    - Ligne déjà `inactive` dans le CSV précédent : reste `inactive` (une
+      confirmation de mort par vérification HTTP n'est jamais écrasée par une
+      re-fusion — seul `verify_annonces_async.py` peut la faire repasser
+      `active` s'il la re-confirme vivante).
+    - Ligne présente dans `df` (le scrape frais) avec un `date_dernier_scan`
+      récent (<= ttl_days) : `statut='active'` — réapparaître dans un scrape
+      est une preuve directe de vie, y compris pour une ligne qui était
+      `a_verifier`.
+    - Ligne dont le `date_dernier_scan` dépasse `ttl_days` (non revue par le
+      scraping depuis trop longtemps), ou absente du scrape courant mais
+      présente précédemment et pas déjà `inactive` : `statut='a_verifier'` —
+      candidate pour `verify_annonces_async.py`, jamais supprimée ici.
+
+    Conservateur par construction, comme l'ancien `step_prune_expired` : une
+    ligne sans `date_dernier_scan` exploitable est traitée comme "non
+    confirmée récemment" (a_verifier si elle a un statut précédent, sinon
+    active par défaut faute d'information pour trancher plus fort).
+    """
+    print("\n🗑️  ETAPE 0 : Calcul du statut (fusion préservante, ORA-134 bis)...")
+
+    # Default values for optional parameters
+    if previous_csv_path is None:
+        previous_csv_path = OUTPUT_FINAL_CSV
+    if ttl_days is None:
+        ttl_days = TTL_JOURS_DERNIER_SCAN
+
+    reference_date = reference_date or pd.Timestamp.now(tz='UTC').normalize()
+
+    if 'date_dernier_scan' in df.columns:
+        dernier_scan = pd.to_datetime(df['date_dernier_scan'], errors='coerce', utc=True)
+        age_jours = (reference_date - dernier_scan).dt.days
+        vue_recemment = age_jours <= ttl_days  # NaN -> False (pas de preuve de fraîcheur)
+    else:
+        vue_recemment = pd.Series(False, index=df.index)
+
+    previous_statut = {}
+    previous_df = None
+    if os.path.exists(previous_csv_path):
+        previous_df = pd.read_csv(previous_csv_path)
+        if 'statut' in previous_df.columns and 'url' in previous_df.columns:
+            previous_statut = dict(zip(previous_df['url'], previous_df['statut']))
+
+    nouveau_statut = []
+    for url, deja_vu in zip(df['url'], vue_recemment):
+        ancien = previous_statut.get(url)
+        if ancien == 'inactive':
+            nouveau_statut.append('inactive')
+        elif deja_vu:
+            nouveau_statut.append('active')
+        elif ancien is not None:
+            nouveau_statut.append('a_verifier')
+        else:
+            nouveau_statut.append('active')
+    df = df.copy()
+    df['statut'] = nouveau_statut
+
+    # Lignes disparues du scrape courant (url absente de `df`) mais connues
+    # précédemment et pas déjà inactive : conservées avec statut a_verifier
+    # plutôt que perdues (ORA-134 bis, étape 3.1 — "toute annonce absente du
+    # nouveau scrape passe en à vérifier, pas supprimée directement").
+    if os.path.exists(previous_csv_path) and previous_df is not None and 'url' in previous_df.columns:
+        urls_courantes = set(df['url'])
+        disparues = previous_df[
+            ~previous_df['url'].isin(urls_courantes)
+            & (previous_df.get('statut', pd.Series(dtype=object)) != 'inactive')
+        ].copy()
+        if len(disparues):
+            disparues['statut'] = disparues['statut'].apply(lambda s: s if s == 'inactive' else 'a_verifier')
+            print(f"   ↩️  {len(disparues)} annonce(s) absente(s) du scrape courant, conservée(s) en a_verifier.")
+            df = pd.concat([df, disparues], ignore_index=True, sort=False)
+
+    counts = df['statut'].value_counts().to_dict()
+    print(f"   ✅ Statuts : {counts}")
+    return df
+
+# =============================================================================
 # ETAPE 1 : GEOCODING & JITTER (geocoding_jitter.py)
 # =============================================================================
 def build_shapes_from_cavaliers(cavaliers_csv_path=CAVALIERS_CSV):
@@ -338,6 +435,8 @@ def step_sync_annonces_store(df, db_path=ANNONCES_DB_PATH):
                 quartier=row.get('quartier') or None,
                 url=url,
                 images=images,
+                statut=row.get('statut') or 'active',
+                derniere_verification=row.get('derniere_verification_http') or None,
                 db_path=db_path,
             )
             synced += 1
@@ -372,7 +471,7 @@ def main():
     df_cavaliers = load_cavaliers(CAVALIERS_CSV)
 
     # 2. Exécution séquentielle en mémoire (orchestration pure, pas de logique métier ici)
-    df = step_prune_expired(df)
+    df = step_flag_expired(df)
     df = step_geocoding(df, CAVALIERS_CSV)
     df = step_quartiers(df)
     df = step_types(df)
