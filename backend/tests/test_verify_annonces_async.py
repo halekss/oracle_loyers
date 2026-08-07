@@ -13,6 +13,140 @@ from scripts import verify_annonces_async
 from services import annonces_store
 
 
+class RowsToVerifyTest(unittest.TestCase):
+    """Test the date-arithmetic logic of _rows_to_verify (TTL/staleness detection)."""
+
+    def test_active_row_stale_included(self):
+        """Row with statut='active' and derniere_verification_http older than ttl_days → included."""
+        df = pd.DataFrame({
+            "url": ["https://example.com/old"],
+            "statut": ["active"],
+            "derniere_verification_http": ["2026-07-20T00:00:00+00:00"],  # 18 days old from 2026-08-07
+        })
+        reference_date = pd.Timestamp("2026-08-07T12:00:00+00:00")
+        ttl_days = 15
+
+        result = verify_annonces_async._rows_to_verify(df, ttl_days, reference_date)
+
+        self.assertIn(0, result, "Stale active row should be included for re-verification")
+
+    def test_active_row_fresh_excluded(self):
+        """Row with statut='active' and derniere_verification_http within ttl_days → NOT included."""
+        df = pd.DataFrame({
+            "url": ["https://example.com/fresh"],
+            "statut": ["active"],
+            "derniere_verification_http": ["2026-08-05T00:00:00+00:00"],  # 2 days old
+        })
+        reference_date = pd.Timestamp("2026-08-07T12:00:00+00:00")
+        ttl_days = 15
+
+        result = verify_annonces_async._rows_to_verify(df, ttl_days, reference_date)
+
+        self.assertNotIn(0, result, "Fresh active row should be excluded from verification")
+
+    def test_active_row_missing_verification_timestamp_included(self):
+        """Row with statut='active' and missing/empty derniere_verification_http → included."""
+        df = pd.DataFrame({
+            "url": ["https://example.com/no-history"],
+            "statut": ["active"],
+            "derniere_verification_http": [""],  # No verification history
+        })
+        reference_date = pd.Timestamp("2026-08-07T12:00:00+00:00")
+        ttl_days = 15
+
+        result = verify_annonces_async._rows_to_verify(df, ttl_days, reference_date)
+
+        self.assertIn(0, result, "Active row with no verification history should be included")
+
+    def test_active_row_nan_verification_timestamp_included(self):
+        """Row with statut='active' and NaT derniere_verification_http → included."""
+        df = pd.DataFrame({
+            "url": ["https://example.com/nan-history"],
+            "statut": ["active"],
+            "derniere_verification_http": [pd.NaT],  # NaT from to_datetime
+        })
+        reference_date = pd.Timestamp("2026-08-07T12:00:00+00:00")
+        ttl_days = 15
+
+        result = verify_annonces_async._rows_to_verify(df, ttl_days, reference_date)
+
+        self.assertIn(0, result, "Active row with NaT verification timestamp should be included")
+
+    def test_a_verifier_row_always_included(self):
+        """Row with statut='a_verifier' regardless of derniere_verification_http → always included."""
+        df = pd.DataFrame({
+            "url": [
+                "https://example.com/verify-no-history",
+                "https://example.com/verify-old",
+                "https://example.com/verify-fresh",
+            ],
+            "statut": ["a_verifier", "a_verifier", "a_verifier"],
+            "derniere_verification_http": ["", "2026-08-01T00:00:00+00:00", "2026-08-06T00:00:00+00:00"],
+        })
+        reference_date = pd.Timestamp("2026-08-07T12:00:00+00:00")
+        ttl_days = 15
+
+        result = verify_annonces_async._rows_to_verify(df, ttl_days, reference_date)
+
+        self.assertEqual(len(result), 3, "All a_verifier rows should be included regardless of timestamp")
+        self.assertIn(0, result)
+        self.assertIn(1, result)
+        self.assertIn(2, result)
+
+    def test_inactive_row_always_excluded(self):
+        """Row with statut='inactive' → never included (even with stale/missing timestamp)."""
+        df = pd.DataFrame({
+            "url": ["https://example.com/inactive"],
+            "statut": ["inactive"],
+            "derniere_verification_http": [""],  # No history would normally trigger inclusion
+        })
+        reference_date = pd.Timestamp("2026-08-07T12:00:00+00:00")
+        ttl_days = 15
+
+        result = verify_annonces_async._rows_to_verify(df, ttl_days, reference_date)
+
+        self.assertNotIn(0, result, "Inactive row should never be included, even if stale/missing")
+
+    def test_mixed_statuses_correct_filtering(self):
+        """Integration test: mix of all statuses with various verification timestamps."""
+        df = pd.DataFrame({
+            "url": [
+                "https://example.com/a_verifier-old",
+                "https://example.com/a_verifier-fresh",
+                "https://example.com/active-stale",
+                "https://example.com/active-fresh",
+                "https://example.com/active-no-history",
+                "https://example.com/inactive-stale",
+                "https://example.com/inactive-no-history",
+            ],
+            "statut": [
+                "a_verifier",
+                "a_verifier",
+                "active",
+                "active",
+                "active",
+                "inactive",
+                "inactive",
+            ],
+            "derniere_verification_http": [
+                "2026-08-01T00:00:00+00:00",  # Old, but a_verifier → included
+                "2026-08-06T00:00:00+00:00",  # Fresh, but a_verifier → included
+                "2026-07-20T00:00:00+00:00",  # Stale active → included
+                "2026-08-05T00:00:00+00:00",  # Fresh active → excluded
+                "",  # No history, active → included
+                "2026-07-20T00:00:00+00:00",  # Stale, but inactive → excluded
+                "",  # No history, but inactive → excluded
+            ],
+        })
+        reference_date = pd.Timestamp("2026-08-07T12:00:00+00:00")
+        ttl_days = 15
+
+        result = verify_annonces_async._rows_to_verify(df, ttl_days, reference_date)
+
+        expected = {0, 1, 2, 4}  # Indices 0, 1 (a_verifier), 2, 4 (active stale or no history)
+        self.assertEqual(set(result), expected, "Mixed statuses should be filtered correctly")
+
+
 class CheckUrlStatusAsyncTest(unittest.IsolatedAsyncioTestCase):
     async def test_returns_true_on_404(self):
         session = MagicMock()
