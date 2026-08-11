@@ -26,6 +26,21 @@ describe('MapComponent', () => {
     expect(iframe.getAttribute('src')).toMatch(/^\/data\/map_pings_lyon_calques\.html/);
   });
 
+  it('points to the lille static map when ville=lille (ORA-71 POC)', () => {
+    render(<MapComponent center={null} ville="lille" />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    expect(iframe.getAttribute('src')).toMatch(/^\/data\/map_pings_lille_calques\.html/);
+  });
+
+  it('reloads the iframe src when ville changes after mount', () => {
+    const { rerender } = render(<MapComponent center={null} ville="lyon" />);
+    expect(screen.getByTitle('Carte Oracle').getAttribute('src')).toMatch(/map_pings_lyon_calques\.html/);
+
+    rerender(<MapComponent center={null} ville="lille" />);
+
+    expect(screen.getByTitle('Carte Oracle').getAttribute('src')).toMatch(/map_pings_lille_calques\.html/);
+  });
+
   it('shows the layer control panel open by default', () => {
     render(<MapComponent center={null} />);
     expect(screen.getByText('Contrôle des Calques')).toBeInTheDocument();

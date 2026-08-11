@@ -74,6 +74,10 @@ function App() {
   // part) : fermé par défaut pour laisser "Détails du quartier" toute la
   // hauteur de la colonne Oracle.
   const [isChatOpen, setIsChatOpen] = useState(false);
+  // Sélecteur de ville (ORA-71 POC) : ne change que la carte affichée et le
+  // bornage des recherches quartier/historique — les CSV/codes postaux
+  // Lyon/Lille restant jamais ambigus entre les deux villes.
+  const [ville, setVille] = useState('lyon');
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
   const facteurs = result?.facteurs || [];
@@ -114,7 +118,7 @@ function App() {
     setPriceHistory(null);
 
     try {
-      const data = await api.getQuartierStats(quartier, typeLocal);
+      const data = await api.getQuartierStats(quartier, typeLocal, ville);
 
       if (!data.found) {
         setError(data.message || "Aucun résultat trouvé.");
@@ -167,7 +171,7 @@ function App() {
 
       // Non bloquant : un échec ici ne doit pas gâcher un scan par ailleurs réussi.
       try {
-        const historyData = await api.getQuartierHistorique(data.quartier_detecte, typeLocal);
+        const historyData = await api.getQuartierHistorique(data.quartier_detecte, typeLocal, ville);
         setPriceHistory(historyData);
       } catch (historyErr) {
         console.error("Historique des prix indisponible :", historyErr);
@@ -195,7 +199,7 @@ function App() {
         >
           {shouldMountMap && (
             <ErrorBoundary fallback={makePanelFallback('La carte')}>
-              <MapComponent center={mapCenter} bounds={mapBounds} chatOpen={isChatOpen} />
+              <MapComponent center={mapCenter} bounds={mapBounds} chatOpen={isChatOpen} ville={ville} />
             </ErrorBoundary>
           )}
         </div>
@@ -210,9 +214,31 @@ function App() {
 
           {/* En-tête / Recherche */}
           <div className="shrink-0 p-4 md:p-5 border-b border-slate-800 bg-slate-950/50 z-20">
-            <h1 className="text-xl font-black tracking-tighter text-white mb-4">
-              ORACLE <span className="text-purple-500">DES LOYERS</span>
-            </h1>
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl font-black tracking-tighter text-white">
+                ORACLE <span className="text-purple-500">DES LOYERS</span>
+              </h1>
+
+              {/* Sélecteur de ville (ORA-71 POC) : ne change que la carte
+                  affichée et le bornage des recherches quartier/historique,
+                  jamais les codes postaux Lyon/Lille (jamais ambigus). */}
+              <div className="flex rounded-lg border border-slate-800 overflow-hidden text-[10px] uppercase tracking-widest font-bold">
+                {['lyon', 'lille'].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setVille(v)}
+                    className={`px-3 py-1.5 transition-colors ${
+                      ville === v
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-slate-900 text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <SearchForm onScan={handleScan} isLoading={loading} />
 

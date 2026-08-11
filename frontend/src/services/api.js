@@ -154,13 +154,16 @@ export const api = {
   },
 
   // SCAN QUARTIER
-  getQuartierStats: async (quartierName, typeLocal = 'Tout') => {
+  // `ville` borne la recherche à la ville active (évite qu'un quartier
+  // d'une autre ville remonte, ex: "Ainay" pendant qu'on est sur l'onglet
+  // Lille) et permet une recherche par nom de ville entière (ex: "Lyon"
+  // renvoie les stats agrégées de toute la ville, pas juste un quartier).
+  getQuartierStats: async (quartierName, typeLocal = 'Tout', ville = undefined) => {
     try {
+      const payload = { quartier: quartierName, type_local: typeLocal };
+      if (ville) payload.ville = ville;
       const response = await fetchWithClassification(`${API_URL}/quartier-stats`, {
-        ...apiFetchOptions({
-          quartier: quartierName,
-          type_local: typeLocal
-        }),
+        ...apiFetchOptions(payload),
       });
 
       return await response.json();
@@ -171,13 +174,12 @@ export const api = {
   },
 
   // Historique du prix moyen/m² par quartier — /api/quartier-historique
-  getQuartierHistorique: async (quartierName, typeLocal = 'Tout') => {
+  getQuartierHistorique: async (quartierName, typeLocal = 'Tout', ville = undefined) => {
     try {
+      const payload = { quartier: quartierName, type_local: typeLocal };
+      if (ville) payload.ville = ville;
       const response = await fetchWithClassification(`${API_URL}/quartier-historique`, {
-        ...apiFetchOptions({
-          quartier: quartierName,
-          type_local: typeLocal
-        }),
+        ...apiFetchOptions(payload),
       });
 
       return await response.json();

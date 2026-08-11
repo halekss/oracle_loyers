@@ -5,9 +5,13 @@ import mapLayersConfig from '../config/mapLayers.config.json';
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
 // (générée par backend/scripts/generate_map.py) : voir MAP_CONTRACT.md (ORA-125).
 
-// Centre par défaut de la carte Folium (backend/scripts/generate_map.py) —
-// repli quand la bounding-box des résultats filtrés est vide (ORA-105).
-const LYON_CENTER = { lat: 45.7640, lng: 4.8357, zoom: 13 };
+// Centre par défaut de chaque carte Folium (backend/scripts/generate_map.py,
+// VILLE_CONFIG) — repli quand la bounding-box des résultats filtrés est vide
+// (ORA-105), par ville (ORA-71 POC).
+const VILLE_CENTERS = {
+  lyon: { lat: 45.7640, lng: 4.8357, zoom: 13 },
+  lille: { lat: 50.6292, lng: 3.0573, zoom: 13 },
+};
 
 // --- CONFIGURATION DES CALQUES ---
 // Source de vérité unique (frontend/src/config/mapLayers.config.json),
@@ -43,10 +47,18 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   </div>
 );
 
-export default function MapComponent({ center, bounds, chatOpen = false }) {
-  const [mapUrl] = useState(() => `/data/map_pings_lyon_calques.html?t=${Date.now()}`);
+export default function MapComponent({ center, bounds, chatOpen = false, ville = 'lyon' }) {
+  const [mapUrl, setMapUrl] = useState(() => `/data/map_pings_${ville}_calques.html?t=${Date.now()}`);
   const iframeRef = useRef(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+
+  // ORA-71 POC : recharge l'iframe carte statique quand la ville active
+  // change (sélecteur Lyon/Lille) — le `useState` initial ne se réévalue
+  // qu'au montage, insuffisant si l'utilisateur bascule de ville sans que
+  // MapComponent soit démonté/remonté.
+  useEffect(() => {
+    setMapUrl(`/data/map_pings_${ville}_calques.html?t=${Date.now()}`);
+  }, [ville]);
 
   // ORA-116 : sur mobile (onglet "Carte"), le panneau de calques et le chat
   // ouvert se chevauchent entièrement (panneau ~256x444px, chat quasi plein
@@ -84,9 +96,10 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
       return;
     }
     if (bounds === null) {
+      const fallbackCenter = VILLE_CENTERS[ville] || VILLE_CENTERS.lyon;
       iframeRef.current.contentWindow.postMessage({
         type: 'FLY_TO',
-        lat: LYON_CENTER.lat, lng: LYON_CENTER.lng, zoom: LYON_CENTER.zoom
+        lat: fallbackCenter.lat, lng: fallbackCenter.lng, zoom: fallbackCenter.zoom
       }, window.location.origin);
       return;
     }
@@ -94,7 +107,7 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
       type: 'FLY_TO_BOUNDS',
       bounds
     }, window.location.origin);
-  }, [bounds]);
+  }, [bounds, ville]);
 
   // ORA-107 : réception du seul message iframe → React du contrat
   // (ANNONCE_CLICK, MAP_CONTRACT.md) — clic sur un marker carte, tracké
