@@ -148,4 +148,86 @@ describe('AnnoncesList', () => {
     await waitFor(() => expect(screen.getByText(/aucune annonce disponible/i)).toBeInTheDocument());
     expect(screen.getByLabelText(/quartier/i)).toBeInTheDocument();
   });
+
+  it('changes the displayed order when a sort option is selected (ORA-127)', async () => {
+    api.getAnnonces.mockImplementation(({ sort, order }) => {
+      const items = sort === 'prix' && order === 'asc'
+        ? [makeAnnonce(2), makeAnnonce(1)]
+        : [makeAnnonce(1), makeAnnonce(2)];
+      return Promise.resolve({ items, page: 1, total_pages: 1 });
+    });
+    const user = userEvent.setup();
+
+    render(<AnnoncesList />);
+
+    await waitFor(() => expect(screen.getByText('Annonce 1')).toBeInTheDocument());
+    const titlesBefore = screen.getAllByText(/^Annonce \d$/).map((el) => el.textContent);
+    expect(titlesBefore).toEqual(['Annonce 1', 'Annonce 2']);
+
+    await user.selectOptions(screen.getByLabelText(/trier/i), 'prix-asc');
+
+    await waitFor(() => {
+      expect(api.getAnnonces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'prix', order: 'asc', page: 1 })
+      );
+    });
+    const titlesAfter = screen.getAllByText(/^Annonce \d$/).map((el) => el.textContent);
+    expect(titlesAfter).toEqual(['Annonce 2', 'Annonce 1']);
+  });
+
+  it('resets to page 1 when the sort option changes (ORA-127)', async () => {
+    api.getAnnonces.mockImplementation(({ page }) =>
+      Promise.resolve({ items: [makeAnnonce(page)], page, total_pages: 2 })
+    );
+    const user = userEvent.setup();
+
+    render(<AnnoncesList />);
+
+    await waitFor(() => expect(screen.getByText('Annonce 1')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /suivant/i }));
+    await waitFor(() => expect(screen.getByText('Annonce 2')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText(/trier/i), 'surface-desc');
+
+    await waitFor(() => {
+      expect(api.getAnnonces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'surface', order: 'desc', page: 1 })
+      );
+    });
+  });
+
+  it('jumps to the scanned quartier annonces when focusedQuartier is set (ORA-127)', async () => {
+    api.getAnnonces.mockResolvedValue({ items: [makeAnnonce(1)], page: 1, total_pages: 1 });
+
+    const { rerender } = render(<AnnoncesList />);
+    await waitFor(() => expect(screen.getByLabelText(/quartier/i)).toBeInTheDocument());
+    expect(screen.getByLabelText(/quartier/i).value).toBe('');
+
+    rerender(<AnnoncesList focusedQuartier={{ quartier: 'Gerland', token: 1 }} />);
+
+    await waitFor(() => {
+      expect(api.getAnnonces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ quartier: 'Gerland', page: 1 })
+      );
+    });
+    expect(screen.getByLabelText(/quartier/i).value).toBe('Gerland');
+  });
+
+  it('re-jumps to the same quartier when focusedQuartier token changes again (ORA-127)', async () => {
+    api.getAnnonces.mockResolvedValue({ items: [makeAnnonce(1)], page: 1, total_pages: 1 });
+    const user = userEvent.setup();
+
+    const { rerender } = render(<AnnoncesList focusedQuartier={{ quartier: 'Gerland', token: 1 }} />);
+    await waitFor(() => expect(screen.getByLabelText(/quartier/i).value).toBe('Gerland'));
+
+    // L'utilisateur change le filtre manuellement...
+    await user.selectOptions(screen.getByLabelText(/quartier/i), 'Confluence');
+    await waitFor(() => expect(screen.getByLabelText(/quartier/i).value).toBe('Confluence'));
+
+    // ...puis re-scanne le même quartier (nouveau token) : le lien doit à
+    // nouveau imposer le filtre, même si `quartier` est identique.
+    rerender(<AnnoncesList focusedQuartier={{ quartier: 'Gerland', token: 2 }} />);
+
+    await waitFor(() => expect(screen.getByLabelText(/quartier/i).value).toBe('Gerland'));
+  });
 });

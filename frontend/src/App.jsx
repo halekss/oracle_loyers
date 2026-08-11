@@ -66,6 +66,10 @@ function App() {
   const [mapBounds, setMapBounds] = useState(undefined);
   const [listings, setListings] = useState([]);
   const [activeTab, setActiveTab] = useState('oracle');
+  // ORA-127 : lien direct depuis un quartier scanné vers ses annonces —
+  // `token` change à chaque clic (même quartier compris) pour que
+  // AnnoncesList redéclenche le saut à chaque fois, cf. son prop `focusedQuartier`.
+  const [focusedQuartier, setFocusedQuartier] = useState(null);
   // Chat en bulle flottante superposée à l'écran (pas de fenêtre/page à
   // part) : fermé par défaut pour laisser "Détails du quartier" toute la
   // hauteur de la colonne Oracle.
@@ -93,6 +97,14 @@ function App() {
   const handleAnnoncesItemsChange = (items) => {
     const quartiers = [...new Set(items.map((item) => item.quartier).filter(Boolean))];
     setMapBounds(computeBoundsForQuartiers(listings, quartiers));
+  };
+
+  // ORA-127 : "Voir les annonces de ce quartier" (ResultCard) — présélectionne
+  // le filtre quartier d'AnnoncesList et bascule sur l'onglet Annonces en
+  // mobile (sans effet en desktop, où les deux colonnes sont déjà visibles).
+  const handleViewAnnonces = (quartier) => {
+    setFocusedQuartier({ quartier, token: Date.now() });
+    setActiveTab('annonces');
   };
 
   const handleScan = async (quartier, typeLocal, surfaceInput) => {
@@ -222,7 +234,7 @@ function App() {
           <ErrorBoundary fallback={makePanelFallback("Le panneau d'estimation")}>
             {/* Résultat */}
             <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
-              <ResultCard data={result} loading={loading} priceHistory={priceHistory} />
+              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} />
               {result && (
                 <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
                   Données réelles ({result.count} biens)
@@ -272,7 +284,7 @@ function App() {
                   <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
                     Annonces récentes
                   </p>
-                  <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} />
+                  <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} />
                 </div>
               </div>
             </details>
@@ -292,7 +304,7 @@ function App() {
           <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-3">
             Annonces récentes
           </p>
-          <AnnoncesList />
+          <AnnoncesList focusedQuartier={focusedQuartier} />
         </div>
       </div>
 
