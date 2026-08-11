@@ -27,6 +27,12 @@ METRO_JSON = os.path.join(DATA_DIR, 'metro_lyon.json')
 # par scripts/fetch_lyon_arrondissements.py et versionnées ici (ORA-104).
 QUARTIERS_GEOJSON = os.path.join(DATA_DIR, 'lyon_arrondissements.geojson')
 ANNONCES_DB_PATH = os.path.join(DATA_DIR, 'annonces.db')
+# Source de vérité unique de la liste des calques carte (nom Folium/TOGGLE_LAYER,
+# visibilité par défaut, libellé et couleur du panneau React) : consommée ici
+# ET par MapComponent.jsx (import JS direct du même fichier), pour ne plus
+# avoir à synchroniser LAYER_MAPPING (React) et les FeatureGroup/GeoJson
+# (Python) à la main à chaque nouveau calque (ORA-130, lié à ORA-125).
+LAYERS_CONFIG_JSON = os.path.join(PROJECT_ROOT, 'frontend', 'src', 'config', 'mapLayers.config.json')
 
 # backend/services (annonces_store) n'est pas sur sys.path par défaut quand ce
 # script est lancé depuis backend/scripts/ (ex: `python generate_map.py`, ou
@@ -173,6 +179,24 @@ def load_geojson_file(path):
         return None
 
 
+def load_layers_config(path=LAYERS_CONFIG_JSON):
+    """Charge la liste des calques carte depuis le JSON partagé avec le
+    frontend (ORA-130) : `[{key, name, label, group, defaultVisible, uiColor}, ...]`.
+
+    `key` identifie le calque côté React (état `layers`, `LAYER_MAPPING`),
+    `name` est le nom du calque tel que connu de Folium/`LayerControl` et du
+    contrat `TOGGLE_LAYER` (MAP_CONTRACT.md), `defaultVisible` fixe l'état
+    initial (`FeatureGroup(show=...)` ici, `layers` initial côté React).
+
+    Contrairement à `load_geojson_file` (couche optionnelle, absence tolérée),
+    ce fichier est requis pour générer une carte cohérente : une erreur ici
+    (fichier manquant/JSON invalide) doit faire échouer la génération plutôt
+    que de produire silencieusement une carte sans calques.
+    """
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
 def build_bridge_message_script(map_js_var_name):
     """Génère le script JS qui écoute les messages postMessage envoyés par
     MapComponent.jsx (React) vers la carte Folium embarquée en iframe.
@@ -238,19 +262,25 @@ def main():
     print("🛑 GENERATION CARTE (METRO LIGNES AUTO)...")
     m = folium.Map(location=[45.7640, 4.8357], zoom_start=13, tiles='CartoDB dark_matter', zoom_control=False)
 
+    # Config partagée des calques (ORA-130) : nom Folium/TOGGLE_LAYER et
+    # visibilité par défaut de chaque calque, aussi consommée par
+    # MapComponent.jsx (LAYER_MAPPING + état initial `layers`).
+    layers_config = load_layers_config()
+    layer_by_key = {layer['key']: layer for layer in layers_config}
+
     # --- CREATION DES GROUPES ---
-    fg_studio = folium.FeatureGroup(name='Immo Studio/T1', show=True)
-    fg_t2 = folium.FeatureGroup(name='Immo T2', show=True)
-    fg_t3 = folium.FeatureGroup(name='Immo T3', show=True)
-    fg_t4 = folium.FeatureGroup(name='Immo Grand (T4+)', show=True)
+    fg_studio = folium.FeatureGroup(name=layer_by_key['Studio']['name'], show=layer_by_key['Studio']['defaultVisible'])
+    fg_t2 = folium.FeatureGroup(name=layer_by_key['T2']['name'], show=layer_by_key['T2']['defaultVisible'])
+    fg_t3 = folium.FeatureGroup(name=layer_by_key['T3']['name'], show=layer_by_key['T3']['defaultVisible'])
+    fg_t4 = folium.FeatureGroup(name=layer_by_key['T4']['name'], show=layer_by_key['T4']['defaultVisible'])
 
     # Groupe Métro Unifié
-    fg_metro = folium.FeatureGroup(name='Metro', show=True)
+    fg_metro = folium.FeatureGroup(name=layer_by_key['Metro']['name'], show=layer_by_key['Metro']['defaultVisible'])
 
-    fg_vice = folium.FeatureGroup(name='Vice', show=True)
-    fg_gentri = folium.FeatureGroup(name='Gentrification', show=False)
-    fg_nuisance = folium.FeatureGroup(name='Nuisance', show=False)
-    fg_superstition = folium.FeatureGroup(name='Superstition', show=False)
+    fg_vice = folium.FeatureGroup(name=layer_by_key['Vice']['name'], show=layer_by_key['Vice']['defaultVisible'])
+    fg_gentri = folium.FeatureGroup(name=layer_by_key['Gentrification']['name'], show=layer_by_key['Gentrification']['defaultVisible'])
+    fg_nuisance = folium.FeatureGroup(name=layer_by_key['Nuisance']['name'], show=layer_by_key['Nuisance']['defaultVisible'])
+    fg_superstition = folium.FeatureGroup(name=layer_by_key['Superstition']['name'], show=layer_by_key['Superstition']['defaultVisible'])
 
     # --- 5. GENERATION POINTS IMMO ---
     for _, row in df_immo.iterrows():
@@ -370,8 +400,8 @@ def main():
     if quartiers_geojson:
         folium.GeoJson(
             quartiers_geojson,
-            name='Quartiers',
-            show=False,  # Off par défaut, cohérent avec Nuisance/Gentrification/Superstition
+            name=layer_by_key['Quartiers']['name'],
+            show=layer_by_key['Quartiers']['defaultVisible'],  # Off par défaut, cohérent avec Nuisance/Gentrification/Superstition
             style_function=lambda feature: {
                 'fillColor': '#a78bfa',
                 'color': '#a78bfa',

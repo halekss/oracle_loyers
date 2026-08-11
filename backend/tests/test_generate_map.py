@@ -194,6 +194,70 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("e.data.bounds", script)
 
 
+class LoadLayersConfigTest(unittest.TestCase):
+    """ORA-130 : la liste des calques (nom Folium/TOGGLE_LAYER, visibilité par
+    défaut, libellé et couleur du panneau React) vient d'un unique JSON
+    partagé avec frontend/src/config/mapLayers.config.json (import JS direct
+    du même fichier côté React), pour ne plus avoir à synchroniser à la main
+    LAYER_MAPPING (MapComponent.jsx) et les FeatureGroup/GeoJson (ce script)
+    à chaque nouveau calque."""
+
+    def test_loads_the_committed_shared_config_by_default(self):
+        layers = generate_map.load_layers_config()
+
+        self.assertIsInstance(layers, list)
+        keys = {layer["key"] for layer in layers}
+        self.assertEqual(
+            keys,
+            {"Studio", "T2", "T3", "T4", "Metro", "Vice", "Gentrification", "Nuisance", "Superstition", "Quartiers"},
+        )
+
+    def test_each_layer_has_the_fields_required_by_both_sides(self):
+        for layer in generate_map.load_layers_config():
+            self.assertIn("key", layer)
+            self.assertIn("name", layer)
+            self.assertIn("label", layer)
+            self.assertIn("group", layer)
+            self.assertIsInstance(layer["defaultVisible"], bool)
+
+    def test_preserves_current_default_visibility_per_layer(self):
+        """Non-régression ORA-130 : le refactor ne doit rien changer à l'état
+        initial des calques (ex. Quartiers/Nuisance/Gentrification/Superstition
+        off par défaut, cf. ORA-104)."""
+        layers_by_key = {layer["key"]: layer for layer in generate_map.load_layers_config()}
+
+        expected_defaults = {
+            "Studio": True,
+            "T2": True,
+            "T3": True,
+            "T4": True,
+            "Metro": True,
+            "Vice": True,
+            "Gentrification": False,
+            "Nuisance": False,
+            "Superstition": False,
+            "Quartiers": False,
+        }
+        for key, expected in expected_defaults.items():
+            self.assertEqual(layers_by_key[key]["defaultVisible"], expected, key)
+
+    def test_loads_from_an_explicit_path(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "layers.json")
+            payload = [{"key": "Test", "name": "Test", "label": "Test", "group": "contexte", "defaultVisible": True}]
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+
+            self.assertEqual(generate_map.load_layers_config(path), payload)
+
+    def test_raises_when_the_config_file_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_path = os.path.join(tmp_dir, "missing.json")
+
+            with self.assertRaises(FileNotFoundError):
+                generate_map.load_layers_config(missing_path)
+
+
 class LoadGeojsonFileTest(unittest.TestCase):
     """ORA-104 : chargement de la couche GeoJSON des quartiers, versionnée
     dans le repo (pas de dépendance réseau à runtime)."""
