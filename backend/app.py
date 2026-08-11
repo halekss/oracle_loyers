@@ -10,7 +10,7 @@ from flasgger import Swagger
 from logging_config import configure_logging, init_sentry
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
-from services.predictor import build_feature_row, estimate_confidence
+from services.predictor import build_feature_row, estimate_confidence, is_physically_implausible_price
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
 from services.text_matching import match_quartier
@@ -678,6 +678,22 @@ def predict():
         estimated_price = float(model.predict(features_df)[0])
     except Exception as e:
         return jsonify({"error": f"Erreur lors de la prédiction : {e}"}), 500
+
+    if is_physically_implausible_price(estimated_price):
+        # Un loyer <= 0 n'est jamais une estimation valide (ORA-152) : signale
+        # presque toujours une incohérence du modèle chargé (ex. désérialisation
+        # avec une version XGBoost incompatible de celle utilisée à l'entraînement)
+        # plutôt qu'une vraie prédiction. On refuse de renvoyer cette valeur au
+        # frontend et on journalise bruyamment pour l'observabilité (Sentry inclus).
+        logger.error(
+            "Prédiction de prix physiquement impossible (%.2f€) pour payload=%s — "
+            "modèle potentiellement corrompu ou incompatible (voir ORA-152).",
+            estimated_price,
+            payload,
+        )
+        return jsonify({
+            "error": "Le modèle de prédiction a renvoyé une estimation incohérente (prix <= 0€).",
+        }), 500
 
     surface = result["surface"]
     price_m2 = estimated_price / surface if surface else 0.0

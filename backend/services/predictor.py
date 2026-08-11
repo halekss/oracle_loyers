@@ -5,6 +5,19 @@ from services.text_matching import resolve_quartier
 
 EARTH_RADIUS_M = 6371000
 
+# Un loyer prédit ne peut physiquement pas être nul ou négatif. Une valeur
+# <= 0 signale presque toujours une incohérence modèle/environnement (ex.
+# ORA-152 : pickle XGBoost désérialisé avec une version incompatible de
+# celle utilisée à l'entraînement) plutôt qu'une vraie estimation basse —
+# on la traite comme une erreur explicite plutôt que de la renvoyer telle
+# quelle au frontend.
+MIN_PLAUSIBLE_PRICE = 0
+
+
+def is_physically_implausible_price(estimated_price):
+    """True si `estimated_price` ne peut pas être un loyer réel (<= 0 €)."""
+    return estimated_price is None or estimated_price <= MIN_PLAUSIBLE_PRICE
+
 TYPE_LOCAL_ALIASES = {
     "STUDIO/T1": "Studio/T1",
     "STUDIO": "Studio/T1",

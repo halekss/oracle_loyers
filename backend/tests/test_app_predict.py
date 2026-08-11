@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -9,6 +9,45 @@ import app
 
 
 class PredictRouteTest(unittest.TestCase):
+    def test_predict_route_rejects_physically_impossible_negative_price_with_500(self):
+        """ORA-152 : un modèle qui prédit un loyer négatif (ex. pickle XGBoost
+        désérialisé avec une version incompatible de celle utilisée à
+        l'entraînement) ne doit jamais être renvoyé tel quel au frontend."""
+        client = app.app.test_client()
+
+        broken_model = MagicMock()
+        broken_model.feature_names_in_ = app.model.feature_names_in_
+        broken_model.predict.return_value = [-168.0]
+
+        with patch.object(app, "model", broken_model):
+            response = client.post(
+                "/api/predict",
+                json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        data = response.get_json()
+        self.assertIn("error", data)
+        self.assertNotIn("estimated_price", data)
+
+    def test_predict_route_rejects_zero_price_with_500(self):
+        """Un loyer exactement nul n'est pas plus plausible qu'un loyer négatif."""
+        client = app.app.test_client()
+
+        broken_model = MagicMock()
+        broken_model.feature_names_in_ = app.model.feature_names_in_
+        broken_model.predict.return_value = [0.0]
+
+        with patch.object(app, "model", broken_model):
+            response = client.post(
+                "/api/predict",
+                json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        data = response.get_json()
+        self.assertIn("error", data)
+
     def test_predict_route_returns_coherent_price_for_nominal_payload(self):
         client = app.app.test_client()
 
