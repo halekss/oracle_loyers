@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 
-from services.text_matching import resolve_quartier
+from services.quartier_search import resolve_quartier_filter
 
 # Même mapping que /api/quartier-stats (app.py), dupliqué ici volontairement :
 # ce module lit des snapshots historiques indépendamment du DataLoader en
@@ -15,17 +15,15 @@ TYPE_LOCAL_ALIASES = {
 }
 
 
-def _filter_quartier(df, quartier, type_local):
+def _filter_quartier(df, quartier, type_local, ville=None):
     df_clean = df.dropna(subset=['quartier', 'prix', 'surface'])
 
-    # Même matching partagé (normalisation + tolérance aux fautes de frappe)
-    # que /api/quartier-stats, résolu indépendamment par snapshot puisque les
-    # quartiers connus peuvent varier d'un snapshot à l'autre (ORA-110).
-    resolved_quartier = resolve_quartier(quartier, df_clean['quartier'].unique().tolist())
-    if resolved_quartier is None:
+    # Même résolution partagée (bornage ville + matching flou, ORA-71/ORA-110)
+    # que /api/quartier-stats, résolue indépendamment par snapshot puisque les
+    # quartiers connus peuvent varier d'un snapshot à l'autre.
+    filtered, match = resolve_quartier_filter(df_clean, quartier, ville)
+    if not match["found"]:
         return df_clean.iloc[0:0]
-
-    filtered = df_clean[df_clean['quartier'] == resolved_quartier]
 
     if type_local and type_local != 'Tout':
         types_cibles = TYPE_LOCAL_ALIASES.get(type_local, [type_local])
@@ -34,10 +32,11 @@ def _filter_quartier(df, quartier, type_local):
     return filtered
 
 
-def compute_price_history(quartier, type_local, snapshots_dir, manifest_path):
+def compute_price_history(quartier, type_local, snapshots_dir, manifest_path, ville=None):
     """Calcule l'évolution du prix moyen/m² pour `quartier` à travers tous les
     snapshots de données enregistrés (ORA-72), avec le même matching partagé
-    (normalisation + fuzzy) que `/api/quartier-stats` (ORA-110).
+    (normalisation + fuzzy) que `/api/quartier-stats` (ORA-110), borné à
+    `ville` si fournie (ORA-71).
 
     Renvoie (historique, status) :
     - status == "insufficient_history" (historique == []) si moins de 2
@@ -60,7 +59,7 @@ def compute_price_history(quartier, type_local, snapshots_dir, manifest_path):
             continue
 
         df = pd.read_csv(snapshot_path)
-        filtered = _filter_quartier(df, quartier, type_local)
+        filtered = _filter_quartier(df, quartier, type_local, ville)
         if filtered.empty:
             continue
 

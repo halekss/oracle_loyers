@@ -133,6 +133,50 @@ class QuartierStatsRouteTest(unittest.TestCase):
         )
         self.assertIn("Croix-Rousse Plateau", data["message"])
 
+    def test_route_scopes_quartier_search_to_the_given_ville(self):
+        # Régression réelle : chercher "Ainay" (quartier lyonnais) en étant
+        # sur l'onglet Lille ne doit renvoyer aucun résultat.
+        client = app.app.test_client()
+        controlled_df = pd.DataFrame({
+            'ville': ['Lyon', 'Lille'],
+            'quartier': ['Ainay', 'Wazemmes'],
+            'prix': [900, 700],
+            'surface': [40, 35],
+            'type_local': ['T2', 'T2'],
+        })
+
+        with patch.object(app.data_loader, "get_data", return_value=controlled_df):
+            response = client.post(
+                "/api/quartier-stats",
+                json={"quartier": "Ainay", "type_local": "Tout", "ville": "lille"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertFalse(data["found"])
+
+    def test_route_treats_an_exact_city_name_as_a_city_wide_search(self):
+        client = app.app.test_client()
+        controlled_df = pd.DataFrame({
+            'ville': ['Lille', 'Lille', 'Lyon'],
+            'quartier': ['Wazemmes', 'Lille-Centre', 'Gerland'],
+            'prix': [700, 900, 800],
+            'surface': [35, 40, 40],
+            'type_local': ['T2', 'T2', 'T2'],
+        })
+
+        with patch.object(app.data_loader, "get_data", return_value=controlled_df):
+            response = client.post(
+                "/api/quartier-stats",
+                json={"quartier": "Lille", "type_local": "Tout"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["found"])
+        self.assertEqual(data["count"], 2)
+        self.assertEqual(data["quartier_detecte"], "Lille")
+
     def test_route_rejects_blank_quartier_with_400(self):
         client = app.app.test_client()
 

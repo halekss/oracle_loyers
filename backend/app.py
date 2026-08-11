@@ -13,7 +13,7 @@ from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence, is_physically_implausible_price
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
-from services.text_matching import match_quartier
+from services.quartier_search import resolve_quartier_filter
 from services.pdf_report import render_estimation_pdf
 from services import annonces_store
 from schemas import (
@@ -452,10 +452,11 @@ def get_quartier_stats():
         # Nettoyage pour éviter les erreurs sur NaN
         df_clean = df.dropna(subset=['quartier', 'prix', 'surface'])
 
-        # Résolution du quartier saisi (accents/casse/tirets + tolérance aux
-        # fautes de frappe partagées avec le chat et /api/predict, ORA-110)
-        known_quartiers = df_clean['quartier'].unique().tolist()
-        match = match_quartier(quartier_input, known_quartiers)
+        # Résolution du quartier saisi : bornée à la ville active + recherche
+        # par nom de ville entière (ORA-71), avec la même tolérance aux
+        # fautes de frappe que le chat et /api/predict (ORA-110) une fois le
+        # DataFrame borné à la ville.
+        filtered_df, match = resolve_quartier_filter(df_clean, quartier_input, payload.ville)
 
         if not match["found"]:
             # ORA-111 : message différencié — plusieurs quartiers assez proches
@@ -475,9 +476,6 @@ def get_quartier_stats():
                 "suggestions": match["suggestions"],
                 "message": message,
             }), 200
-
-        resolved_quartier = match["match"]
-        filtered_df = df_clean[df_clean['quartier'] == resolved_quartier]
 
         # 2. Filtrage par Type de bien (Si pas 'Tout')
         mapping_types = {
@@ -529,8 +527,10 @@ def get_quartier_stats():
             for _, row in comparables_df.iterrows()
         ]
 
-        # Libellé canonique déjà résolu (ex: "Gerland" au lieu de "greland")
-        nom_officiel = resolved_quartier
+        # Libellé canonique déjà résolu (ex: "Gerland" au lieu de "greland") ;
+        # pour une recherche par ville entière (is_city_search), il n'y a pas
+        # de quartier unique — on affiche le nom de la ville elle-même.
+        nom_officiel = filtered_df['ville'].mode().iloc[0] if match["is_city_search"] else match["match"]
         center = None
         if {'latitude', 'longitude'}.issubset(filtered_df.columns):
             coords = filtered_df.dropna(subset=['latitude', 'longitude'])
@@ -607,7 +607,7 @@ def get_quartier_historique():
     type_filter = payload.type_local
 
     historique, status = compute_price_history(
-        quartier_input, type_filter, SNAPSHOTS_DIR, SNAPSHOTS_MANIFEST_PATH
+        quartier_input, type_filter, SNAPSHOTS_DIR, SNAPSHOTS_MANIFEST_PATH, payload.ville
     )
 
     if status == "insufficient_history":
