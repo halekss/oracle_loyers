@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
+import pandas as pd
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from scripts import generate_map
@@ -284,6 +286,70 @@ class LoadGeojsonFileTest(unittest.TestCase):
                 f.write("{not valid json")
 
             self.assertIsNone(generate_map.load_geojson_file(path))
+
+
+class BuildImmoTooltipHtmlTest(unittest.TestCase):
+    def test_includes_type_and_price(self):
+        html_out = generate_map.build_immo_tooltip_html(type_local="T2", prix="750")
+
+        self.assertIn("T2", html_out)
+        self.assertIn("750", html_out)
+
+    def test_never_renders_a_link(self):
+        # Un tooltip Leaflet (survol) ne peut pas héberger de contenu cliquable
+        # de façon fiable (cf. ORA-99) : le lien reste réservé au popup (clic).
+        html_out = generate_map.build_immo_tooltip_html(type_local="T2", prix="750")
+
+        self.assertNotIn("<a ", html_out)
+
+    def test_never_renders_an_image_tag(self):
+        html_out = generate_map.build_immo_tooltip_html(type_local="T2", prix="750")
+
+        self.assertNotIn("<img", html_out)
+
+    def test_escapes_hostile_type_value(self):
+        html_out = generate_map.build_immo_tooltip_html(type_local="<script>alert(1)</script>", prix="750")
+
+        self.assertNotIn("<script>alert(1)</script>", html_out)
+
+
+class ResolveVillePathsTest(unittest.TestCase):
+    def test_lyon_paths_match_existing_filenames(self):
+        paths = generate_map.resolve_ville_paths("lyon")
+
+        self.assertTrue(paths["output_html"].endswith("map_pings_lyon_calques.html"))
+        self.assertTrue(paths["metadata_json"].endswith("map_metadata_lyon.json"))
+        self.assertTrue(paths["poi_csv"].endswith("cavaliers_lyon.csv"))
+        self.assertTrue(paths["metro_json"].endswith("metro_lyon.json"))
+        self.assertTrue(paths["quartiers_geojson"].endswith("lyon_arrondissements.geojson"))
+        self.assertEqual(paths["center"], [45.7640, 4.8357])
+
+    def test_lille_paths_are_distinct_from_lyon(self):
+        paths = generate_map.resolve_ville_paths("lille")
+
+        self.assertTrue(paths["output_html"].endswith("map_pings_lille_calques.html"))
+        self.assertTrue(paths["poi_csv"].endswith("cavaliers_lille.csv"))
+        self.assertEqual(paths["center"], [50.6292, 3.0573])
+
+    def test_raises_for_an_undeclared_ville(self):
+        with self.assertRaises(KeyError):
+            generate_map.resolve_ville_paths("marseille")
+
+
+class FilterByVilleTest(unittest.TestCase):
+    def test_keeps_only_rows_matching_the_ville_case_insensitively(self):
+        df = pd.DataFrame({"ville": ["Lyon", "Lille", "Lyon"], "prix": [800, 700, 900]})
+
+        result = generate_map.filter_by_ville(df, "lyon")
+
+        self.assertEqual(list(result["prix"]), [800, 900])
+
+    def test_returns_dataframe_unchanged_when_ville_column_is_missing(self):
+        df = pd.DataFrame({"prix": [800, 700]})
+
+        result = generate_map.filter_by_ville(df, "lyon")
+
+        self.assertEqual(len(result), 2)
 
 
 if __name__ == "__main__":

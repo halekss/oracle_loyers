@@ -1,3 +1,4 @@
+import argparse
 import folium
 import pandas as pd
 import os
@@ -17,16 +18,67 @@ BACKEND_DIR = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(BACKEND_DIR, 'data')
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 FRONTEND_DATA_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'public', 'data')
-OUTPUT_HTML = os.path.join(FRONTEND_DATA_DIR, 'map_pings_lyon_calques.html')
-METADATA_JSON = os.path.join(FRONTEND_DATA_DIR, 'map_metadata.json')
 
 IMMO_CSV = os.path.join(DATA_DIR, 'master_immo_final.csv')
-POI_CSV = os.path.join(DATA_DIR, 'cavaliers_lyon.csv')
-METRO_JSON = os.path.join(DATA_DIR, 'metro_lyon.json')
-# Limites des 9 arrondissements de Lyon (OSM/Nominatim), récupérées une fois
-# par scripts/fetch_lyon_arrondissements.py et versionnées ici (ORA-104).
-QUARTIERS_GEOJSON = os.path.join(DATA_DIR, 'lyon_arrondissements.geojson')
 ANNONCES_DB_PATH = os.path.join(DATA_DIR, 'annonces.db')
+
+# Une carte HTML statique par ville (ORA-71 POC) : `metro_json`/`quartiers_geojson`
+# sont optionnels, absents pour une ville tant que sa couche correspondante n'a
+# pas été produite (chargement gracieux existant, cf. load_geojson_file et le
+# `if os.path.exists(METRO_JSON)` plus bas).
+VILLE_CONFIG = {
+    'lyon': {
+        'output_html': 'map_pings_lyon_calques.html',
+        'metadata_json': 'map_metadata_lyon.json',
+        'poi_csv': 'cavaliers_lyon.csv',
+        'metro_json': 'metro_lyon.json',
+        # Limites des 9 arrondissements de Lyon (OSM/Nominatim), récupérées une
+        # fois par scripts/fetch_lyon_arrondissements.py et versionnées (ORA-104).
+        'quartiers_geojson': 'lyon_arrondissements.geojson',
+        'center': [45.7640, 4.8357],
+    },
+    'lille': {
+        'output_html': 'map_pings_lille_calques.html',
+        'metadata_json': 'map_metadata_lille.json',
+        'poi_csv': 'cavaliers_lille.csv',
+        'metro_json': 'metro_lille.json',
+        'quartiers_geojson': 'lille_quartiers.geojson',
+        'center': [50.6292, 3.0573],
+    },
+}
+
+# Source de vérité unique de la liste des calques carte (nom Folium/TOGGLE_LAYER,
+# visibilité par défaut, libellé et couleur du panneau React) : consommée ici
+# ET par MapComponent.jsx (import JS direct du même fichier), pour ne plus
+# avoir à synchroniser LAYER_MAPPING (React) et les FeatureGroup/GeoJson
+# (Python) à la main à chaque nouveau calque (ORA-130, lié à ORA-125) —
+# partagée par toutes les villes, pas de déclinaison par ville.
+LAYERS_CONFIG_JSON = os.path.join(PROJECT_ROOT, 'frontend', 'src', 'config', 'mapLayers.config.json')
+
+
+def resolve_ville_paths(ville):
+    """Résout les chemins absolus (HTML de sortie, métadonnées, POI, métro,
+    GeoJSON quartiers) et le centre de carte pour une ville déclarée dans
+    VILLE_CONFIG. Lève KeyError si la ville n'est pas déclarée (fail-fast
+    plutôt qu'un repli silencieux vers Lyon)."""
+    config = VILLE_CONFIG[ville]
+    return {
+        "output_html": os.path.join(FRONTEND_DATA_DIR, config['output_html']),
+        "metadata_json": os.path.join(FRONTEND_DATA_DIR, config['metadata_json']),
+        "poi_csv": os.path.join(DATA_DIR, config['poi_csv']),
+        "metro_json": os.path.join(DATA_DIR, config['metro_json']),
+        "quartiers_geojson": os.path.join(DATA_DIR, config['quartiers_geojson']),
+        "center": config['center'],
+    }
+
+
+def filter_by_ville(df_immo, ville):
+    """Filtre les annonces sur la ville demandée (comparaison insensible à la
+    casse). Si la colonne `ville` est absente (données pas encore migrées),
+    renvoie le DataFrame inchangé plutôt que de tout faire disparaître."""
+    if 'ville' not in df_immo.columns:
+        return df_immo
+    return df_immo[df_immo['ville'].str.lower() == ville.lower()]
 # Source de vérité unique de la liste des calques carte (nom Folium/TOGGLE_LAYER,
 # visibilité par défaut, libellé et couleur du panneau React) : consommée ici
 # ET par MapComponent.jsx (import JS direct du même fichier), pour ne plus
@@ -82,6 +134,24 @@ def sanitize_image_url(url):
     if lowered.startswith('http://') or lowered.startswith('https://'):
         return candidate
     return None
+
+
+def build_immo_tooltip_html(type_local, prix):
+    """Aperçu léger affiché au survol d'un marker d'annonce (ORA-99).
+
+    Volontairement sans lien ni action : un tooltip Leaflet (quel que soit son
+    mode, sticky ou non) se ferme au `mouseout` du marker, pas selon si la
+    souris est sur le tooltip lui-même — impossible d'y héberger un lien
+    cliquable de façon fiable. Le lien reste réservé au popup au clic
+    (cf. build_immo_popup_html)."""
+    safe_type = html.escape(str(type_local))
+    safe_prix = html.escape(str(prix))
+
+    return f"""
+    <div style='font-family:sans-serif; font-size:12px; white-space:nowrap;'>
+        <b style='color:#22c55e;'>{safe_type}</b> — {safe_prix} €
+    </div>
+    """
 
 
 def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_url=None, annonce_id=None):
@@ -231,7 +301,9 @@ def build_bridge_message_script(map_js_var_name):
     """
 
 
-def main():
+def main(ville='lyon'):
+    paths = resolve_ville_paths(ville)
+
     # --- 3. CHARGEMENT DONNEES ---
     # A. Immo
     try:
@@ -240,14 +312,22 @@ def main():
             df_immo.columns = df_immo.columns.str.strip().str.lower()
             for col in ['latitude', 'longitude']:
                 if col in df_immo.columns: df_immo[col] = pd.to_numeric(df_immo[col], errors='coerce')
+            df_immo = filter_by_ville(df_immo, ville)
         else: df_immo = pd.DataFrame()
     except: df_immo = pd.DataFrame()
 
     # B. Cavaliers
     df_poi = pd.DataFrame()
     try:
-        if os.path.exists(POI_CSV):
-            df_poi = pd.read_csv(POI_CSV, sep=None, engine='python')
+        if os.path.exists(paths['poi_csv']):
+            # encoding='utf-8-sig' : certains cavaliers_*.csv (ex: cavaliers_lille.csv,
+            # produit par api_overpass.py via to_csv(..., encoding='utf-8-sig'))
+            # ont un BOM UTF-8 ; sans ce paramètre, le moteur 'python' laisse le
+            # BOM collé au nom de la première colonne ("﻿categorie_cavalier"),
+            # qui ne matche alors plus "categorie_cavalier" ci-dessous — tous les
+            # POI de la ville concernée disparaissaient silencieusement de la carte
+            # (constaté sur un run réel : 0/400 POI Lille affichés).
+            df_poi = pd.read_csv(paths['poi_csv'], sep=None, engine='python', encoding='utf-8-sig')
             df_poi.columns = df_poi.columns.str.strip().str.lower()
             if 'categorie_cavalier' in df_poi.columns: df_poi['type'] = df_poi['categorie_cavalier']
             elif 'type_osm' in df_poi.columns: df_poi['type'] = df_poi['type_osm']
@@ -259,8 +339,8 @@ def main():
     except: pass
 
     # --- 4. CARTE ---
-    print("🛑 GENERATION CARTE (METRO LIGNES AUTO)...")
-    m = folium.Map(location=[45.7640, 4.8357], zoom_start=13, tiles='CartoDB dark_matter', zoom_control=False)
+    print(f"🛑 GENERATION CARTE {ville.upper()} (METRO LIGNES AUTO)...")
+    m = folium.Map(location=paths['center'], zoom_start=13, tiles='CartoDB dark_matter', zoom_control=False)
 
     # Config partagée des calques (ORA-130) : nom Folium/TOGGLE_LAYER et
     # visibilité par défaut de chaque calque, aussi consommée par
@@ -303,8 +383,9 @@ def main():
                 if existing:
                     annonce_id = existing['id']
 
+            txt_tooltip = build_immo_tooltip_html(type_local, prix)
             txt_popup = build_immo_popup_html(
-                type_local, prix, row.get('quartier', 'Lyon'), listing_url, image_url, annonce_id,
+                type_local, prix, row.get('quartier', ville.capitalize()), listing_url, image_url, annonce_id,
             )
 
             target_group = None
@@ -316,17 +397,20 @@ def main():
             if target_group:
                 # Popup (pas Tooltip) : reste ouvert au clic au lieu de disparaître
                 # dès que la souris quitte le marker, ce qui rendait le lien "Voir
-                # l'annonce" à l'intérieur impossible à atteindre (ORA-134).
+                # l'annonce" à l'intérieur impossible à atteindre (ORA-134). Le
+                # tooltip au survol reste utilisé en parallèle pour un aperçu
+                # rapide sans lien (ORA-99, build_immo_tooltip_html).
                 marker = folium.CircleMarker(
                     [lat, lon], radius=5, color=COLORS['Immo'], weight=1, fill=True, fill_color=COLORS['Immo'], fill_opacity=0.8,
+                    tooltip=folium.Tooltip(txt_tooltip, class_name='oracle-popup'),
                     popup=folium.Popup(txt_popup, max_width=220, className='oracle-popup'),
                 )
                 marker.add_to(target_group)
 
     # --- 6. GESTION DU MÉTRO VIA JSON (LIGNES + STATIONS) ---
-    if os.path.exists(METRO_JSON):
+    if os.path.exists(paths['metro_json']):
         try:
-            with open(METRO_JSON, 'r', encoding='utf-8') as f:
+            with open(paths['metro_json'], 'r', encoding='utf-8') as f:
                 metro_data = json.load(f)
 
             # Dictionnaire pour stocker les coordonnées par ligne (ex: {'A': [[lat,lon], [lat,lon]...]})
@@ -393,10 +477,10 @@ def main():
             print(f"🚇 Métro chargé : {len(stations_by_line)} lignes tracées, {count_stations} stations.")
 
         except Exception as e:
-            print(f"⚠️ Erreur lors du traitement de metro_lyon.json : {e}")
+            print(f"⚠️ Erreur lors du traitement de {paths['metro_json']} : {e}")
 
     # --- 6bis. LIMITES DES QUARTIERS (ARRONDISSEMENTS), ORA-104 ---
-    quartiers_geojson = load_geojson_file(QUARTIERS_GEOJSON)
+    quartiers_geojson = load_geojson_file(paths['quartiers_geojson'])
     if quartiers_geojson:
         folium.GeoJson(
             quartiers_geojson,
@@ -413,7 +497,7 @@ def main():
         ).add_to(m)
         print(f"🗺️ Quartiers chargés : {len(quartiers_geojson.get('features', []))} arrondissements tracés.")
     else:
-        print(f"⚠️ GeoJSON des quartiers introuvable ou invalide ({QUARTIERS_GEOJSON}), couche ignorée.")
+        print(f"⚠️ GeoJSON des quartiers introuvable ou invalide ({paths['quartiers_geojson']}), couche ignorée.")
 
     # --- 7. CAVALIERS ---
     mapping_simple = {'vice': (fg_vice, COLORS['Vice']), 'gentrification': (fg_gentri, COLORS['Gentrification']), 'nuisance': (fg_nuisance, COLORS['Nuisance']), 'superstition': (fg_superstition, COLORS['Superstition'])}
@@ -490,16 +574,20 @@ def main():
     if not os.path.exists(FRONTEND_DATA_DIR):
         os.makedirs(FRONTEND_DATA_DIR)
 
-    with open(OUTPUT_HTML, 'w', encoding='utf-8') as f:
+    with open(paths['output_html'], 'w', encoding='utf-8') as f:
         f.write(html_out)
 
-    print(f"🎉 TERMINÉ : {OUTPUT_HTML} (Métro : Lignes reliées automatiquement)")
+    print(f"🎉 TERMINÉ : {paths['output_html']} (Métro : Lignes reliées automatiquement)")
 
     # --- 10. CONTRÔLE DE FRAÎCHEUR (ORA-54) ---
-    # Écrit map_metadata.json à côté de la carte, avec la date de génération,
-    # pour détecter facilement une carte périmée si le pipeline de données change.
-    write_map_metadata(METADATA_JSON, output_html=OUTPUT_HTML)
+    # Écrit map_metadata_<ville>.json à côté de la carte, avec la date de
+    # génération, pour détecter facilement une carte périmée si le pipeline
+    # de données change.
+    write_map_metadata(paths['metadata_json'], output_html=paths['output_html'])
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Génère la carte statique Folium pour une ville.")
+    parser.add_argument('--ville', default='lyon', help="Slug de la ville (cf. VILLE_CONFIG), ex: lyon, lille.")
+    args = parser.parse_args()
+    main(args.ville)
