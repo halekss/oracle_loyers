@@ -214,30 +214,28 @@ function App() {
 
           {/* En-tête / Recherche */}
           <div className="shrink-0 p-4 md:p-5 border-b border-slate-800 bg-slate-950/50 z-20">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-xl font-black tracking-tighter text-white">
-                ORACLE <span className="text-purple-500">DES LOYERS</span>
-              </h1>
+            <h1 className="text-xl font-black tracking-tighter text-white mb-4">
+              ORACLE <span className="text-purple-500">DES LOYERS</span>
+            </h1>
 
-              {/* Sélecteur de ville (ORA-71 POC) : ne change que la carte
-                  affichée et le bornage des recherches quartier/historique,
-                  jamais les codes postaux Lyon/Lille (jamais ambigus). */}
-              <div className="flex rounded-lg border border-slate-800 overflow-hidden text-[10px] uppercase tracking-widest font-bold">
-                {['lyon', 'lille'].map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setVille(v)}
-                    className={`px-3 py-1.5 transition-colors ${
-                      ville === v
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-slate-900 text-slate-500 hover:text-slate-300'
-                    }`}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
+            {/* Sélecteur de ville (ORA-71 POC) : ne change que la carte
+                affichée, la recherche par quartier fonctionne sans distinction
+                de ville (codes postaux Lyon/Lille jamais ambigus). */}
+            <div className="flex gap-2 mb-4">
+              {['lyon', 'lille'].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setVille(v)}
+                  className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${
+                    ville === v
+                      ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/40'
+                      : 'bg-transparent border-slate-700 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
             </div>
 
             <SearchForm onScan={handleScan} isLoading={loading} />
