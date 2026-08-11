@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import AnnonceCard from './AnnonceCard';
 import { api, describeApiError } from '../services/api';
+import { useFavorites } from '../hooks/useFavorites';
 
 // ORA-127 : options de tri exposées à l'utilisateur (label FR + clé/ordre
 // envoyés au backend, qui trie côté SQL avant de paginer — cf. api.getAnnonces).
@@ -36,6 +37,10 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
   // canoniques que celle écrite dans annonces.db par clean_immo.py) —
   // annonces.db n'a pas d'endpoint dédié pour lister les quartiers connus.
   const [quartierOptions, setQuartierOptions] = useState([]);
+  // ORA-132 : filtre additif "Mes favoris" — n'affecte ni le tri, ni la
+  // pagination/le fetch (filtre client-side sur la page déjà chargée).
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const { isFavorite } = useFavorites();
 
   const perPage = compact ? 4 : 12;
   const activeSort = SORT_OPTIONS.find((opt) => opt.value === sortValue) || SORT_OPTIONS[0];
@@ -149,6 +154,39 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
     </div>
   );
 
+  // ORA-132 : bascule "Toutes" / "Mes favoris", additive au filtre quartier
+  // et au tri existants — ne modifie ni le tri, ni le fetch paginé.
+  const favoritesToggleControl = (
+    <div className="mb-2 flex items-center gap-2" role="tablist" aria-label="Filtrer les annonces">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={!showFavoritesOnly}
+        onClick={() => setShowFavoritesOnly(false)}
+        className={`text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-lg border transition-colors ${
+          !showFavoritesOnly
+            ? 'bg-purple-900/40 text-purple-300 border-purple-700/50'
+            : 'text-slate-500 border-slate-700 hover:text-slate-300'
+        }`}
+      >
+        Toutes
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={showFavoritesOnly}
+        onClick={() => setShowFavoritesOnly(true)}
+        className={`text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-lg border transition-colors ${
+          showFavoritesOnly
+            ? 'bg-purple-900/40 text-purple-300 border-purple-700/50'
+            : 'text-slate-500 border-slate-700 hover:text-slate-300'
+        }`}
+      >
+        ★ Mes favoris
+      </button>
+    </div>
+  );
+
   if (loading) {
     return (
       <div>
@@ -185,15 +223,24 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
     );
   }
 
+  const displayedItems = showFavoritesOnly ? items.filter((annonce) => isFavorite(annonce.id)) : items;
+
   return (
     <div className={compact ? 'max-h-72 overflow-y-auto pr-1' : ''}>
       {quartierFilterControl}
       {sortControl}
-      <div className="grid grid-cols-2 gap-3">
-        {items.map((annonce) => (
-          <AnnonceCard key={annonce.id} annonce={annonce} />
-        ))}
-      </div>
+      {favoritesToggleControl}
+      {displayedItems.length === 0 ? (
+        <p className="text-xs text-slate-500 text-center py-4">
+          Aucun favori pour le moment sur cette page.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {displayedItems.map((annonce) => (
+            <AnnonceCard key={annonce.id} annonce={annonce} />
+          ))}
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div className="mt-3 flex items-center justify-center gap-3">
