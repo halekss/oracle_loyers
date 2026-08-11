@@ -89,6 +89,52 @@ class AnnoncesStoreTest(unittest.TestCase):
         self.assertEqual(len(page_2["items"]), 2)
         self.assertNotEqual(page_1["items"], page_2["items"])
 
+    def test_list_annonces_sorts_by_prix_ascending(self):
+        annonces_store.upsert_annonce(url="https://example.com/a", prix=1200, db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/b", prix=800, db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/c", prix=1000, db_path=self.db_path)
+
+        result = annonces_store.list_annonces(sort="prix", order="asc", db_path=self.db_path)
+
+        self.assertEqual([item["prix"] for item in result["items"]], [800, 1000, 1200])
+
+    def test_list_annonces_sorts_by_surface_descending(self):
+        annonces_store.upsert_annonce(url="https://example.com/a", surface=30, db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/b", surface=50, db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/c", surface=40, db_path=self.db_path)
+
+        result = annonces_store.list_annonces(sort="surface", order="desc", db_path=self.db_path)
+
+        self.assertEqual([item["surface"] for item in result["items"]], [50, 40, 30])
+
+    def test_list_annonces_sorts_by_date(self):
+        annonces_store.upsert_annonce(
+            url="https://example.com/a", date_scraping="2024-01-01T00:00:00+00:00", db_path=self.db_path,
+        )
+        annonces_store.upsert_annonce(
+            url="https://example.com/b", date_scraping="2024-03-01T00:00:00+00:00", db_path=self.db_path,
+        )
+
+        result = annonces_store.list_annonces(sort="date", order="asc", db_path=self.db_path)
+
+        self.assertEqual([item["url"] for item in result["items"]], ["https://example.com/a", "https://example.com/b"])
+
+    def test_list_annonces_defaults_to_id_desc_without_sort(self):
+        annonces_store.upsert_annonce(url="https://example.com/a", db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/b", db_path=self.db_path)
+
+        result = annonces_store.list_annonces(db_path=self.db_path)
+
+        self.assertEqual([item["url"] for item in result["items"]], ["https://example.com/b", "https://example.com/a"])
+
+    def test_list_annonces_ignores_unknown_sort_key(self):
+        annonces_store.upsert_annonce(url="https://example.com/a", db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/b", db_path=self.db_path)
+
+        result = annonces_store.list_annonces(sort="bogus", db_path=self.db_path)
+
+        self.assertEqual([item["url"] for item in result["items"]], ["https://example.com/b", "https://example.com/a"])
+
     def test_get_annonce_by_id_returns_none_when_missing(self):
         self.assertIsNone(annonces_store.get_annonce_by_id(999, db_path=self.db_path))
 

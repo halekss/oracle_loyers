@@ -91,13 +91,19 @@ export const describeApiError = (error) => {
 
 export const api = {
   // Liste paginée des annonces — GET /api/annonces (ORA-84)
-  getAnnonces: async ({ ville, quartier, page = 1, perPage = 20 } = {}) => {
+  // `sort` ('prix' | 'surface' | 'date') et `order` ('asc' | 'desc') : tri
+  // optionnel appliqué côté serveur, la pagination étant déjà côté serveur
+  // (ORA-127 — cohérent avec le reste de la liste plutôt qu'un tri client
+  // limité à la page courante).
+  getAnnonces: async ({ ville, quartier, page = 1, perPage = 20, sort, order } = {}) => {
     try {
       const params = new URLSearchParams();
       if (ville) params.set('ville', ville);
       if (quartier) params.set('quartier', quartier);
       params.set('page', page);
       params.set('per_page', perPage);
+      if (sort) params.set('sort', sort);
+      if (order) params.set('order', order);
 
       const response = await fetchWithClassification(`${API_URL}/annonces?${params.toString()}`);
 

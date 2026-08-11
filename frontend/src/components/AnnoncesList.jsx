@@ -2,24 +2,43 @@ import { useState, useEffect } from 'react';
 import AnnonceCard from './AnnonceCard';
 import { api, describeApiError } from '../services/api';
 
+// ORA-127 : options de tri exposées à l'utilisateur (label FR + clé/ordre
+// envoyés au backend, qui trie côté SQL avant de paginer — cf. api.getAnnonces).
+const SORT_OPTIONS = [
+  { value: '', label: 'Plus récentes', sort: undefined, order: undefined },
+  { value: 'prix-asc', label: 'Prix croissant', sort: 'prix', order: 'asc' },
+  { value: 'prix-desc', label: 'Prix décroissant', sort: 'prix', order: 'desc' },
+  { value: 'surface-asc', label: 'Surface croissante', sort: 'surface', order: 'asc' },
+  { value: 'surface-desc', label: 'Surface décroissante', sort: 'surface', order: 'desc' },
+  { value: 'date-asc', label: 'Plus anciennes', sort: 'date', order: 'asc' },
+  { value: 'date-desc', label: 'Plus récentes en premier', sort: 'date', order: 'desc' },
+];
+
 // `compact` : variante utilisée dans la colonne Oracle en desktop (peu de
 // place, scroll interne borné) ; en plein écran (onglet mobile "Annonces"),
 // on charge une page plus large.
 // `onItemsChange` (optionnel) : notifie le parent des annonces actuellement
 // affichées, pour recentrer la carte sur leur bounding-box (ORA-105).
-export default function AnnoncesList({ compact = false, onItemsChange }) {
+// `focusedQuartier` (optionnel, ORA-127) : `{ quartier, token }` fourni par
+// le parent (ex. après un scan de quartier) pour présélectionner le filtre
+// quartier et sauter directement sur ses annonces. `token` doit changer à
+// chaque nouvelle demande (même quartier scanné deux fois de suite compris)
+// pour redéclencher le saut.
+export default function AnnoncesList({ compact = false, onItemsChange, focusedQuartier }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [quartierFilter, setQuartierFilter] = useState('');
+  const [sortValue, setSortValue] = useState('');
   // ORA-115 : options dérivées de /api/listings (même liste de quartiers
   // canoniques que celle écrite dans annonces.db par clean_immo.py) —
   // annonces.db n'a pas d'endpoint dédié pour lister les quartiers connus.
   const [quartierOptions, setQuartierOptions] = useState([]);
 
   const perPage = compact ? 4 : 12;
+  const activeSort = SORT_OPTIONS.find((opt) => opt.value === sortValue) || SORT_OPTIONS[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +56,16 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
     };
   }, []);
 
+  // ORA-127 : saute directement sur les annonces du quartier scanné quand le
+  // parent le demande (nouveau `token`), même si `quartier` est identique au
+  // filtre déjà actif (ex. deux scans successifs du même quartier).
+  useEffect(() => {
+    if (!focusedQuartier?.quartier) return;
+    setQuartierFilter(focusedQuartier.quartier);
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedQuartier?.token]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -45,7 +74,13 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
       setError(null);
 
       try {
-        const data = await api.getAnnonces({ page, perPage, quartier: quartierFilter || undefined });
+        const data = await api.getAnnonces({
+          page,
+          perPage,
+          quartier: quartierFilter || undefined,
+          sort: activeSort.sort,
+          order: activeSort.order,
+        });
         if (cancelled) return;
         setItems(data.items || []);
         setTotalPages(data.total_pages || 0);
@@ -64,14 +99,20 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
     return () => {
       cancelled = true;
     };
-  }, [page, perPage, quartierFilter]);
+  }, [page, perPage, quartierFilter, activeSort.sort, activeSort.order]);
 
   const handleQuartierChange = (e) => {
     setQuartierFilter(e.target.value);
     setPage(1);
   };
 
+  const handleSortChange = (e) => {
+    setSortValue(e.target.value);
+    setPage(1);
+  };
+
   const filterId = compact ? 'annonces-quartier-filter-compact' : 'annonces-quartier-filter';
+  const sortId = compact ? 'annonces-sort-compact' : 'annonces-sort';
 
   const quartierFilterControl = quartierOptions.length > 0 && (
     <div className="mb-2">
@@ -90,10 +131,29 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
     </div>
   );
 
+  // ORA-127 : contrôle de tri, toujours affiché (indépendant des quartiers
+  // connus contrairement au filtre ci-dessus).
+  const sortControl = (
+    <div className="mb-2">
+      <label htmlFor={sortId} className="sr-only">Trier les annonces</label>
+      <select
+        id={sortId}
+        value={sortValue}
+        onChange={handleSortChange}
+        className="w-full bg-slate-900 border border-slate-700 text-slate-300 text-[10px] uppercase tracking-widest font-bold px-2 py-1.5 rounded-lg focus:outline-none focus:border-purple-500"
+      >
+        {SORT_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+
   if (loading) {
     return (
       <div>
         {quartierFilterControl}
+        {sortControl}
         <div className="animate-pulse grid grid-cols-2 gap-3">
           {Array.from({ length: compact ? 2 : 4 }).map((_, i) => (
             <div key={i} className="h-32 bg-slate-800 rounded-xl" />
@@ -107,6 +167,7 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
     return (
       <div>
         {quartierFilterControl}
+        {sortControl}
         <p className="text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
           {error}
         </p>
@@ -118,6 +179,7 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
     return (
       <div>
         {quartierFilterControl}
+        {sortControl}
         <p className="text-xs text-slate-500 text-center py-4">Aucune annonce disponible pour le moment.</p>
       </div>
     );
@@ -126,6 +188,7 @@ export default function AnnoncesList({ compact = false, onItemsChange }) {
   return (
     <div className={compact ? 'max-h-72 overflow-y-auto pr-1' : ''}>
       {quartierFilterControl}
+      {sortControl}
       <div className="grid grid-cols-2 gap-3">
         {items.map((annonce) => (
           <AnnonceCard key={annonce.id} annonce={annonce} />

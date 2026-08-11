@@ -56,6 +56,24 @@ class AnnoncesRoutesTest(unittest.TestCase):
         response = self.client.get("/api/annonces?page=0")
         self.assertEqual(response.status_code, 400)
 
+    def test_list_annonces_sorts_by_prix(self):
+        annonces_store.upsert_annonce(url="https://example.com/a", prix=1200, db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/b", prix=800, db_path=self.db_path)
+
+        response = self.client.get("/api/annonces?sort=prix&order=asc")
+
+        data = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["prix"] for item in data["items"]], [800, 1200])
+
+    def test_list_annonces_rejects_invalid_sort(self):
+        response = self.client.get("/api/annonces?sort=bogus")
+        self.assertEqual(response.status_code, 400)
+
+    def test_list_annonces_rejects_invalid_order(self):
+        response = self.client.get("/api/annonces?sort=prix&order=bogus")
+        self.assertEqual(response.status_code, 400)
+
     def test_get_annonce_detail_returns_the_annonce(self):
         created = annonces_store.upsert_annonce(
             titre="T3 Confluence", url="https://example.com/c", db_path=self.db_path,

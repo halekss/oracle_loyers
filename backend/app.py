@@ -299,11 +299,22 @@ def get_annonces():
         type: integer
         required: false
         default: 20
+      - name: sort
+        in: query
+        type: string
+        required: false
+        description: "'prix', 'surface' ou 'date' (ORA-127)"
+      - name: order
+        in: query
+        type: string
+        required: false
+        default: desc
+        description: "'asc' ou 'desc' (ORA-127)"
     responses:
       200:
         description: Page d'annonces correspondant aux filtres
       400:
-        description: Paramètre de pagination invalide
+        description: Paramètre de pagination ou de tri invalide
     """
     try:
         page = int(request.args.get('page', 1))
@@ -314,11 +325,21 @@ def get_annonces():
     if page < 1 or per_page < 1:
         return jsonify({"error": "page et per_page doivent être positifs"}), 400
 
+    sort = request.args.get('sort') or None
+    order = request.args.get('order', 'desc')
+
+    if sort is not None and sort not in annonces_store.SORT_COLUMNS:
+        return jsonify({"error": "sort doit être 'prix', 'surface' ou 'date'"}), 400
+    if order not in ('asc', 'desc'):
+        return jsonify({"error": "order doit être 'asc' ou 'desc'"}), 400
+
     result = annonces_store.list_annonces(
         ville=request.args.get('ville') or None,
         quartier=request.args.get('quartier') or None,
         page=page,
         per_page=per_page,
+        sort=sort,
+        order=order,
         db_path=ANNONCES_DB_PATH,
     )
     return jsonify(result)
