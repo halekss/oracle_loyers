@@ -593,7 +593,15 @@ def get_quartier_historique():
         return jsonify({
             "found": True,
             "status": "insufficient_history",
-            "message": "Pas encore assez d'historique de données pour observer une tendance (un seul snapshot enregistré à ce jour).",
+            # ORA-129 : cadence honnête, pas garantie — un nouveau snapshot est écrit
+            # à chaque run réussi du pipeline (visé hebdomadaire, voir README section
+            # "Versioning des snapshots de données"), mais rien n'alerte si un run est
+            # sauté, d'où "généralement" plutôt qu'une promesse ferme de délai.
+            "message": (
+                "Pas encore assez d'historique de données pour observer une tendance "
+                "(un seul snapshot enregistré à ce jour). De nouvelles données sont "
+                "généralement ajoutées chaque semaine."
+            ),
             "historique": [],
         })
 

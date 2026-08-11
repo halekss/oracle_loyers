@@ -5,6 +5,12 @@ import React from "react";
 // assez d'historique (un seul snapshot enregistré), le backend renvoie
 // status="insufficient_history" plutôt qu'une fausse tendance à un point —
 // affiché honnêtement ici plutôt que masqué.
+//
+// ORA-129 : le `message` renvoyé par le backend dans ce cas indique aussi à
+// l'utilisateur·rice quand s'attendre à de nouvelles données ("généralement
+// chaque semaine"), sans transformer la cadence visée du pipeline (DAG
+// Airflow hebdomadaire, non surveillé pour les runs manqués) en promesse
+// ferme — voir README section "Versioning des snapshots de données".
 export default function PriceHistory({ status, message, historique }) {
   if (!status) return null;
 

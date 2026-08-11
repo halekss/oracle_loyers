@@ -304,10 +304,12 @@ curl -X POST http://localhost:5000/api/quartier-stats \
 {
   "found": true,
   "status": "insufficient_history",
-  "message": "Pas encore assez d'historique de données pour observer une tendance (un seul snapshot enregistré à ce jour).",
+  "message": "Pas encore assez d'historique de données pour observer une tendance (un seul snapshot enregistré à ce jour). De nouvelles données sont généralement ajoutées chaque semaine.",
   "historique": []
 }
 ```
+
+  La mention "chaque semaine" reflète la cadence *visée* du pipeline (DAG Airflow hebdomadaire, voir README section "Versioning des snapshots de données"), pas un délai garanti — un run manqué ou en échec ne déclenche aucune alerte dédiée côté Airflow (ORA-129).
 
 - **Codes d'erreur** : `400` si `quartier` est vide, comme `/api/quartier-stats`.
 
