@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+import json
 from unittest.mock import patch
 
 import pandas as pd
@@ -15,7 +16,10 @@ from data_fusion import (
     extract_postal_code,
     extract_type,
     format_description,
+    load_declared_villes,
+    resolve_default_cp,
     run_fusion,
+    site_files_config,
 )
 
 
@@ -68,6 +72,21 @@ class ExtractPostalCodeTest(unittest.TestCase):
     def test_defaults_to_69000_for_nan(self):
         self.assertEqual(extract_postal_code(pd.NA), "69000")
 
+    def test_extracts_explicit_lille_postal_code(self):
+        self.assertEqual(extract_postal_code("Appartement Lille 59800"), "59800")
+
+    def test_extracts_lille_postal_code_from_free_text(self):
+        self.assertEqual(extract_postal_code("Studio quartier Wazemmes, 59000 Lille"), "59000")
+
+    def test_uses_given_default_cp_when_nothing_found(self):
+        self.assertEqual(extract_postal_code("Bel appartement", default_cp="59000"), "59000")
+
+    def test_uses_given_default_cp_for_nan(self):
+        self.assertEqual(extract_postal_code(pd.NA, default_cp="59000"), "59000")
+
+    def test_default_cp_defaults_to_69000_when_not_given(self):
+        self.assertEqual(extract_postal_code("Bel appartement"), "69000")
+
 
 class ExtractTypeTest(unittest.TestCase):
     def test_detects_colocation(self):
@@ -99,11 +118,63 @@ class FormatDescriptionTest(unittest.TestCase):
     def test_returns_empty_string_for_nan(self):
         self.assertEqual(format_description(pd.NA), "")
 
+    def test_strips_lille_and_postal_code(self):
+        result = format_description("T2 Lille 59800 Appartement lumineux avec balcon")
+        self.assertNotIn("59800", result)
+        self.assertNotIn("Lille", result)
+
+
+class LoadDeclaredVillesTest(unittest.TestCase):
+    def test_reads_villes_from_scraping_config(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = os.path.join(tmp_dir, "scraping_config.json")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "ville_active": "lyon",
+                    "villes": {
+                        "lyon": {"nom": "Lyon", "slug": "lyon"},
+                        "lille": {"nom": "Lille", "slug": "lille"},
+                    },
+                }, f)
+
+            villes = load_declared_villes(config_path)
+
+        self.assertEqual(set(villes.keys()), {"lyon", "lille"})
+        self.assertEqual(villes["lille"]["nom"], "Lille")
+
+
+class ResolveDefaultCpTest(unittest.TestCase):
+    def test_returns_the_configured_code_postal_defaut(self):
+        cp = resolve_default_cp({"nom": "Lille", "code_postal_defaut": "59000"}, "Lille")
+
+        self.assertEqual(cp, "59000")
+
+    def test_raises_when_code_postal_defaut_is_missing(self):
+        # Régression réelle : un repli silencieux vers "69000" (Lyon) pour une
+        # ville dont la config oublierait code_postal_defaut mélangerait ses
+        # annonces non résolues avec celles de Lyon, sans que rien ne le signale.
+        with self.assertRaises(KeyError):
+            resolve_default_cp({"nom": "Marseille"}, "Marseille")
+
+
+class SiteFilesConfigTest(unittest.TestCase):
+    def test_builds_filenames_from_slug(self):
+        configs = site_files_config("lille")
+
+        filenames = [c['file'] for c in configs]
+        self.assertIn("annonces_lille_century21.csv", filenames)
+        self.assertIn("annonces_lille_orpi.csv", filenames)
+        self.assertEqual(len(configs), 5)
+
 
 class RunFusionDateDernierScanTest(unittest.TestCase):
     """ORA-134 : la colonne DerniereVue des scrapers doit survivre à la fusion
     sous le nom date_dernier_scan, exploitée ensuite par clean_immo.py pour la
-    purge par TTL."""
+    purge par TTL. run_fusion() boucle maintenant sur toutes les villes
+    déclarées dans scraping_config.json (ORA-71) : seul le fichier Lyon est
+    présent dans data_dir pour ce test, les autres villes sont silencieusement
+    ignorées (fichiers absents), le fichier de sortie combiné n'a donc que la
+    ligne Lyon écrite ici."""
 
     def _write_century21_csv(self, data_dir, rows):
         path = os.path.join(data_dir, "annonces_lyon_century21.csv")
@@ -119,7 +190,7 @@ class RunFusionDateDernierScanTest(unittest.TestCase):
 
             with patch.object(data_fusion, "data_dir", tmp_dir):
                 run_fusion()
-                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_lyon_complet.csv"))
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
 
         self.assertIn("date_dernier_scan", result.columns)
         self.assertEqual(result.loc[0, "date_dernier_scan"], "2026-08-06")
@@ -135,7 +206,7 @@ class RunFusionDateDernierScanTest(unittest.TestCase):
 
             with patch.object(data_fusion, "data_dir", tmp_dir):
                 run_fusion()
-                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_lyon_complet.csv"))
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
 
         self.assertIn("date_dernier_scan", result.columns)
         self.assertTrue(result["date_dernier_scan"].isna().all())

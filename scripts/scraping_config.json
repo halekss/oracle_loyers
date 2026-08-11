@@ -11,6 +11,7 @@
     "lyon": {
       "nom": "Lyon",
       "slug": "lyon",
+      "code_postal_defaut": "69000",
       "century21": {
         "base_url": "https://www.century21.fr/annonces/f/location-maison-appartement/v-lyon/page-{}/"
       },
@@ -29,6 +30,36 @@
       },
       "paruvendu": {
         "base_url": "https://www.paruvendu.fr/immobilier/recherche/location/lyon/?rechpv=1&tt=5&tbApp=1&tbDup=1&tbChb=1&tbLof=1&tbAtl=1&tbPla=1&tbMai=1&tbVil=1&tbCha=1&tbPro=1&tbHot=1&tbMou=1&tbFer=1&nbp0=99&pa=FR&lol=0&ray=50&codeINSEE=69000,",
+        "page_query_param": "p"
+      }
+    },
+    "lille": {
+      "nom": "Lille",
+      "slug": "lille",
+      "code_postal_defaut": "59000",
+      "century21": {
+        "base_url": "https://www.century21.fr/annonces/f/location-maison-appartement/v-lille/page-{}/"
+      },
+      "orpi": {
+        "base_url": "https://www.orpi.com/recherche/rent?transaction=rent&locations%5B0%5D%5Bvalue%5D=lille&sort=date-down&layoutType=list&page={}"
+      },
+      "pap": {
+        "base_url": "https://www.pap.fr/annonce/locations-appartement-lille-59-g43627-a-partir-du-2-pieces?page={}"
+      },
+      "seloger": {
+        "base_url": "https://www.seloger.com/classified-search?distributionTypes=Rent&estateTypes=House,Apartment&locations=AD08FR23619",
+        "page_query_param": "page"
+      },
+      "vizzit": {
+        "base_url": "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-type-rentals-hab_appartement-on-hab_house-on-city_id-gr_3040-tf_ids-235728",
+        "price_bands": [
+          {"max": 600},
+          {"min": 601, "max": 900},
+          {"min": 901}
+        ]
+      },
+      "paruvendu": {
+        "base_url": "https://www.paruvendu.fr/immobilier/recherche/location/lille/?rechpv=1&tt=5&tbApp=1&tbDup=1&tbChb=1&tbLof=1&tbAtl=1&tbPla=1&tbMai=1&tbVil=1&tbCha=1&tbPro=1&tbHot=1&tbMou=1&tbFer=1&nbp0=99&pa=FR&lol=0&ray=50&codeINSEE=59350,",
         "page_query_param": "p"
       }
     }
