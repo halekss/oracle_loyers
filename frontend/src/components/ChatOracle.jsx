@@ -57,25 +57,26 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
     saveChatHistory(messages);
   }, [messages]);
 
-  // 3. Envoi du message utilisateur
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    const userMsg = input.trim();
-    
-    // Affiche le message de l'utilisateur tout de suite
-    setMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
-    setInput('');
+  // 3. Envoi du message utilisateur (et ré-envoi, ORA-120)
+  // `messageIndex` repère le message utilisateur associé dans `messages`,
+  // pour pouvoir le marquer en échec (et l'en sortir au réessai) sans
+  // dupliquer de bulle.
+  const attemptSend = async (userMsg, messageIndex) => {
     setIsLoading(true);
 
     try {
       // Envoie le message + le contexte (prix, quartier...) au Backend
       const oracleResponse = await api.sendChatMessage(userMsg, buildChatContext(context, latestInsight));
       const responseText = typeof oracleResponse === 'string' ? oracleResponse : oracleResponse.response;
-      
-      // Affiche la réponse d'Immotep
-      setMessages(prev => [...prev, { sender: 'oracle', text: responseText }]);
+
+      // Affiche la réponse d'Immotep, et lève le marqueur d'échec éventuel
+      setMessages(prev => {
+        const next = [...prev];
+        if (next[messageIndex]?.sender === 'user') {
+          next[messageIndex] = { ...next[messageIndex], failed: false };
+        }
+        return [...next, { sender: 'oracle', text: responseText }];
+      });
       if (typeof oracleResponse === 'object') {
         setLatestInsight(oracleResponse);
         onInsight?.(oracleResponse);
@@ -86,13 +87,46 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
       }
     } catch (error) {
       console.error('Erreur chat:', error);
-      setMessages(prev => [...prev, {
-        sender: 'oracle',
-        text: describeChatError(error)
-      }]);
+      // ORA-120 : marque le message utilisateur en échec pour afficher un
+      // bouton réessayer dessus (réseau, 500, timeout...)
+      setMessages(prev => {
+        const next = [...prev];
+        if (next[messageIndex]?.sender === 'user') {
+          next[messageIndex] = { ...next[messageIndex], failed: true };
+        }
+        return [...next, { sender: 'oracle', text: describeChatError(error) }];
+      });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSend = (e) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    const userMsg = input.trim();
+    const messageIndex = messages.length;
+
+    // Affiche le message de l'utilisateur tout de suite
+    setMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
+    setInput('');
+
+    attemptSend(userMsg, messageIndex);
+  };
+
+  // ORA-120 : renvoie le même message (sans le ressaisir) depuis le bouton
+  // réessayer affiché sur un message utilisateur en échec d'envoi.
+  const handleRetry = (messageIndex, text) => {
+    if (isLoading) return;
+    setMessages(prev => {
+      const next = [...prev];
+      if (next[messageIndex]) {
+        next[messageIndex] = { ...next[messageIndex], failed: false };
+      }
+      return next;
+    });
+    attemptSend(text, messageIndex);
   };
 
   return (
@@ -101,18 +135,18 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
       {/* --- ZONE DE MESSAGES (Scrollable) --- */}
       <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
         {messages.map((msg, idx) => (
-          <div key={idx} data-testid="chat-message" data-sender={msg.sender} className={`flex w-full ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={idx} data-testid="chat-message" data-sender={msg.sender} className={`flex w-full flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
 
             <div
               className={`max-w-[88%] md:max-w-[82%] px-4 py-3 rounded-xl text-sm leading-relaxed shadow-md backdrop-blur-sm ${
-                msg.sender === 'user' 
-                  ? 'bg-indigo-600 text-white rounded-br-sm' 
+                msg.sender === 'user'
+                  ? 'bg-indigo-600 text-white rounded-br-sm'
                   : 'bg-slate-800 text-slate-200 border border-slate-700/60 rounded-bl-sm'
               }`}
             >
               {msg.sender === 'oracle' ? (
                 // Rendu Markdown pour Immotep (Gras, Titres, Listes...)
-                <ReactMarkdown 
+                <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
                     // Correction : on ne récupère pas 'node' pour éviter le warning console
@@ -131,6 +165,19 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
                 <p>{msg.text}</p>
               )}
             </div>
+
+            {/* ORA-120 : bouton réessayer sur le message utilisateur en échec d'envoi */}
+            {msg.sender === 'user' && msg.failed && (
+              <button
+                type="button"
+                onClick={() => handleRetry(idx, msg.text)}
+                disabled={isLoading}
+                data-testid="retry-button"
+                className="mt-1 flex items-center gap-1 text-[11px] text-red-300 hover:text-red-200 underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Échec de l'envoi · Réessayer
+              </button>
+            )}
           </div>
         ))}
         

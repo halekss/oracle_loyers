@@ -102,6 +102,68 @@ describe('ChatOracle', () => {
     });
   });
 
+  it('shows a retry button on the failed user message after a send error (ORA-120)', async () => {
+    api.sendChatMessage.mockRejectedValue(new ApiError('Erreur serveur (500)', { type: 'server' }));
+    const user = userEvent.setup();
+
+    render(<ChatOracle />);
+
+    await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Quel prix a Gerland ?');
+    await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('retry-button')).toBeInTheDocument();
+    });
+    // Le message original reste affiché, non effacé par l'échec
+    expect(screen.getByText('Quel prix a Gerland ?')).toBeInTheDocument();
+  });
+
+  it('does not show a retry button after a successful send', async () => {
+    api.sendChatMessage.mockResolvedValue({ response: 'Ça tourne autour de 780 EUR.' });
+    const user = userEvent.setup();
+
+    render(<ChatOracle />);
+
+    await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Quel prix a Gerland ?');
+    await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/780 EUR/)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('retry-button')).not.toBeInTheDocument();
+  });
+
+  it('resends the same message content when the retry button is clicked, without retyping it (ORA-120)', async () => {
+    api.sendChatMessage
+      .mockRejectedValueOnce(new ApiError('Erreur serveur (500)', { type: 'server' }))
+      .mockResolvedValueOnce({ response: 'Ça tourne autour de 780 EUR.' });
+    const user = userEvent.setup();
+
+    render(<ChatOracle />);
+
+    await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Quel prix a Gerland ?');
+    await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('retry-button')).toBeInTheDocument();
+    });
+
+    // L'input est vide : le renvoi doit se faire sans ressaisie
+    expect(screen.getByPlaceholderText('Prix, surface, quartier...')).toHaveValue('');
+
+    await user.click(screen.getByTestId('retry-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/780 EUR/)).toBeInTheDocument();
+    });
+
+    expect(api.sendChatMessage).toHaveBeenCalledTimes(2);
+    expect(api.sendChatMessage).toHaveBeenNthCalledWith(2, 'Quel prix a Gerland ?', expect.anything());
+    // Une seule bulle utilisateur : le message n'a pas été dupliqué
+    expect(screen.getAllByText('Quel prix a Gerland ?')).toHaveLength(1);
+    expect(screen.queryByTestId('retry-button')).not.toBeInTheDocument();
+  });
+
   it('disables the send button while input is empty', () => {
     render(<ChatOracle />);
     expect(screen.getByRole('button', { name: /envoyer le message/i })).toBeDisabled();
