@@ -1,0 +1,82 @@
+[
+  {
+    "key": "Studio",
+    "name": "Immo Studio/T1",
+    "label": "Studio / T1",
+    "group": "immobilier",
+    "defaultVisible": true,
+    "uiColor": "#22c55e"
+  },
+  {
+    "key": "T2",
+    "name": "Immo T2",
+    "label": "Apparts T2",
+    "group": "immobilier",
+    "defaultVisible": true,
+    "uiColor": "#22c55e"
+  },
+  {
+    "key": "T3",
+    "name": "Immo T3",
+    "label": "Apparts T3",
+    "group": "immobilier",
+    "defaultVisible": true,
+    "uiColor": "#22c55e"
+  },
+  {
+    "key": "T4",
+    "name": "Immo Grand (T4+)",
+    "label": "Grands (T4+)",
+    "group": "immobilier",
+    "defaultVisible": true,
+    "uiColor": "#22c55e"
+  },
+  {
+    "key": "Metro",
+    "name": "Metro",
+    "label": "Métro (Lignes & Stations)",
+    "group": "transports",
+    "defaultVisible": true,
+    "uiColor": "#818181"
+  },
+  {
+    "key": "Vice",
+    "name": "Vice",
+    "label": "Vice",
+    "group": "contexte",
+    "defaultVisible": true,
+    "uiColor": "#e74c3c"
+  },
+  {
+    "key": "Gentrification",
+    "name": "Gentrification",
+    "label": "Gentrification",
+    "group": "contexte",
+    "defaultVisible": false,
+    "uiColor": "#3b82f6"
+  },
+  {
+    "key": "Nuisance",
+    "name": "Nuisance",
+    "label": "Nuisance",
+    "group": "contexte",
+    "defaultVisible": false,
+    "uiColor": "#f39c12"
+  },
+  {
+    "key": "Superstition",
+    "name": "Superstition",
+    "label": "Superstition",
+    "group": "contexte",
+    "defaultVisible": false,
+    "uiColor": "#9b59b6"
+  },
+  {
+    "key": "Quartiers",
+    "name": "Quartiers",
+    "label": "Quartiers",
+    "group": "contexte",
+    "defaultVisible": false,
+    "uiColor": "#a78bfa"
+  }
+]

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
+import mapLayersConfig from '../config/mapLayers.config.json';
 
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
 // (générée par backend/scripts/generate_map.py) : voir MAP_CONTRACT.md (ORA-125).
@@ -9,19 +10,16 @@ import { api } from '../services/api';
 const LYON_CENTER = { lat: 45.7640, lng: 4.8357, zoom: 13 };
 
 // --- CONFIGURATION DES CALQUES ---
-const LAYER_MAPPING = {
-  'Studio': 'Immo Studio/T1',
-  'T2': 'Immo T2',
-  'T3': 'Immo T3',
-  'T4': 'Immo Grand (T4+)',
-  
-  'Metro': 'Metro', // Groupe unifié
-  'Vice': 'Vice',
-  'Nuisance': 'Nuisance',
-  'Gentrification': 'Gentrification',
-  'Superstition': 'Superstition',
-  'Quartiers': 'Quartiers' // Limites des arrondissements (ORA-104)
-};
+// Source de vérité unique (frontend/src/config/mapLayers.config.json),
+// consommée aussi par backend/scripts/generate_map.py (ORA-130) : ajouter un
+// calque = éditer ce JSON, pas ce composant ET le script Python séparément.
+// `LAYER_MAPPING` (clé interne React -> libellé du calque Folium/TOGGLE_LAYER)
+// dérive de ce fichier plutôt que d'être recopié à la main.
+const LAYER_MAPPING = Object.fromEntries(
+  mapLayersConfig.map((layer) => [layer.key, layer.name])
+);
+
+const layersByGroup = (group) => mapLayersConfig.filter((layer) => layer.group === group);
 
 const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   <div 
@@ -60,19 +58,12 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
   }, [chatOpen]);
   
   // --- ETATS ---
-  const [layers, setLayers] = useState({
-    'Studio': true,
-    'T2': true,
-    'T3': true,
-    'T4': true,
-    
-    'Metro': true, // Etat unique pour tout le métro
-    'Vice': true,
-    'Nuisance': false,
-    'Gentrification': false,
-    'Superstition': false,
-    'Quartiers': false
-  });
+  // Visibilité initiale de chaque calque : dérivée de mapLayers.config.json
+  // (`defaultVisible`), même source que le `show=` des FeatureGroup/GeoJson
+  // Folium correspondants côté generate_map.py (ORA-130).
+  const [layers, setLayers] = useState(() =>
+    Object.fromEntries(mapLayersConfig.map((layer) => [layer.key, layer.defaultVisible]))
+  );
 
   useEffect(() => {
     if (center && iframeRef.current && iframeRef.current.contentWindow) {
@@ -196,8 +187,16 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
 
           <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 font-bold">Transports</h3>
           {/* BOUTON UNIQUE METRO */}
-          <ToggleItem label="Métro (Lignes & Stations)" color="#818181" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
-          
+          {layersByGroup('transports').map((layer) => (
+            <ToggleItem
+              key={layer.key}
+              label={layer.label}
+              color={layer.uiColor}
+              isActive={layers[layer.key]}
+              onToggle={() => toggleLayer(layer.key)}
+            />
+          ))}
+
           <details className="mt-4 group" open>
             <summary className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-slate-300 transition-colors">
               <span>Contexte</span>
@@ -205,18 +204,27 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </summary>
-            <ToggleItem label="Vice" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
-            <ToggleItem label="Gentrification" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
-            <ToggleItem label="Nuisance" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
-            <ToggleItem label="Superstition" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
-            <ToggleItem label="Quartiers" color="#a78bfa" isActive={layers['Quartiers']} onToggle={() => toggleLayer('Quartiers')} />
+            {layersByGroup('contexte').map((layer) => (
+              <ToggleItem
+                key={layer.key}
+                label={layer.label}
+                color={layer.uiColor}
+                isActive={layers[layer.key]}
+                onToggle={() => toggleLayer(layer.key)}
+              />
+            ))}
           </details>
-          
+
           <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Offres Immobilières</h3>
-          <ToggleItem label="Studio / T1" color="#22c55e" isActive={layers['Studio']} onToggle={() => toggleLayer('Studio')} />
-          <ToggleItem label="Apparts T2" color="#22c55e" isActive={layers['T2']} onToggle={() => toggleLayer('T2')} />
-          <ToggleItem label="Apparts T3" color="#22c55e" isActive={layers['T3']} onToggle={() => toggleLayer('T3')} />
-          <ToggleItem label="Grands (T4+)" color="#22c55e" isActive={layers['T4']} onToggle={() => toggleLayer('T4')} />
+          {layersByGroup('immobilier').map((layer) => (
+            <ToggleItem
+              key={layer.key}
+              label={layer.label}
+              color={layer.uiColor}
+              isActive={layers[layer.key]}
+              onToggle={() => toggleLayer(layer.key)}
+            />
+          ))}
         </div>
       )}
     </div>
