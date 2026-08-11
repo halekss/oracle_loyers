@@ -27,6 +27,7 @@ const makeAnnonce = (id) => ({
 describe('AnnoncesList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     api.getListings.mockResolvedValue([
       { quartier: 'Gerland' },
       { quartier: 'Confluence' },
@@ -147,5 +148,73 @@ describe('AnnoncesList', () => {
 
     await waitFor(() => expect(screen.getByText(/aucune annonce disponible/i)).toBeInTheDocument());
     expect(screen.getByLabelText(/quartier/i)).toBeInTheDocument();
+  });
+
+  describe('filtre "Mes favoris" (ORA-132)', () => {
+    it('shows all fetched annonces by default', async () => {
+      api.getAnnonces.mockResolvedValue({
+        items: [makeAnnonce(1), makeAnnonce(2)],
+        page: 1,
+        total_pages: 1,
+      });
+
+      render(<AnnoncesList />);
+
+      await waitFor(() => expect(screen.getByText('Annonce 1')).toBeInTheDocument());
+      expect(screen.getByText('Annonce 2')).toBeInTheDocument();
+    });
+
+    it('filters to only the favorited annonces when switching to "Mes favoris"', async () => {
+      localStorage.setItem('oracle-loyers:favorites', JSON.stringify([2]));
+      api.getAnnonces.mockResolvedValue({
+        items: [makeAnnonce(1), makeAnnonce(2)],
+        page: 1,
+        total_pages: 1,
+      });
+      const user = userEvent.setup();
+
+      render(<AnnoncesList />);
+      await waitFor(() => expect(screen.getByText('Annonce 1')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('tab', { name: /mes favoris/i }));
+
+      expect(screen.queryByText('Annonce 1')).not.toBeInTheDocument();
+      expect(screen.getByText('Annonce 2')).toBeInTheDocument();
+    });
+
+    it('shows an empty-favorites message when no fetched annonce is favorited', async () => {
+      api.getAnnonces.mockResolvedValue({
+        items: [makeAnnonce(1), makeAnnonce(2)],
+        page: 1,
+        total_pages: 1,
+      });
+      const user = userEvent.setup();
+
+      render(<AnnoncesList />);
+      await waitFor(() => expect(screen.getByText('Annonce 1')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('tab', { name: /mes favoris/i }));
+
+      expect(screen.getByText(/aucun favori pour le moment/i)).toBeInTheDocument();
+    });
+
+    it('switches back to showing all annonces when "Toutes" is clicked', async () => {
+      api.getAnnonces.mockResolvedValue({
+        items: [makeAnnonce(1), makeAnnonce(2)],
+        page: 1,
+        total_pages: 1,
+      });
+      const user = userEvent.setup();
+
+      render(<AnnoncesList />);
+      await waitFor(() => expect(screen.getByText('Annonce 1')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('tab', { name: /mes favoris/i }));
+      expect(screen.getByText(/aucun favori pour le moment/i)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('tab', { name: /^toutes$/i }));
+      expect(screen.getByText('Annonce 1')).toBeInTheDocument();
+      expect(screen.getByText('Annonce 2')).toBeInTheDocument();
+    });
   });
 });
