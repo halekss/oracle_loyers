@@ -71,6 +71,22 @@ def compute_distance_features(latitude, longitude, cavaliers_df):
     return features
 
 
+def scope_cavaliers_to_ville(cavaliers_df, ville):
+    """Cavaliers de la ville donnée uniquement (même convention que
+    clean_immo.build_shapes_from_cavaliers/step_features : `code_postal`
+    renseigné = cavalier Lyon, absent = cavalier Lille) — évite qu'une
+    prédiction Lille calcule ses distances aux POI par rapport à des
+    cavaliers Lyon (et inversement). Renvoie `cavaliers_df` inchangé si la
+    ville est inconnue ou si la colonne `code_postal` est absente."""
+    if cavaliers_df is None or cavaliers_df.empty or "code_postal" not in cavaliers_df.columns:
+        return cavaliers_df
+    if ville == "Lyon":
+        return cavaliers_df[cavaliers_df["code_postal"].notna()]
+    if ville == "Lille":
+        return cavaliers_df[cavaliers_df["code_postal"].isna()]
+    return cavaliers_df
+
+
 def estimate_confidence(df, quartier, type_local):
     """Niveau de confiance basé sur le nombre de comparables réels (quartier + type) dans le dataset."""
     if df is None or df.empty:
@@ -109,12 +125,32 @@ def build_feature_row(payload, df, cavaliers_df, feature_names):
     quartier = resolve_quartier(payload.get("quartier"), known_quartiers)
     if not quartier:
         errors.append("quartier inconnu ou non fourni")
+    elif f"quartier_{quartier}" not in feature_names:
+        # Régression réelle (ORA-99 follow-up) : un quartier peut exister dans
+        # les données réelles (df) sans jamais avoir été vu par le modèle
+        # actif (ex: tout Lille, tant que le garde-fou de promotion rejette un
+        # réentraînement combiné) — sans ce contrôle, la colonne one-hot
+        # correspondante est silencieusement ignorée plus bas et le modèle
+        # prédit à l'aveugle, tout en affichant un niveau de confiance basé
+        # sur les vraies annonces comparables : trompeur. Le frontend a déjà
+        # un repli silencieux sur la moyenne réelle du secteur quand cet
+        # appel échoue (cf. App.jsx handleScan).
+        errors.append(
+            f"Le modèle actif n'a pas de données d'entraînement pour le quartier '{quartier}' "
+            "— prédiction non fiable pour cette zone."
+        )
 
     if errors:
         return None, errors
 
     type_bien = normalize_type_bien(payload.get("type"))
     quartier_rows = df[df["quartier"] == quartier]
+
+    ville_annonce = None
+    if "ville" in quartier_rows.columns:
+        villes_connues = quartier_rows["ville"].dropna()
+        if not villes_connues.empty:
+            ville_annonce = villes_connues.mode().iloc[0]
 
     latitude = payload.get("latitude")
     longitude = payload.get("longitude")
@@ -141,8 +177,9 @@ def build_feature_row(payload, df, cavaliers_df, feature_names):
     row["latitude"] = latitude
     row["longitude"] = longitude
 
-    if cavaliers_df is not None and not cavaliers_df.empty:
-        for name, value in compute_distance_features(latitude, longitude, cavaliers_df).items():
+    cavaliers_scoped = scope_cavaliers_to_ville(cavaliers_df, ville_annonce)
+    if cavaliers_scoped is not None and not cavaliers_scoped.empty:
+        for name, value in compute_distance_features(latitude, longitude, cavaliers_scoped).items():
             if name in row:
                 row[name] = value
 
