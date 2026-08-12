@@ -83,6 +83,25 @@ FALLBACK_ZONE_LOMME = {"lat": 50.6457, "lon": 2.9871, "radius": 0.018}
 FALLBACK_ZONE_HELLEMMES = {"lat": 50.6275, "lon": 3.1092, "radius": 0.013}
 FALLBACK_ZONE_EURALILLE = {"lat": 50.6392, "lon": 3.0738, "radius": 0.006}
 
+# Vraies communes limitrophes de Lille (pas des communes associées comme
+# Lomme/Hellemmes : des communes indépendantes, avec leur propre mairie et
+# CP) dont des annonces remontent parfois dans une recherche SeLoger centrée
+# sur Lille (rayon de recherche du site) — constaté en conditions réelles
+# sur le champ `Lieu` (ORA-71 POC follow-up : Lambersart, La Madeleine,
+# Faches-Thumesnil, Villeneuve-d'Ascq). Centre + rayon (max(largeur,
+# hauteur)/2 de la bounding box, même formule que _lille_zone_center_and_radius)
+# depuis les limites administratives réelles (Nominatim, boundary=administrative).
+# Jamais clippées à LILLE_COMMUNE_POLYGON — ce ne sont pas des annonces
+# Lille, et Lambersart/La Madeleine bordent directement Lille : un clip à la
+# frontière de Lille placerait leurs annonces du mauvais côté de la limite.
+ZONES_LIMITROPHES_LILLE = {
+    "Lambersart": {"lat": 50.6477924, "lon": 3.0223644, "radius": 0.0224, "cp": "59130"},
+    "La Madeleine": {"lat": 50.6544010, "lon": 3.0733338, "radius": 0.0137, "cp": "59110"},
+    "Faches-Thumesnil": {"lat": 50.6026031, "lon": 3.0697877, "radius": 0.0181, "cp": "59155"},
+    "Villeneuve-d'Ascq": {"lat": 50.6193174, "lon": 3.1314002, "radius": 0.0460, "cp": "59650"},
+}
+CP_A_ZONE_LIMITROPHE = {z["cp"]: nom for nom, z in ZONES_LIMITROPHES_LILLE.items()}
+
 # Contour réel de la commune de Lille (Lille + Lomme + Hellemmes, communes
 # associées incluses dans le même périmètre administratif), (lat, lon),
 # simplifié (tolérance 0.001°) depuis la géométrie officielle Overpass
@@ -321,6 +340,14 @@ def get_point_in_circle(center_lat, center_lon, radius):
     return center_lat + r * np.cos(angle), center_lon + r * np.sin(angle)
 
 def get_point_for_zipcode(cp, polygons_map, url=None):
+    # Communes limitrophes réelles (Lambersart, La Madeleine...) : jamais
+    # clippées à LILLE_COMMUNE_POLYGON, ce ne sont pas des annonces Lille
+    # (cf. ZONES_LIMITROPHES_LILLE). Vérifié avant la branche Lille
+    # ci-dessous car ces CP commencent aussi par "59".
+    if cp in CP_A_ZONE_LIMITROPHE:
+        z = ZONES_LIMITROPHES_LILLE[CP_A_ZONE_LIMITROPHE[cp]]
+        return get_point_in_circle(z["lat"], z["lon"], z["radius"])
+
     # Lille (ORA-71 POC) : priorité au quartier déduit de l'URL SeLoger
     # (signal structuré le plus fiable qu'on ait) ; sinon CP fiables
     # Lomme/Hellemmes/Euralille en zones dédiées ; sinon reste de la zone
@@ -459,6 +486,12 @@ def trouver_quartier(row):
     except: cp = str(row['code_postal'])
 
     if pd.isna(lat) or pd.isna(lon): return f"Secteur {cp}"
+
+    # Communes limitrophes réelles (pas des communes associées) : leur CP
+    # distinctif suffit à les identifier directement, avant la branche Lille
+    # ci-dessous (ces CP commencent aussi par "59").
+    if cp in CP_A_ZONE_LIMITROPHE:
+        return CP_A_ZONE_LIMITROPHE[cp]
 
     # Lille (ORA-71 POC) : priorité au quartier déduit de l'URL SeLoger
     # (signal structuré fourni par le site, cf. resolve_lille_quartier_hint)

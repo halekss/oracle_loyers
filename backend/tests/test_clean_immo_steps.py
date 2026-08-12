@@ -61,6 +61,25 @@ class StepPruneExpiredTest(unittest.TestCase):
         )
 
 
+class GetPointForZipcodeZonesLimitrophesTest(unittest.TestCase):
+    def test_lambersart_point_stays_within_its_own_circle_not_clipped_to_lille(self):
+        # Régression réelle : Lambersart borde directement Lille — un clip à
+        # LILLE_COMMUNE_POLYGON (comme pour Lomme/Hellemmes, qui EN font
+        # partie) placerait ses annonces du mauvais côté de la frontière.
+        # Lambersart n'est jamais clippée : on vérifie ici que le point tiré
+        # reste dans son propre cercle plutôt que d'être forcé vers Lille.
+        z = clean_immo.ZONES_LIMITROPHES_LILLE["Lambersart"]
+        for _ in range(20):
+            lat, lon = clean_immo.get_point_for_zipcode("59130", {})
+            dist_sq = (lat - z["lat"]) ** 2 + (lon - z["lon"]) ** 2
+            self.assertLessEqual(dist_sq, z["radius"] ** 2 * 1.0001)
+
+    def test_unknown_zone_limitrophe_cp_falls_through_to_lille_branch(self):
+        # CP réel Lille (pas une commune limitrophe) : ne doit pas passer par
+        # la branche ZONES_LIMITROPHES_LILLE.
+        self.assertNotIn("59000", clean_immo.CP_A_ZONE_LIMITROPHE)
+
+
 class MatchQuartierLilleTest(unittest.TestCase):
     def test_point_inside_wazemmes_bbox_returns_wazemmes(self):
         # Ce point est exactement le centroïde de Wazemmes, MAIS il tombe
@@ -141,6 +160,46 @@ class StepQuartiersTest(unittest.TestCase):
         result = clean_immo.step_quartiers(df)
 
         self.assertEqual(result.loc[0, "quartier"], "Lomme")
+
+    def test_lambersart_postal_code_returns_lambersart_directly(self):
+        # Régression réelle (ORA-71 POC follow-up) : une recherche SeLoger
+        # centrée sur Lille remonte aussi des annonces dans des communes
+        # limitrophes réelles (pas des communes associées comme
+        # Lomme/Hellemmes) — leur CP distinctif suffit à les identifier.
+        df = pd.DataFrame([
+            {"code_postal": "59130", "latitude": 50.6478, "longitude": 3.0224, "a_gps_reel": False},
+        ])
+
+        result = clean_immo.step_quartiers(df)
+
+        self.assertEqual(result.loc[0, "quartier"], "Lambersart")
+
+    def test_la_madeleine_postal_code_returns_la_madeleine_directly(self):
+        df = pd.DataFrame([
+            {"code_postal": "59110", "latitude": 50.6544, "longitude": 3.0733, "a_gps_reel": False},
+        ])
+
+        result = clean_immo.step_quartiers(df)
+
+        self.assertEqual(result.loc[0, "quartier"], "La Madeleine")
+
+    def test_faches_thumesnil_postal_code_returns_faches_thumesnil_directly(self):
+        df = pd.DataFrame([
+            {"code_postal": "59155", "latitude": 50.6026, "longitude": 3.0698, "a_gps_reel": False},
+        ])
+
+        result = clean_immo.step_quartiers(df)
+
+        self.assertEqual(result.loc[0, "quartier"], "Faches-Thumesnil")
+
+    def test_villeneuve_d_ascq_postal_code_returns_villeneuve_d_ascq_directly(self):
+        df = pd.DataFrame([
+            {"code_postal": "59650", "latitude": 50.6193, "longitude": 3.1314, "a_gps_reel": False},
+        ])
+
+        result = clean_immo.step_quartiers(df)
+
+        self.assertEqual(result.loc[0, "quartier"], "Villeneuve-d'Ascq")
 
     def test_central_cp_with_real_gps_uses_quartier_match(self):
         df = pd.DataFrame([

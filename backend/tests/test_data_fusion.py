@@ -18,6 +18,7 @@ from data_fusion import (
     format_description,
     load_declared_villes,
     resolve_default_cp,
+    resolve_seloger_lieu,
     run_fusion,
     site_files_config,
 )
@@ -86,6 +87,41 @@ class ExtractPostalCodeTest(unittest.TestCase):
 
     def test_default_cp_defaults_to_69000_when_not_given(self):
         self.assertEqual(extract_postal_code("Bel appartement"), "69000")
+
+
+class ResolveSelogerLieuTest(unittest.TestCase):
+    """ORA-71 POC follow-up : le champ Lieu de SeLoger contient parfois une
+    vraie commune limitrophe (pas Lille), et parfois un attribut du bien
+    ("Première occupation", "logement étudiant" — constatés en conditions
+    réelles) plutôt qu'un lieu, auquel cas le vrai lieu reste en tête
+    d'Infos ("Lieu - détails")."""
+
+    def test_returns_cp_for_a_known_commune_in_lieu(self):
+        self.assertEqual(resolve_seloger_lieu("Lambersart", "3 pièces, 67 m²", "59000"), "59130")
+
+    def test_is_case_insensitive(self):
+        self.assertEqual(resolve_seloger_lieu("LAMBERSART", "3 pièces", "59000"), "59130")
+
+    def test_lille_itself_resolves_too(self):
+        self.assertEqual(resolve_seloger_lieu("Lille", "1 pièce, 12 m²", "59000"), "59000")
+
+    def test_falls_back_to_infos_prefix_when_lieu_is_not_a_place(self):
+        result = resolve_seloger_lieu("Première occupation", "Lambersart - 3 pièces, 67 m²", "59000")
+        self.assertEqual(result, "59130")
+
+    def test_falls_back_to_infos_prefix_for_logement_etudiant(self):
+        result = resolve_seloger_lieu("logement étudiant", "Lille - 1 pièce, 19 m²", "59000")
+        self.assertEqual(result, "59000")
+
+    def test_returns_none_when_lieu_and_infos_prefix_are_both_unresolvable(self):
+        result = resolve_seloger_lieu("Première occupation", "Studio meublé - 1 pièce", "59000")
+        self.assertIsNone(result)
+
+    def test_returns_none_when_infos_is_missing(self):
+        self.assertIsNone(resolve_seloger_lieu("Première occupation", None, "59000"))
+
+    def test_returns_none_when_infos_has_no_separator(self):
+        self.assertIsNone(resolve_seloger_lieu("Première occupation", "pas de séparateur ici", "59000"))
 
 
 class ExtractTypeTest(unittest.TestCase):
@@ -210,6 +246,48 @@ class RunFusionDateDernierScanTest(unittest.TestCase):
 
         self.assertIn("date_dernier_scan", result.columns)
         self.assertTrue(result["date_dernier_scan"].isna().all())
+
+
+class RunFusionSelogerLieuTest(unittest.TestCase):
+    """ORA-71 POC follow-up : run_fusion() doit résoudre le vrai lieu
+    SeLoger (voire exclure l'annonce si introuvable) plutôt que de tout
+    regrouper sous le CP générique de la ville."""
+
+    def _write_seloger_csv(self, data_dir, rows):
+        path = os.path.join(data_dir, "annonces_lille_seloger.csv")
+        pd.DataFrame(
+            rows, columns=["Titre", "Prix", "Lieu", "Infos", "Lien", "Image", "DerniereVue"]
+        ).to_csv(path, index=False)
+
+    def test_resolves_a_bordering_commune_to_its_own_postal_code(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # surface < 60 : évite le filtre heuristique "colocation probable"
+            # (prix < 800 ET surface > 60) sur run_fusion(), sans rapport
+            # avec ce qui est testé ici.
+            self._write_seloger_csv(tmp_dir, [
+                ["Appartement à louer", "700 €", "Lambersart", "3 pièces, 45 m²",
+                 "https://example.test/1", "", "2026-08-06"],
+            ])
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(str(result.loc[0, "code_postal"]), "59130")
+
+    def test_drops_the_row_when_no_place_is_resolvable_anywhere(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self._write_seloger_csv(tmp_dir, [
+                ["Studio à louer", "500 €", "Première occupation", "Studio meublé - 1 pièce, 18 m²",
+                 "https://example.test/2", "", "2026-08-06"],
+            ])
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
+
+        self.assertEqual(len(result), 0)
 
 
 if __name__ == "__main__":

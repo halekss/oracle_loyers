@@ -41,6 +41,52 @@ def extract_postal_code(text, default_cp="69000"):
     if match_arr: return f"690{int(match_arr.group(1)):02d}"
     return default_cp
 
+# Lieux réels observés dans le champ Lieu de SeLoger pour une recherche
+# centrée sur Lille (le rayon de recherche du site déborde sur des communes
+# limitrophes réelles, pas des communes associées comme Lomme/Hellemmes) :
+# associés à leur vrai code postal, pour que clean_immo.py puisse les
+# distinguer de Lille elle-même plutôt que de tout regrouper sous le CP
+# générique 59000 (extract_postal_code ne trouve aucun chiffre à extraire
+# dans un nom de commune, donc retombait silencieusement sur le défaut).
+SELOGER_LIEU_TO_CP = {
+    "lille": "59000",
+    "lambersart": "59130",
+    "la madeleine": "59110",
+    "faches-thumesnil": "59155",
+    "faches thumesnil": "59155",
+    "villeneuve-d'ascq": "59650",
+    "villeneuve d'ascq": "59650",
+}
+
+
+def normalize_lieu(value):
+    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def resolve_seloger_lieu(lieu, infos, default_cp):
+    """CP réel déduit du champ `Lieu` de SeLoger, ou du premier segment
+    d'`Infos` ("Lieu - détails", même format structuré fourni par le site)
+    si `Lieu` n'est pas un nom de lieu exploitable — constaté en conditions
+    réelles : "Première occupation" et "logement étudiant" sont des
+    attributs du bien, pas une localisation, mais le vrai lieu reste
+    disponible en tête d'Infos pour ces annonces.
+
+    Renvoie None si aucun lieu connu n'est trouvé ni dans l'un ni dans
+    l'autre — l'appelant doit alors exclure l'annonce plutôt que de la
+    localiser au hasard sur `default_cp`."""
+    direct = SELOGER_LIEU_TO_CP.get(normalize_lieu(lieu))
+    if direct:
+        return direct
+
+    if pd.notna(infos) and " - " in str(infos):
+        premier_segment = str(infos).split(" - ", 1)[0]
+        depuis_infos = SELOGER_LIEU_TO_CP.get(normalize_lieu(premier_segment))
+        if depuis_infos:
+            return depuis_infos
+
+    return None
+
+
 def extract_type(text):
     """Détermine le type de bien (Maison, Appartement, Studio, Coloc)."""
     if pd.isna(text): return "Appartement"
@@ -146,6 +192,19 @@ def run_fusion():
                 if config['site'] == 'Orpi':
                     new_df['surface'] = full_desc.apply(clean_surface)
                     new_df['code_postal'] = full_desc.apply(lambda t: extract_postal_code(t, default_cp))
+                elif config['site'] == 'SeLoger':
+                    new_df['surface'] = df[config['col_surf']].apply(clean_surface)
+                    # Le champ Lieu de SeLoger est parfois un vrai nom de
+                    # commune limitrophe (Lambersart, La Madeleine...), pas
+                    # seulement Lille — resolve_seloger_lieu() le résout vers
+                    # son CP réel (ou None si ni Lieu ni Infos ne donnent de
+                    # lieu exploitable, cf. dropna(subset=['code_postal'])
+                    # ci-dessous qui exclut alors l'annonce plutôt que de la
+                    # localiser au hasard).
+                    new_df['code_postal'] = df.apply(
+                        lambda row: resolve_seloger_lieu(row[config['col_cp']], row.get('Infos'), default_cp),
+                        axis=1,
+                    )
                 else:
                     new_df['surface'] = df[config['col_surf']].apply(clean_surface)
                     new_df['code_postal'] = df[config['col_cp']].apply(lambda t: extract_postal_code(t, default_cp))
@@ -161,7 +220,7 @@ def run_fusion():
                 else:
                     new_df = new_df.drop_duplicates(subset=['url'])
 
-                new_df = new_df.dropna(subset=['prix'])
+                new_df = new_df.dropna(subset=['prix', 'code_postal'])
                 dfs.append(new_df)
                 print(f"   ✅ Ajouté : {len(new_df)} annonces")
 
