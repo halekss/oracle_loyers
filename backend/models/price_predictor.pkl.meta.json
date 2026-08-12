@@ -14,5 +14,6 @@
     "subsample": 0.7,
     "colsample_bytree": 0.6,
     "random_state": 42
-  }
+  },
+  "rolled_back_at": "2026-08-12T16:11:37.399692+00:00"
 }
