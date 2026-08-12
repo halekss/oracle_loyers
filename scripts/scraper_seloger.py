@@ -9,6 +9,7 @@ import sys
 
 from scraper_utils import (
     atomic_csv_writer,
+    canonical_url,
     find_first_image_url,
     get_chrome_driver,
     get_scraper_logger,
@@ -166,7 +167,7 @@ if __name__ == '__main__':
         compteur_page = 0
         for annonce in annonces:
             try:
-                lien = annonce.get_attribute("href")
+                lien = canonical_url(annonce.get_attribute("href") or "")
                 if not lien:
                     continue
 

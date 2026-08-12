@@ -17,7 +17,7 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from functools import wraps
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -38,6 +38,7 @@ __all__ = [
     "today_iso",
     "should_continue_pagination",
     "GRACE_PAGES_SANS_NOUVEAUTE",
+    "canonical_url",
 ]
 
 # Nombre de pages consécutives sans nouvelle annonce à parcourir avant d'arrêter
@@ -139,6 +140,24 @@ def today_iso():
     """Date du jour (UTC) au format ISO — utilisée pour horodater la colonne
     'DerniereVue' des scrapers (ORA-134 : TTL par re-scraping)."""
     return datetime.now(timezone.utc).date().isoformat()
+
+
+def canonical_url(url):
+    """Retire la query string et le fragment d'une URL d'annonce.
+
+    Régression réelle constatée sur SeLoger (Lille) : le `href` de chaque
+    carte annonce embarque le contexte de recherche courant (page, tri...),
+    qui varie selon la page depuis laquelle l'annonce est atteinte -- une
+    même annonce revue depuis une page différente produit donc un `href`
+    différent. Utilisé tel quel comme clé de dédoublonnage (`rows_by_lien`),
+    ça empêchait de jamais reconnaître une annonce déjà connue : elle était
+    re-scrapée et réécrite en CSV à chaque nouvelle page où le site la
+    présentait, jusqu'à des dizaines de fois (constaté : jusqu'à 144x pour
+    une même annonce), et `should_continue_pagination` ne voyait alors
+    jamais de page "sans nouveauté", ce qui empêchait aussi la pagination de
+    s'arrêter d'elle-même une fois le vrai inventaire épuisé."""
+    parts = urlsplit(str(url))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
 def should_continue_pagination(compteur_nouveaux, consecutive_empty_pages):
