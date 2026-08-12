@@ -129,9 +129,16 @@ def apply_price_band(base_url, band):
 def load_page(driver, url):
     driver.get(url)
 
-def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, derniere_vue_index, logger):
+def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, derniere_vue_index, logger, checkpoint=lambda: None):
     """Parcourt toutes les pages d'une recherche Vizzit donnée (déjà filtrée
-    par tranche de prix le cas échéant). Renvoie (nouveaux, cards_vues, erreurs)."""
+    par tranche de prix le cas échéant). Renvoie (nouveaux, cards_vues, erreurs).
+
+    `checkpoint` (callable sans argument) est appelé après chaque page plutôt
+    que de tout écrire une seule fois à la toute fin du run : régression
+    réelle constatée sur scraper_seloger.py (242 pages perdues suite à un
+    hoquet Selenium transitoire tardif, alors que atomic_csv_writer n'était
+    appelé qu'une fois à la toute fin). Pas d'effet par défaut (no-op), pour
+    rester testable sans dépendre du système de fichiers."""
     erreurs = 0
     nouveaux = 0
     cards_vues = 0
@@ -239,6 +246,7 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
 
         logger.info("Page %s terminée : %s annonces sauvegardées.", page_num, compteur_page)
         nouveaux += compteur_page
+        checkpoint()
 
         continuer, consecutive_empty_pages = should_continue_pagination(compteur_page, consecutive_empty_pages)
         page_num += 1
@@ -262,6 +270,11 @@ if __name__ == '__main__':
     rows_by_lien = {row[LIEN_INDEX]: row for row in existing_rows}
     today = today_iso()
 
+    def checkpoint():
+        with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
+            for row in rows_by_lien.values():
+                writer.writerow(row)
+
     # Une recherche Vizzit ne renvoie jamais plus de 20 pages (~480
     # annonces), même si le nombre réel de résultats est plus grand (803
     # constatés pour Lille avec une seule recherche) : on subdivise donc en
@@ -274,17 +287,13 @@ if __name__ == '__main__':
         band_url = apply_price_band(SEARCH_URL, band)
         logger.info("Tranche de prix %s : %s", band or "aucune", band_url)
         nouveaux, cards_vues, band_erreurs = scrape_search(
-            driver, wait, band_url, rows_by_lien, liens_vus, today, DERNIERE_VUE_INDEX, logger
+            driver, wait, band_url, rows_by_lien, liens_vus, today, DERNIERE_VUE_INDEX, logger, checkpoint
         )
         total_nouveaux_run += nouveaux
         total_cards_vues += cards_vues
         erreurs += band_erreurs
 
     driver.quit()
-
-    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
-        for row in rows_by_lien.values():
-            writer.writerow(row)
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour Vizzit. Le site a peut-être changé de structure.")

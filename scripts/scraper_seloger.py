@@ -86,8 +86,22 @@ if __name__ == '__main__':
     total_cards_vues = 0
     consecutive_empty_pages = 0
 
+    def checkpoint():
+        """Persiste l'état courant de `rows_by_lien` (écriture atomique complète,
+        pas un append). Appelée après chaque page plutôt qu'une seule fois à la
+        fin du run : régression réelle constatée (SeLoger, 242 pages) — un
+        hoquet Selenium transitoire (TimeoutException sur driver.execute_script,
+        pas un vrai blocage du site) en page 243 a fait planter tout le script,
+        et comme atomic_csv_writer n'était appelé qu'une fois à la toute fin,
+        les 242 pages déjà collectées en mémoire ont été perdues avec le crash."""
+        with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
+            for row in rows_by_lien.values():
+                writer.writerow(row)
+
     page_num = 1
     continuer = True
+    page_retry_count = 0
+    MAX_PAGE_RETRIES = 3
 
     while continuer:
         url = base_url if page_num == 1 else f"{base_url}&{PAGE_QUERY_PARAM}={page_num}"
@@ -117,14 +131,32 @@ if __name__ == '__main__':
         else:
             time.sleep(random.uniform(5, 8))
 
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
+        # Régression réelle : un hoquet Selenium transitoire ici (constaté :
+        # TimeoutException "Timed out receiving message from renderer" après
+        # 242 pages sans problème, pas un vrai blocage du site) faisait
+        # planter tout le script — checkpoint() protège les pages déjà
+        # collectées, mais laisser l'exception se propager arrêtait quand
+        # même le run avant les pages suivantes. On retente la page courante
+        # une fois plutôt que d'abandonner tout le run sur un incident isolé.
+        try:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
 
-        annonces = []
-        for sel in CARD_SELECTORS:
-            annonces = driver.find_elements(By.CSS_SELECTOR, sel)
-            if annonces:
+            annonces = []
+            for sel in CARD_SELECTORS:
+                annonces = driver.find_elements(By.CSS_SELECTOR, sel)
+                if annonces:
+                    break
+        except Exception as exc:
+            erreurs += 1
+            page_retry_count += 1
+            if page_retry_count > MAX_PAGE_RETRIES:
+                logger.error("Page %s : incident persistant après %s tentatives (%s), abandon du run.", page_num, MAX_PAGE_RETRIES, exc)
                 break
+            logger.warning("Incident navigateur transitoire page %s (%s/%s) : %s -- nouvelle tentative.", page_num, page_retry_count, MAX_PAGE_RETRIES, exc)
+            time.sleep(5)
+            continue
+        page_retry_count = 0
 
         if not annonces:
             logger.warning("Aucune annonce trouvée sur la page %s.", page_num)
@@ -174,6 +206,7 @@ if __name__ == '__main__':
 
         logger.info("Page %s terminée : %s nouvelles annonces.", page_num, compteur_page)
         total_nouveaux_run += compteur_page
+        checkpoint()
 
         continuer, consecutive_empty_pages = should_continue_pagination(compteur_page, consecutive_empty_pages)
         if not continuer:
@@ -181,10 +214,6 @@ if __name__ == '__main__':
         page_num += 1
 
     driver.quit()
-
-    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
-        for row in rows_by_lien.values():
-            writer.writerow(row)
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour SeLoger. Le site a peut-être changé de structure.")

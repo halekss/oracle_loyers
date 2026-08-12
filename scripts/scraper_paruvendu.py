@@ -116,6 +116,16 @@ if __name__ == '__main__':
     page_num = 1
     continuer = True
 
+    def checkpoint():
+        """Persiste l'état courant de `rows_by_lien` (écriture atomique complète,
+        pas un append). Appelée après chaque page plutôt qu'une seule fois à la
+        fin du run : régression réelle constatée sur scraper_seloger.py (242
+        pages perdues suite à un hoquet Selenium transitoire tardif, alors que
+        atomic_csv_writer n'était appelé qu'une fois à la toute fin du run)."""
+        with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
+            for row in rows_by_lien.values():
+                writer.writerow(row)
+
     while continuer:
         url_page = base_url if page_num == 1 else f"{base_url}&{PAGE_QUERY_PARAM}={page_num}"
         logger.info("Analyse de la page %s", page_num)
@@ -181,6 +191,7 @@ if __name__ == '__main__':
 
         logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_page)
         total_nouveaux_run += compteur_page
+        checkpoint()
 
         continuer, consecutive_empty_pages = should_continue_pagination(compteur_page, consecutive_empty_pages)
         if not continuer:
@@ -188,10 +199,6 @@ if __name__ == '__main__':
         else:
             time.sleep(random.uniform(1.5, 3))
         page_num += 1
-
-    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
-        for row in rows_by_lien.values():
-            writer.writerow(row)
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour ParuVendu. Le site a peut-être changé de structure.")
