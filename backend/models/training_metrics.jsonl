@@ -2,3 +2,4 @@
 {"trained_at": "2026-08-03T13:21:36.467168+00:00", "mae": 167.03, "r2": 0.755, "dataset_size": 1197, "n_features": 45}
 {"trained_at": "2026-08-05T16:34:17.704044+00:00", "mae": 169.86, "r2": 0.7313, "dataset_size": 1197, "n_features": 45, "model_version": "97355d253130", "promoted": true}
 {"trained_at": "2026-08-12T16:11:37.402852+00:00", "mae": 167.13, "r2": 0.6609, "dataset_size": 2110, "n_features": 103, "model_version": "7bb6de4f6ade", "promoted": false}
+{"trained_at": "2026-08-12T17:10:33.192219+00:00", "mae": 163.31, "r2": 0.6809, "dataset_size": 2110, "n_features": 103, "model_version": "76a5d2a5d96f", "promoted": false}
