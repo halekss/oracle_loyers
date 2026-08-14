@@ -290,5 +290,61 @@ class RunFusionSelogerLieuTest(unittest.TestCase):
         self.assertEqual(len(result), 0)
 
 
+class RunFusionPerVilleTest(unittest.TestCase):
+    """ORA-153 : chaque DAG annonces tourne désormais indépendamment par
+    ville. run_fusion(ville_slug) ne doit retraiter QUE cette ville, sans
+    écraser les annonces des autres villes déjà présentes dans le fichier
+    combiné (comportement historique de run_fusion() sans argument : toutes
+    les villes déclarées sont reconstruites depuis zéro à chaque appel)."""
+
+    def _write_century21_csv(self, data_dir, slug, rows):
+        path = os.path.join(data_dir, f"annonces_{slug}_century21.csv")
+        pd.DataFrame(
+            rows, columns=["Titre", "Prix", "Lieu_Surface", "Lien", "Image", "DerniereVue"]
+        ).to_csv(path, index=False)
+
+    def test_partial_fusion_preserves_other_villes_already_present(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self._write_century21_csv(tmp_dir, "lyon", [
+                ["T2 Lyon 69003 45 m2", "700 €", "45 m2", "https://example.test/lyon1", "", "2026-08-06"],
+            ])
+            self._write_century21_csv(tmp_dir, "lille", [
+                ["T2 Lille 59000 40 m2", "650 €", "40 m2", "https://example.test/lille1", "", "2026-08-06"],
+            ])
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+                run_fusion("lille")
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
+
+        self.assertEqual(set(result["ville"]), {"Lyon", "Lille"})
+        self.assertEqual(len(result), 2)
+
+    def test_partial_fusion_replaces_stale_rows_of_the_targeted_ville_only(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self._write_century21_csv(tmp_dir, "lyon", [
+                ["T2 Lyon 69003 45 m2", "700 €", "45 m2", "https://example.test/lyon1", "", "2026-08-06"],
+            ])
+            self._write_century21_csv(tmp_dir, "lille", [
+                ["T2 Lille 59000 40 m2", "650 €", "40 m2", "https://example.test/lille-old", "", "2026-08-06"],
+            ])
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+
+                # L'annonce Lille "old" n'est plus scrapée (retirée du site) ;
+                # une nouvelle la remplace au run partiel Lille suivant, sans
+                # toucher à Lyon.
+                os.remove(os.path.join(tmp_dir, "annonces_lille_century21.csv"))
+                self._write_century21_csv(tmp_dir, "lille", [
+                    ["T2 Lille 59000 42 m2", "660 €", "42 m2", "https://example.test/lille-new", "", "2026-08-07"],
+                ])
+                run_fusion("lille")
+
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
+
+        self.assertEqual(set(result["url"]), {"https://example.test/lyon1", "https://example.test/lille-new"})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,7 +8,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
-from api_overpass import merge_cavaliers, resolve_active_city_name
+from api_overpass import merge_cavaliers, resolve_active_city_name, resolve_city_name
 
 
 def _row(lat, lon, type_osm, categorie, nom):
@@ -88,6 +88,28 @@ class ResolveActiveCityNameTest(unittest.TestCase):
                 }, f)
 
             self.assertEqual(resolve_active_city_name(config_path), "VilleFictiveTest")
+
+
+class ResolveCityNameTest(unittest.TestCase):
+    """ORA-153 : resolve_city_name(slug) cible explicitement une ville, sans
+    dépendre ni modifier `ville_active` — chaque DAG cavaliers par ville
+    passe son propre slug plutôt que de mutualiser un réglage global partagé
+    entre villes (jusqu'ici modifié à la main entre deux scrapes)."""
+
+    def test_resolves_a_given_ville_regardless_of_ville_active(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = os.path.join(tmp_dir, "scraping_config.json")
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "ville_active": "lyon",
+                    "villes": {
+                        "lyon": {"nom": "Lyon", "slug": "lyon"},
+                        "lille": {"nom": "Lille", "slug": "lille"},
+                    },
+                }, f)
+
+            self.assertEqual(resolve_city_name("lille", config_path), "Lille")
+            self.assertEqual(resolve_city_name("lyon", config_path), "Lyon")
 
 
 if __name__ == "__main__":

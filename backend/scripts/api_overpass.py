@@ -24,6 +24,15 @@ def resolve_active_city_name(config_path=DEFAULT_SCRAPING_CONFIG_PATH):
     ville_active = config['ville_active']
     return config['villes'][ville_active]['nom']
 
+def resolve_city_name(ville_slug, config_path=DEFAULT_SCRAPING_CONFIG_PATH):
+    """Résout le nom d'affichage d'une ville depuis son slug, indépendamment
+    de `ville_active` — pour que chaque DAG cavaliers par ville (ORA-153)
+    cible explicitement sa ville sans dépendre d'un réglage global partagé
+    (jusqu'ici modifié à la main entre deux scrapes, cf. `ville_active`)."""
+    with open(config_path, encoding='utf-8') as f:
+        config = json.load(f)
+    return config['villes'][ville_slug]['nom']
+
 def merge_cavaliers(df_old, df_new):
     """Fusionne les cavaliers déjà connus avec les cavaliers fraîchement extraits.
 
@@ -192,4 +201,10 @@ def get_cavaliers_data(city_name="Lyon"):
         print("\n⚠️ Aucune nouvelle donnée récupérée.")
 
 if __name__ == "__main__":
-    get_cavaliers_data(resolve_active_city_name())
+    import argparse
+    parser = argparse.ArgumentParser(description="Scrape les POI (cavaliers) via Overpass pour une ville.")
+    parser.add_argument('--ville', default=None, help="Slug de la ville (cf. scraping_config.json). Par défaut : ville_active de la config.")
+    args = parser.parse_args()
+
+    city_name = resolve_city_name(args.ville) if args.ville else resolve_active_city_name()
+    get_cavaliers_data(city_name)

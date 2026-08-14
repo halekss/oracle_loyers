@@ -157,10 +157,22 @@ def site_files_config(slug):
         { 'file': f'annonces_{slug}_seloger.csv', 'site': 'SeLoger', 'col_prix': 'Prix', 'col_surf': 'Infos', 'text_cols': ['Titre', 'Infos'], 'col_cp': 'Lieu', 'col_url': 'Lien' },
     ]
 
-def run_fusion():
+def run_fusion(ville_slug=None):
+    """Fusionne les CSV scrapés en base_de_donnees_immo_complet.csv.
+
+    Par défaut (`ville_slug=None`), reconstruit le fichier combiné à partir
+    de TOUTES les villes déclarées (comportement historique, utilisé par les
+    tests et les runs manuels toutes villes confondues).
+
+    Avec `ville_slug`, ne retraite QUE cette ville (ORA-153 : chaque DAG
+    annonces tourne désormais indépendamment par ville) — les annonces des
+    autres villes déjà présentes dans le fichier combiné sont préservées
+    plutôt qu'écrasées."""
     dfs = []
     print("\n🏗️  DÉMARRAGE DE LA FUSION...\n")
     villes = load_declared_villes()
+    if ville_slug is not None:
+        villes = {ville_slug: villes[ville_slug]}
 
     for slug, ville_config in villes.items():
         ville_nom = ville_config['nom']
@@ -266,6 +278,21 @@ def run_fusion():
             lambda row: round(row['prix'] / row['surface'], 2) if row['surface'] and row['surface'] > 9 else None, axis=1
         )
 
+        cols = ['site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'latitude', 'longitude', 'url', 'image', 'date_dernier_scan']
+        master_df = master_df[cols]
+
+        output_file = os.path.join(data_dir, 'base_de_donnees_immo_complet.csv')
+
+        if ville_slug is not None and os.path.exists(output_file):
+            # Fusion partielle (une seule ville) : préserve les annonces des
+            # autres villes déjà présentes dans le fichier combiné plutôt que
+            # de les écraser (ORA-153).
+            existing = pd.read_csv(output_file)
+            existing = existing.drop(columns=['id_annonce'], errors='ignore')
+            ville_nom = villes[ville_slug]['nom']
+            existing = existing[existing['ville'] != ville_nom]
+            master_df = pd.concat([existing, master_df], ignore_index=True)
+
         master_df = master_df.sort_values(by=['latitude', 'longitude'], na_position='last')
         colonnes_cles = ['prix', 'surface', 'prix_m2', 'type', 'code_postal']
         master_df = master_df.drop_duplicates(subset=colonnes_cles, keep='first')
@@ -273,11 +300,8 @@ def run_fusion():
         master_df.index = master_df.index + 1
         master_df.reset_index(inplace=True)
         master_df = master_df.rename(columns={'index': 'id_annonce'})
+        master_df = master_df[['id_annonce'] + cols]
 
-        cols = ['id_annonce', 'site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'latitude', 'longitude', 'url', 'image', 'date_dernier_scan']
-        master_df = master_df[cols]
-
-        output_file = os.path.join(data_dir, 'base_de_donnees_immo_complet.csv')
         master_df.to_csv(output_file, index=False, encoding='utf-8-sig')
 
         print("\n" + "="*50)
@@ -288,4 +312,9 @@ def run_fusion():
         print("❌ Aucun fichier n'a été traité.")
 
 if __name__ == "__main__":
-    run_fusion()
+    import argparse
+    parser = argparse.ArgumentParser(description="Fusionne les CSV d'annonces scrapées en un fichier combiné.")
+    parser.add_argument('--ville', default=None, help="Slug de la ville (cf. scraping_config.json). Par défaut : toutes les villes déclarées.")
+    args = parser.parse_args()
+
+    run_fusion(args.ville)

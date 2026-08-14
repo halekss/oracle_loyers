@@ -8,21 +8,28 @@ from http_retry import request_with_retry
 # --- CONFIGURATION ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, '..', 'data')
-TARGET_FILE = os.path.join(DATA_DIR, 'cavaliers_lyon.csv')
 
 # API de géocodage inversé (Batch)
 API_URL = "https://api-adresse.data.gouv.fr/reverse/csv/"
 
-def enrich_and_overwrite():
+
+def resolve_target_file(ville_slug):
+    """cavaliers_<ville>.csv pour le slug donné. Avant ORA-153, ce script
+    ciblait en dur cavaliers_lyon.csv : Lille n'était jamais enrichi tant que
+    ce fichier n'était pas mentionné explicitement."""
+    return os.path.join(DATA_DIR, f'cavaliers_{ville_slug}.csv')
+
+
+def enrich_and_overwrite(target_file):
     print("🚀 Démarrage de l'enrichissement (Mode : Écrasement du fichier original)...")
 
     # 1. Vérification
-    if not os.path.exists(TARGET_FILE):
-        print(f"❌ Erreur : Fichier introuvable : {TARGET_FILE}")
+    if not os.path.exists(target_file):
+        print(f"❌ Erreur : Fichier introuvable : {target_file}")
         return
 
     try:
-        df = pd.read_csv(TARGET_FILE)
+        df = pd.read_csv(target_file)
         print(f"📂 Fichier chargé : {len(df)} lignes.")
     except Exception as e:
         print(f"❌ Erreur lecture CSV : {e}")
@@ -71,12 +78,14 @@ def enrich_and_overwrite():
             df_enriched['code_postal'] = df_enriched['code_postal'].fillna(0).astype(str).apply(lambda x: x.split('.')[0])
             
             # 3. ÉCRASEMENT SÉCURISÉ
-            # On sauvegarde d'abord dans un fichier temporaire
-            temp_file = os.path.join(DATA_DIR, 'temp_cavaliers_update.csv')
+            # On sauvegarde d'abord dans un fichier temporaire nommé d'après la
+            # cible (pas un nom partagé) : les DAGs par ville (ORA-153) peuvent
+            # tourner en parallèle sans se marcher dessus sur ce fichier temp.
+            temp_file = target_file + '.tmp'
             df_enriched.to_csv(temp_file, index=False)
-            
+
             # Si la sauvegarde a marché, on remplace l'original
-            os.replace(temp_file, TARGET_FILE)
+            os.replace(temp_file, target_file)
             
             # --- BILAN ---
             stats = df_enriched['code_postal'].value_counts().sort_index()
@@ -85,7 +94,7 @@ def enrich_and_overwrite():
             print("\n" + "="*60)
             print("🏆 MISE À JOUR TERMINÉE")
             print("="*60)
-            print(f"✅ Le fichier {TARGET_FILE} a été mis à jour.")
+            print(f"✅ Le fichier {target_file} a été mis à jour.")
             print(f"📍 {total_trouves} établissements localisés sur {len(df_enriched)}.")
             print("-" * 60)
             print(f"{'CODE POSTAL':<15} | {'NOMBRE'}")
@@ -103,4 +112,9 @@ def enrich_and_overwrite():
         print("⚠️ Le fichier original n'a pas été touché.")
 
 if __name__ == "__main__":
-    enrich_and_overwrite()
+    import argparse
+    parser = argparse.ArgumentParser(description="Enrichit le CSV cavaliers d'une ville avec le code postal (API Data Gouv).")
+    parser.add_argument('--ville', default='lyon', help="Slug de la ville (ex: lyon, lille) — cible cavaliers_<ville>.csv.")
+    args = parser.parse_args()
+
+    enrich_and_overwrite(resolve_target_file(args.ville))
