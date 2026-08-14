@@ -53,7 +53,11 @@ y = df['prix']
 # effet prix par ville dès qu'il y en a plus d'une dans les données (ORA-71).
 # Tant qu'une seule ville existe, `drop_first=True` supprime cette unique
 # catégorie : aucun changement de comportement avec les données actuelles.
-features_to_drop = ['id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'titre', 'date']
+# `image` (URL de la photo, quasi unique par ligne) ne peut structurellement
+# pas généraliser : une nouvelle annonce a toujours une nouvelle URL, jamais
+# vue à l'entraînement. La garder dans l'encodage one-hot génère du
+# sur-apprentissage sur des annonces précises du jeu d'entraînement (ORA-155).
+features_to_drop = ['id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'titre', 'date', 'image']
 X = df.drop(columns=features_to_drop, errors='ignore')
 
 # On vire les colonnes 'nb_' (Nombres) pour ne garder que les 'dist_'
