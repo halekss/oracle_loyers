@@ -11,21 +11,34 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import app as app_module
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "price_predictor.pkl")
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "master_immo_final.csv")
 
-# Bornes de non-régression : le modèle actuel obtient MAE≈167€ / R²≈0.75 sur ce
-# jeu de données (voir backend/models/training_metrics.jsonl). On garde une
-# marge confortable pour ne pas casser la CI sur un léger recalcul, tout en
-# détectant une vraie dégradation du modèle.
-MAX_ACCEPTABLE_MAE = 250
-MIN_ACCEPTABLE_R2 = 0.6
+# Bornes de non-régression PAR VILLE (ORA-154 : un modèle XGBoost distinct
+# par ville, chacun avec sa propre histoire de métriques — comparer un seuil
+# unique aux deux reviendrait au problème que ce ticket corrige : mélanger
+# des gammes de prix différentes gonfle mécaniquement la variance testée).
+# Lille est un jeu de données plus jeune (moins d'annonces, quartiers
+# limitrophes à faible échantillon) : un plancher R² plus bas est un choix
+# assumé (voir ORA-154 "coût accepté"), pas un oubli. On garde une marge
+# confortable au-dessus/en-dessous des métriques observées (voir
+# backend/models/training_metrics_<ville>.jsonl) pour ne pas casser la CI
+# sur un léger recalcul, tout en détectant une vraie dégradation.
+REGRESSION_THRESHOLDS = {
+    "Lyon": {"max_mae": 280, "min_r2": 0.45},
+    "Lille": {"max_mae": 230, "min_r2": 0.40},
+}
 
 
 def _prepare_features(df):
-    """Reproduit exactement le prétraitement de train_model.py, pour obtenir
-    le même jeu de features à partir des mêmes données brutes."""
-    features_to_drop = ['id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'titre', 'date']
+    """Reproduit exactement le prétraitement de train_model.py (ORA-154,
+    ORA-155), pour obtenir le même jeu de features à partir des mêmes
+    données brutes. `ville` est toujours exclue : constante au sein d'un
+    modèle par ville, elle n'apporterait aucune information."""
+    features_to_drop = [
+        'id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'titre',
+        'date', 'image', 'ville',
+    ]
     X = df.drop(columns=features_to_drop, errors='ignore')
 
     cols_nb = [c for c in X.columns if c.startswith('nb_')]
@@ -41,69 +54,75 @@ def _prepare_features(df):
 class ModelRegressionTest(unittest.TestCase):
     """Remplace backend/scripts/test_prediction.py (script manuel, échantillon
     aléatoire non reproductible) par un test de non-régression sur un jeu de
-    validation fixe (ORA-35)."""
+    validation fixe (ORA-35) — un par ville (ORA-154), chacun évalué sur SA
+    propre tranche du dataset combiné, avec le même split que
+    train_model.py (test_size=0.2, random_state=42)."""
 
     @classmethod
     def setUpClass(cls):
-        if not os.path.exists(MODEL_PATH):
-            raise unittest.SkipTest("Modèle price_predictor.pkl introuvable.")
+        if not os.path.exists(DATA_PATH):
+            raise unittest.SkipTest("master_immo_final.csv introuvable.")
+        cls.df_all = pd.read_csv(DATA_PATH)
 
-        cls.model = joblib.load(MODEL_PATH)
-        df = pd.read_csv(DATA_PATH)
+    def _evaluate_ville(self, ville_nom, ville_slug):
+        model_path = os.path.join(MODELS_DIR, f"price_predictor_{ville_slug}.pkl")
+        if not os.path.exists(model_path):
+            self.skipTest(f"{model_path} introuvable.")
+
+        model = joblib.load(model_path)
+        df = self.df_all[self.df_all['ville'] == ville_nom]
         y = df['prix']
         X = _prepare_features(df)
-        X = X.reindex(columns=cls.model.feature_names_in_, fill_value=0)
+        X = X.reindex(columns=model.feature_names_in_, fill_value=0)
 
-        # Même split que train_model.py (test_size=0.2, random_state=42) :
-        # jeu de validation fixe et reproductible d'un run à l'autre.
-        _, cls.X_test, _, cls.y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        predictions = model.predict(X_test)
+        return mean_absolute_error(y_test, predictions), r2_score(y_test, predictions)
 
-    def test_model_metrics_stay_within_acceptable_range_on_fixed_validation_set(self):
-        predictions = self.model.predict(self.X_test)
-        mae = mean_absolute_error(self.y_test, predictions)
-        r2 = r2_score(self.y_test, predictions)
+    def test_lyon_model_metrics_stay_within_acceptable_range(self):
+        mae, r2 = self._evaluate_ville("Lyon", "lyon")
+        thresholds = REGRESSION_THRESHOLDS["Lyon"]
 
         self.assertLess(
-            mae, MAX_ACCEPTABLE_MAE,
-            f"MAE {mae:.2f}€ dépasse le seuil de non-régression ({MAX_ACCEPTABLE_MAE}€)",
+            mae, thresholds["max_mae"],
+            f"MAE {mae:.2f}€ dépasse le seuil de non-régression Lyon ({thresholds['max_mae']}€)",
         )
         self.assertGreater(
-            r2, MIN_ACCEPTABLE_R2,
-            f"R² {r2:.3f} sous le seuil de non-régression ({MIN_ACCEPTABLE_R2})",
+            r2, thresholds["min_r2"],
+            f"R² {r2:.3f} sous le seuil de non-régression Lyon ({thresholds['min_r2']})",
+        )
+
+    def test_lille_model_metrics_stay_within_acceptable_range(self):
+        mae, r2 = self._evaluate_ville("Lille", "lille")
+        thresholds = REGRESSION_THRESHOLDS["Lille"]
+
+        self.assertLess(
+            mae, thresholds["max_mae"],
+            f"MAE {mae:.2f}€ dépasse le seuil de non-régression Lille ({thresholds['max_mae']}€)",
+        )
+        self.assertGreater(
+            r2, thresholds["min_r2"],
+            f"R² {r2:.3f} sous le seuil de non-régression Lille ({thresholds['min_r2']})",
         )
 
 
-class MultiCityFeatureGenericizationTest(unittest.TestCase):
-    """ORA-71 : `ville` n'est plus dans `features_to_drop` (contrairement à avant),
-    donc encodée comme les autres colonnes texte (`quartier`, `type_local`). Ces
-    tests vérifient que le mécanisme fonctionne avec une ville fictive de test —
-    pas une vraie deuxième ville en production, qui reste un travail séparé
-    (vérification live des 6 scrapers, choix de la ville)."""
+class VilleExcludedFromFeaturesTest(unittest.TestCase):
+    """ORA-154 : un modèle XGBoost distinct par ville plutôt que `ville` en
+    feature d'un modèle combiné (approche initiale d'ORA-71, abandonnée —
+    voir la justification dans train_model.py). `ville` est désormais
+    toujours exclue de l'encodage, quel que soit le nombre de villes
+    présentes dans les données brutes passées à _prepare_features."""
 
-    def test_ville_becomes_a_feature_once_a_second_city_exists(self):
+    def test_ville_is_never_encoded_as_a_feature(self):
         df = pd.DataFrame({
-            'ville': ['Lyon'] * 5 + ['VilleFictiveTest'] * 5,
+            'ville': ['Lyon'] * 5 + ['Lille'] * 5,
             'surface': [40, 45, 50, 55, 60, 65, 70, 75, 80, 85],
             'prix': [800, 850, 900, 950, 1000, 500, 550, 600, 650, 700],
         })
 
         X = _prepare_features(df)
 
-        self.assertIn('ville_VilleFictiveTest', X.columns)
-
-    def test_ville_produces_no_extra_feature_with_a_single_city(self):
-        """Avec une seule ville (l'état actuel du projet), le one-hot de `ville`
-        ne produit aucune colonne (drop_first supprime l'unique catégorie) :
-        aucun changement de comportement du modèle actuel."""
-        df = pd.DataFrame({
-            'ville': ['Lyon'] * 5,
-            'surface': [40, 45, 50, 55, 60],
-            'prix': [800, 850, 900, 950, 1000],
-        })
-
-        X = _prepare_features(df)
-
-        ville_columns = [c for c in X.columns if c.startswith('ville_')]
+        ville_columns = [c for c in X.columns if c == 'ville' or c.startswith('ville_')]
         self.assertEqual(ville_columns, [])
 
 

@@ -3,7 +3,6 @@ import os
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
@@ -120,9 +119,7 @@ class PromotionGuardTriggersRollbackTest(unittest.TestCase):
             # train_model.py n'écrit PAS le candidat sur le modèle actif quand
             # `promote` est False (on ne touche donc pas model_path ici), puis
             # déclenche le rollback existant pour reconfirmer la version active.
-            with patch.object(rollback_model, "MODEL_PATH", model_path), \
-                    patch.object(rollback_model, "VERSIONS_DIR", versions_dir):
-                rollback_model.rollback_to(previous_version)
+            rollback_model.rollback_to(previous_version, model_path)
 
             with open(model_path, "rb") as f:
                 self.assertEqual(f.read(), active_bytes)  # toujours l'ancien modèle, jamais le candidat

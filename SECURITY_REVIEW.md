@@ -146,10 +146,10 @@ restreint.
   jobs de test (`backend`, `scrapers`, `frontend`, `e2e`) réussissent au
   préalable (`needs:` + condition explicite `success()`), empêchant un
   déploiement sur du code non validé.
-- Le modèle ML (`price_predictor.pkl`) est versionné dans le dépôt avec un
-  pipeline d'entraînement déterministe documenté — pas de désérialisation
-  d'un artefact modèle provenant d'une source non fiable/externe à chaque
-  démarrage.
+- Les modèles ML (`price_predictor_<ville>.pkl`, un par ville depuis
+  ORA-154) sont versionnés dans le dépôt avec un pipeline d'entraînement
+  déterministe documenté — pas de désérialisation d'un artefact modèle
+  provenant d'une source non fiable/externe à chaque démarrage.
 - Pas de mécanisme d'auto-update / téléchargement de code exécutable à
   l'exécution.
 

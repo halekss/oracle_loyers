@@ -4,17 +4,16 @@ L'Oracle des Loyers — DAG Annonces (scraping + modèle)
 Fusionne les annonces immobilières scrapées (6 sites), calcule les features
 de distance aux POI, ré-entraîne le modèle et régénère la carte statique.
 
-ORA-153 : la fusion (data_fusion.py) et la génération de carte
-(generate_map.py) sont scindées par ville — chacune tourne indépendamment
-pour chaque ville déclarée dans scraping_config.json, sans dépendance
-forcée aux autres. `clean_immo` et `train_model` restent en revanche un
-step PARTAGÉ, unique pour toutes les villes : le modèle actif est encore
-un seul price_predictor.pkl combiné (`ville` en feature, pas un modèle par
-ville). Le scinder par ville reviendrait à lancer deux réentraînements
-concurrents sur le même fichier de sortie — cf. ORA-154 (modèle séparé par
-ville), préalable nécessaire à un vrai découpage par ville de cette partie
-de la chaîne. En attendant, `clean_immo`/`train_model` tournent une seule
-fois par run, après que TOUTES les fusions par ville se sont terminées.
+ORA-153 : la fusion (data_fusion.py) est scindée par ville — chacune tourne
+indépendamment pour chaque ville déclarée dans scraping_config.json, sans
+dépendance forcée aux autres. `clean_immo` reste un step PARTAGÉ, unique
+pour toutes les villes (il calcule les features sur le fichier combiné en
+une passe). `train_model` et `generate_map`, en revanche, sont scindés par
+ville (ORA-154 : un modèle XGBoost distinct par ville plutôt qu'un modèle
+combiné avec `ville` en feature) — deux tâches indépendantes après
+`clean_immo`, sans risque de réentraînements concurrents sur le même
+fichier de sortie puisque chaque ville écrit désormais son propre
+price_predictor_<ville>.pkl.
 
 Cadence hebdomadaire, volontairement découplée du DAG cavaliers
 (oracle_cavaliers_pipeline_<ville>.py) : les annonces ont besoin d'un
@@ -25,7 +24,7 @@ rester bloqué par la lenteur/flakiness de l'API Overpass externe.
 fichier le plus récent sur disque au moment du run.
 
 Architecture : [data_fusion_<ville> pour chaque ville] → clean_immo →
-               train_model → [generate_map_<ville> pour chaque ville]
+               [train_model_<ville> → generate_map_<ville> pour chaque ville]
 """
 
 import json
@@ -86,22 +85,29 @@ with DAG(
         bash_command=f"cd {SCRIPTS} && python clean_immo.py",
     )
 
-    # Entraîne XGBoost sur le master (toutes villes confondues, cf. docstring)
-    # Écrit : backend/models/price_predictor.pkl
-    step_train = BashOperator(
-        task_id="train_model",
-        bash_command=f"cd {SCRIPTS} && python train_model.py",
-    )
+    # Entraîne XGBoost sur le master, filtré à sa ville — un modèle distinct
+    # par ville (ORA-154), comparé par le garde-fou de promotion à sa propre
+    # histoire uniquement.
+    # Écrit : backend/models/price_predictor_<slug>.pkl
+    steps_train = {
+        slug: BashOperator(
+            task_id=f"train_model_{slug}",
+            bash_command=f"cd {SCRIPTS} && python train_model.py --ville {slug}",
+        )
+        for slug in VILLES
+    }
 
     # Régénère la carte statique de chaque ville à partir des données/modèle
     # à jour, pour éviter toute péremption silencieuse (ORA-54).
     # Écrit : frontend/public/data/map_pings_<ville>_calques.html + map_metadata_<ville>.json
-    steps_generate_map = [
-        BashOperator(
+    steps_generate_map = {
+        slug: BashOperator(
             task_id=f"generate_map_{slug}",
             bash_command=f"cd {SCRIPTS} && python generate_map.py --ville {slug}",
         )
         for slug in VILLES
-    ]
+    }
 
-    steps_fusion >> step_features >> step_train >> steps_generate_map
+    steps_fusion >> step_features
+    for slug in VILLES:
+        step_features >> steps_train[slug] >> steps_generate_map[slug]

@@ -16,10 +16,10 @@ class PredictRouteTest(unittest.TestCase):
         client = app.app.test_client()
 
         broken_model = MagicMock()
-        broken_model.feature_names_in_ = app.model.feature_names_in_
+        broken_model.feature_names_in_ = app.models["Lyon"].feature_names_in_
         broken_model.predict.return_value = [-168.0]
 
-        with patch.object(app, "model", broken_model):
+        with patch.dict(app.models, {"Lyon": broken_model}):
             response = client.post(
                 "/api/predict",
                 json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
@@ -35,10 +35,10 @@ class PredictRouteTest(unittest.TestCase):
         client = app.app.test_client()
 
         broken_model = MagicMock()
-        broken_model.feature_names_in_ = app.model.feature_names_in_
+        broken_model.feature_names_in_ = app.models["Lyon"].feature_names_in_
         broken_model.predict.return_value = [0.0]
 
-        with patch.object(app, "model", broken_model):
+        with patch.dict(app.models, {"Lyon": broken_model}):
             response = client.post(
                 "/api/predict",
                 json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
@@ -111,10 +111,10 @@ class PredictRouteTest(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data["error"], "Payload invalide")
 
-    def test_predict_route_returns_500_when_model_is_absent(self):
+    def test_predict_route_returns_500_when_no_model_is_loaded_for_any_ville(self):
         client = app.app.test_client()
 
-        with patch.object(app, "model", None):
+        with patch.object(app, "models", {ville: None for ville in app.models}):
             response = client.post(
                 "/api/predict",
                 json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
@@ -122,6 +122,22 @@ class PredictRouteTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 500)
         self.assertIn("error", response.get_json())
+
+    def test_predict_route_returns_400_when_model_is_absent_for_the_requested_ville_only(self):
+        """ORA-154 : la panne d'un modèle ne doit plus dégrader toutes les
+        villes — seule celle sans modèle chargé échoue (400, payload
+        invalide pour cette zone), les autres continuent de répondre."""
+        client = app.app.test_client()
+
+        with patch.dict(app.models, {"Lyon": None}):
+            response = client.post(
+                "/api/predict",
+                json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertTrue(any("Lyon" in detail for detail in data["details"]))
 
 
 if __name__ == "__main__":

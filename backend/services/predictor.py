@@ -101,10 +101,20 @@ def estimate_confidence(df, quartier, type_local):
     return "Faible", count
 
 
-def build_feature_row(payload, df, cavaliers_df, feature_names):
+def build_feature_row(payload, df, cavaliers_df, feature_names_by_ville):
     """
     Construit le vecteur de features attendu par le modèle à partir du payload utilisateur.
-    Renvoie (features_df, infos) en cas de succès, ou (None, [messages d'erreur]) sinon.
+
+    `feature_names_by_ville` : `{nom_ville: [feature_names]}` — un modèle
+    XGBoost distinct par ville (ORA-154), chacun avec son propre jeu de
+    colonnes one-hot (`quartier_...`). Le payload ne porte pas explicitement
+    `ville` : elle est déduite du quartier résolu (comme avant ORA-154),
+    avant de choisir le jeu de features à valider/construire — impossible de
+    savoir quel modèle utiliser avant de savoir quel quartier (donc quelle
+    ville) est visé.
+
+    Renvoie (features_df, infos) en cas de succès (`infos["ville"]` indique
+    quel modèle appeler), ou (None, [messages d'erreur]) sinon.
     """
     errors = []
 
@@ -123,34 +133,44 @@ def build_feature_row(payload, df, cavaliers_df, feature_names):
 
     known_quartiers = df["quartier"].dropna().unique().tolist() if df is not None else []
     quartier = resolve_quartier(payload.get("quartier"), known_quartiers)
+
+    ville_annonce = None
+    feature_names = None
+    quartier_rows = None
     if not quartier:
         errors.append("quartier inconnu ou non fourni")
-    elif f"quartier_{quartier}" not in feature_names:
-        # Régression réelle (ORA-99 follow-up) : un quartier peut exister dans
-        # les données réelles (df) sans jamais avoir été vu par le modèle
-        # actif (ex: tout Lille, tant que le garde-fou de promotion rejette un
-        # réentraînement combiné) — sans ce contrôle, la colonne one-hot
-        # correspondante est silencieusement ignorée plus bas et le modèle
-        # prédit à l'aveugle, tout en affichant un niveau de confiance basé
-        # sur les vraies annonces comparables : trompeur. Le frontend a déjà
-        # un repli silencieux sur la moyenne réelle du secteur quand cet
-        # appel échoue (cf. App.jsx handleScan).
-        errors.append(
-            f"Le modèle actif n'a pas de données d'entraînement pour le quartier '{quartier}' "
-            "— prédiction non fiable pour cette zone."
-        )
+    else:
+        quartier_rows = df[df["quartier"] == quartier]
+        if "ville" in quartier_rows.columns:
+            villes_connues = quartier_rows["ville"].dropna()
+            if not villes_connues.empty:
+                ville_annonce = villes_connues.mode().iloc[0]
+
+        feature_names = feature_names_by_ville.get(ville_annonce)
+        if feature_names is None:
+            errors.append(
+                f"Aucun modèle de prédiction disponible pour la ville "
+                f"'{ville_annonce or 'inconnue'}' — prédiction non fiable pour cette zone."
+            )
+        elif f"quartier_{quartier}" not in feature_names:
+            # Régression réelle (ORA-99 follow-up) : un quartier peut exister dans
+            # les données réelles (df) sans jamais avoir été vu par le modèle
+            # de sa ville (ex: un quartier ajouté aux données mais pas encore
+            # dans un modèle promu) — sans ce contrôle, la colonne one-hot
+            # correspondante est silencieusement ignorée plus bas et le modèle
+            # prédit à l'aveugle, tout en affichant un niveau de confiance basé
+            # sur les vraies annonces comparables : trompeur. Le frontend a déjà
+            # un repli silencieux sur la moyenne réelle du secteur quand cet
+            # appel échoue (cf. App.jsx handleScan).
+            errors.append(
+                f"Le modèle actif n'a pas de données d'entraînement pour le quartier '{quartier}' "
+                "— prédiction non fiable pour cette zone."
+            )
 
     if errors:
         return None, errors
 
     type_bien = normalize_type_bien(payload.get("type"))
-    quartier_rows = df[df["quartier"] == quartier]
-
-    ville_annonce = None
-    if "ville" in quartier_rows.columns:
-        villes_connues = quartier_rows["ville"].dropna()
-        if not villes_connues.empty:
-            ville_annonce = villes_connues.mode().iloc[0]
 
     latitude = payload.get("latitude")
     longitude = payload.get("longitude")
@@ -188,5 +208,11 @@ def build_feature_row(payload, df, cavaliers_df, feature_names):
             row[column] = 1.0
 
     features_df = pd.DataFrame([row], columns=feature_names)
-    infos = {"quartier": quartier, "type_local": type_local, "type": type_bien, "surface": surface}
+    infos = {
+        "quartier": quartier,
+        "type_local": type_local,
+        "type": type_bien,
+        "surface": surface,
+        "ville": ville_annonce,
+    }
     return features_df, infos

@@ -3,7 +3,6 @@ import os
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
@@ -30,9 +29,7 @@ class RollbackModelTest(unittest.TestCase):
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({"model_version": "currenthash", "metrics": {"mae": 100}}, f)
 
-            with patch.object(rollback_model, "MODEL_PATH", model_path), \
-                    patch.object(rollback_model, "VERSIONS_DIR", versions_dir):
-                rollback_model.rollback_to("oldhash1234")
+            rollback_model.rollback_to("oldhash1234", model_path)
 
             with open(model_path, "rb") as f:
                 self.assertEqual(f.read(), b"contenu-ancienne-version")
@@ -50,10 +47,17 @@ class RollbackModelTest(unittest.TestCase):
             versions_dir = os.path.join(tmp_dir, "versions")
             os.makedirs(versions_dir)
 
-            with patch.object(rollback_model, "MODEL_PATH", model_path), \
-                    patch.object(rollback_model, "VERSIONS_DIR", versions_dir):
-                with self.assertRaises(SystemExit):
-                    rollback_model.rollback_to("version-inexistante")
+            with self.assertRaises(SystemExit):
+                rollback_model.rollback_to("version-inexistante", model_path)
+
+
+class ResolveModelPathTest(unittest.TestCase):
+    """ORA-154 : un modèle distinct par ville — price_predictor_<ville>.pkl,
+    pas un unique price_predictor.pkl partagé."""
+
+    def test_targets_the_pkl_of_the_given_ville(self):
+        self.assertTrue(rollback_model.resolve_model_path("lyon").endswith("price_predictor_lyon.pkl"))
+        self.assertTrue(rollback_model.resolve_model_path("lille").endswith("price_predictor_lille.pkl"))
 
 
 if __name__ == "__main__":

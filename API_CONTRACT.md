@@ -41,7 +41,7 @@ Ce projet est une démo portfolio publique sans notion d'utilisateur ni de compt
 
 ## `GET /api/health`
 
-Expose l'état du serveur et la version du modèle de prédiction actuellement chargé (ORA-31). Non soumis au rate limiting (`@limiter.exempt`).
+Expose l'état du serveur et la version des modèles de prédiction actuellement chargés — un par ville (ORA-31, ORA-154). Non soumis au rate limiting (`@limiter.exempt`).
 
 - **Payload d'entrée** : aucun.
 - **Réponse `200`** :
@@ -50,15 +50,24 @@ Expose l'état du serveur et la version du modèle de prédiction actuellement c
 {
   "status": "ok",
   "model_loaded": true,
-  "model": {
-    "model_version": "5af9e5a1be0c",
-    "trained_at": "2026-08-03T13:21:36.516616+00:00",
-    "metrics": { "mae": 167.03, "r2": 0.755 }
+  "models": {
+    "Lyon": {
+      "loaded": true,
+      "model_version": "610216b3af75",
+      "trained_at": "2026-08-14T11:55:03.516616+00:00",
+      "metrics": { "mae": 175.08, "r2": 0.60 }
+    },
+    "Lille": {
+      "loaded": true,
+      "model_version": "ede558640538",
+      "trained_at": "2026-08-14T11:56:12.192219+00:00",
+      "metrics": { "mae": 151.06, "r2": 0.55 }
+    }
   }
 }
 ```
 
-`status` vaut `"degraded"` et `model.model_version`/`trained_at`/`metrics` sont `null` si le modèle ou ses métadonnées (`backend/models/price_predictor.pkl.meta.json`) sont indisponibles.
+`status` vaut `"degraded"` dès qu'AU MOINS une ville déclarée n'a pas de modèle chargé ; `model_loaded` vaut `true` dès qu'AU MOINS une ville en a un (l'API peut encore servir des prédictions pour les autres). Pour une ville donnée, `loaded` vaut `false` et `model_version`/`trained_at`/`metrics` sont `null` si son modèle ou ses métadonnées (`backend/models/price_predictor_<slug>.pkl.meta.json`) sont indisponibles.
 
 Exemple :
 
@@ -325,7 +334,7 @@ curl -X POST http://localhost:5000/api/quartier-historique \
 
 ## `POST /api/predict`
 
-Prédiction de prix par Machine Learning (modèle XGBoost `backend/models/price_predictor.pkl`, chargé au démarrage). Construit le vecteur de 45 features attendu par le modèle à partir du payload (distances aux points d'intérêt calculées à la volée depuis `cavaliers_lyon.csv`, coordonnées/code postal déduits du quartier si absents du payload).
+Prédiction de prix par Machine Learning — un modèle XGBoost distinct par ville (`backend/models/price_predictor_<slug>.pkl`, chargés au démarrage, ORA-154), routé selon la ville déduite du quartier résolu (le payload ne porte pas `ville` explicitement). Construit le vecteur de features attendu par le modèle de cette ville à partir du payload (distances aux points d'intérêt calculées à la volée depuis `cavaliers_all.csv`, coordonnées/code postal déduits du quartier si absents du payload).
 
 - **Payload d'entrée** :
 
@@ -358,8 +367,8 @@ Prédiction de prix par Machine Learning (modèle XGBoost `backend/models/price_
 `confiance` (`"Faible"` / `"Moyenne"` / `"Élevée"`) est dérivée du nombre réel de `comparables` (annonces du même quartier et type dans `master_immo_final.csv`) : `< 5` → Faible, `< 20` → Moyenne, `>= 20` → Élevée.
 
 - **Codes d'erreur** :
-  - `400` si le payload est invalide (`surface`/`quartier`/`type_local` manquant ou incorrect) : `{ "error": "Payload invalide", "details": ["..."] }`
-  - `500` si le modèle n'est pas chargé, si les données de référence sont indisponibles, ou en cas d'exception pendant la prédiction : `{ "error": "..." }`
+  - `400` si le payload est invalide (`surface`/`quartier`/`type_local` manquant ou incorrect), y compris si la ville déduite du quartier n'a pas de modèle chargé (les autres villes restent servies) : `{ "error": "Payload invalide", "details": ["..."] }`
+  - `500` si AUCUN modèle n'est chargé (toutes villes confondues), si les données de référence sont indisponibles, ou en cas d'exception pendant la prédiction : `{ "error": "..." }`
 
 Exemple :
 

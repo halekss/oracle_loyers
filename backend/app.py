@@ -178,9 +178,9 @@ def get_request_json():
 # Configuration des chemins
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'master_immo_final.csv')
-MODEL_PATH = os.path.join(BASE_DIR, 'models', 'price_predictor.pkl')
-MODEL_META_PATH = f"{MODEL_PATH}.meta.json"
-CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_lyon.csv')
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
+SCRAPING_CONFIG_PATH = os.path.join(BASE_DIR, '..', 'scripts', 'scraping_config.json')
+CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_all.csv')
 SNAPSHOTS_DIR = os.path.join(BASE_DIR, 'data', 'snapshots')
 SNAPSHOTS_MANIFEST_PATH = os.path.join(SNAPSHOTS_DIR, 'manifest.csv')
 ANNONCES_DB_PATH = os.path.join(BASE_DIR, 'data', 'annonces.db')
@@ -196,7 +196,7 @@ try:
     cavaliers_df = pd.read_csv(CAVALIERS_PATH)
 except Exception as exc:
     logger.warning(
-        "cavaliers_lyon.csv introuvable, features de distance à 0 par défaut : %s - %s",
+        "cavaliers_all.csv introuvable, features de distance à 0 par défaut : %s - %s",
         type(exc).__name__, exc,
     )
     cavaliers_df = None
@@ -204,39 +204,57 @@ except Exception as exc:
 logger.info("Initialisation d'Immotep (Service Chat)...")
 chat_service = ChatService()
 
-# Chargement du modèle IA (XGBoost)
-logger.info("Chargement du modèle IA...")
-try:
-    model = joblib.load(MODEL_PATH)
-except Exception as exc:
-    logger.warning(
-        "Modèle price_predictor.pkl introuvable : %s - %s",
-        type(exc).__name__, exc,
-    )
-    model = None
+# Chargement des modèles IA (XGBoost) — un modèle distinct par ville (ORA-154)
+# plutôt qu'un unique price_predictor.pkl combiné : une dérive de features
+# sur une ville (ex. cavaliers) ne peut plus casser les prédictions des
+# autres, et chaque modèle est comparé à sa propre histoire par le garde-fou
+# de promotion (voir train_model.py).
+logger.info("Chargement des modèles IA...")
+with open(SCRAPING_CONFIG_PATH, encoding='utf-8') as f:
+    VILLES_CONFIG = json.load(f)['villes']
+
+MODEL_PATHS = {}  # nom de ville -> chemin du .pkl
+models = {}       # nom de ville -> modèle chargé, ou None si indisponible
+for slug, ville_config in VILLES_CONFIG.items():
+    ville_nom = ville_config['nom']
+    model_path = os.path.join(MODELS_DIR, f'price_predictor_{slug}.pkl')
+    MODEL_PATHS[ville_nom] = model_path
+    try:
+        models[ville_nom] = joblib.load(model_path)
+    except Exception as exc:
+        logger.warning(
+            "Modèle %s (%s) introuvable : %s - %s",
+            ville_nom, model_path, type(exc).__name__, exc,
+        )
+        models[ville_nom] = None
 
 # --- ROUTES API ---
 
 @app.route('/api/health', methods=['GET'])
 @limiter.exempt
 def health():
-    """Expose la version du modèle de prédiction actuellement chargé (ORA-31)."""
-    model_info = {"model_version": None, "trained_at": None, "metrics": None}
-    try:
-        with open(MODEL_META_PATH, encoding='utf-8') as f:
-            meta = json.load(f)
-        model_info = {
-            "model_version": meta.get("model_version"),
-            "trained_at": meta.get("trained_at"),
-            "metrics": meta.get("metrics"),
-        }
-    except Exception:
-        pass
+    """Expose l'état et la version des modèles de prédiction actuellement
+    chargés, un par ville (ORA-31, ORA-154)."""
+    models_info = {}
+    for ville_nom, model_path in MODEL_PATHS.items():
+        info = {"loaded": models.get(ville_nom) is not None, "model_version": None, "trained_at": None, "metrics": None}
+        try:
+            with open(f"{model_path}.meta.json", encoding='utf-8') as f:
+                meta = json.load(f)
+            info["model_version"] = meta.get("model_version")
+            info["trained_at"] = meta.get("trained_at")
+            info["metrics"] = meta.get("metrics")
+        except Exception:
+            pass
+        models_info[ville_nom] = info
+
+    any_model_loaded = any(m is not None for m in models.values())
+    all_models_loaded = bool(models) and all(m is not None for m in models.values())
 
     return jsonify({
-        "status": "ok" if model is not None else "degraded",
-        "model_loaded": model is not None,
-        "model": model_info,
+        "status": "ok" if all_models_loaded else "degraded",
+        "model_loaded": any_model_loaded,
+        "models": models_info,
     })
 
 @app.route('/api/listings', methods=['GET'])
@@ -679,7 +697,7 @@ def predict():
       500:
         description: Modèle ou données de référence indisponibles
     """
-    if model is None:
+    if not any(m is not None for m in models.values()):
         return jsonify({"error": "Modèle de prédiction indisponible sur ce serveur"}), 500
 
     df = data_loader.get_data()
@@ -699,10 +717,21 @@ def predict():
             "details": ["Le format des champs envoyés est incorrect."],
         }), 400
 
-    features_df, result = build_feature_row(payload, df, cavaliers_df, list(model.feature_names_in_))
+    # Un jeu de features par ville (un modèle XGBoost distinct par ville,
+    # ORA-154) : build_feature_row déduit la ville du quartier résolu et
+    # route vers le bon jeu — les villes sans modèle chargé sont simplement
+    # absentes du dict, ce qui produit l'erreur "aucun modèle disponible"
+    # appropriée plutôt qu'un crash.
+    feature_names_by_ville = {
+        ville_nom: list(m.feature_names_in_)
+        for ville_nom, m in models.items()
+        if m is not None
+    }
+    features_df, result = build_feature_row(payload, df, cavaliers_df, feature_names_by_ville)
     if features_df is None:
         return jsonify({"error": "Payload invalide", "details": result}), 400
 
+    model = models[result["ville"]]
     try:
         estimated_price = float(model.predict(features_df)[0])
     except Exception as e:

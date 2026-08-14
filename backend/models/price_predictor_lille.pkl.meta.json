@@ -1,0 +1,18 @@
+{
+  "trained_at": "2026-08-14T12:08:32.385517+00:00",
+  "data_snapshot_sha256": "b4c7fb12a9f7c9909a85646064addcc7384e93ce3cda3ba9cc2d749c73266714",
+  "data_snapshot_file": "master_immo_final_b4c7fb12a9f7.csv",
+  "metrics": {
+    "mae": 151.0588526491259,
+    "r2": 0.5455727396952392
+  },
+  "model_version": "ede558640538",
+  "hyperparameters": {
+    "n_estimators": 1500,
+    "learning_rate": 0.01,
+    "max_depth": 7,
+    "subsample": 0.7,
+    "colsample_bytree": 0.6,
+    "random_state": 42
+  }
+}
