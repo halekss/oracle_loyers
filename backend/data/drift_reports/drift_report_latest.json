@@ -1,162 +1,162 @@
 {
-  "checked_at": "2026-08-10T04:21:27.006547+00:00",
-  "status": "ok",
+  "checked_at": "2026-08-17T03:39:35.139140+00:00",
+  "status": "drift_detected",
   "reference_snapshot": "master_immo_final_60837a8a0ecd.csv",
   "reference_snapshot_timestamp": "2026-08-03T13:21:36.515946+00:00",
   "reference_row_count": 1197,
-  "current_row_count": 700,
+  "current_row_count": 2110,
   "ks_drift_threshold": 0.15,
   "features": [
     {
       "feature": "surface",
-      "ks_statistic": 0.0788,
-      "p_value": 0.007724,
+      "ks_statistic": 0.1129,
+      "p_value": 0.0,
       "drifted": false
     },
     {
       "feature": "code_postal",
-      "ks_statistic": 0.0306,
-      "p_value": 0.787448,
-      "drifted": false
+      "ks_statistic": 0.5782,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "latitude",
-      "ks_statistic": 0.0779,
-      "p_value": 0.008791,
-      "drifted": false
+      "ks_statistic": 0.5782,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "longitude",
-      "ks_statistic": 0.0559,
-      "p_value": 0.120502,
-      "drifted": false
+      "ks_statistic": 0.5796,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "dist_vice_sex-shop",
-      "ks_statistic": 0.0631,
-      "p_value": 0.056258,
+      "ks_statistic": 0.0368,
+      "p_value": 0.47787,
       "drifted": false
     },
     {
       "feature": "dist_vice_bar",
-      "ks_statistic": 0.0485,
-      "p_value": 0.239549,
+      "ks_statistic": 0.0684,
+      "p_value": 0.001494,
       "drifted": false
     },
     {
       "feature": "dist_vice_tabac",
-      "ks_statistic": 0.0458,
-      "p_value": 0.30178,
-      "drifted": false
+      "ks_statistic": 0.2514,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "dist_vice_cbd_shop",
-      "ks_statistic": 0.039,
-      "p_value": 0.497613,
+      "ks_statistic": 0.0704,
+      "p_value": 0.000971,
       "drifted": false
     },
     {
       "feature": "dist_gentrification_épicerie_fine",
-      "ks_statistic": 0.0584,
-      "p_value": 0.093435,
-      "drifted": false
+      "ks_statistic": 0.1941,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "dist_gentrification_atelier_vélo",
-      "ks_statistic": 0.0518,
-      "p_value": 0.17874,
+      "ks_statistic": 0.0874,
+      "p_value": 1.6e-05,
       "drifted": false
     },
     {
       "feature": "dist_nuisance_aire_de_jeux",
-      "ks_statistic": 0.0361,
-      "p_value": 0.595248,
+      "ks_statistic": 0.0607,
+      "p_value": 0.006769,
       "drifted": false
     },
     {
       "feature": "dist_nuisance_discothèque",
-      "ks_statistic": 0.0733,
-      "p_value": 0.016262,
+      "ks_statistic": 0.0804,
+      "p_value": 9.4e-05,
       "drifted": false
     },
     {
       "feature": "dist_superstition_pompes_funèbres",
-      "ks_statistic": 0.0652,
-      "p_value": 0.044314,
+      "ks_statistic": 0.06,
+      "p_value": 0.007727,
       "drifted": false
     },
     {
       "feature": "dist_gentrification_salle_sport",
-      "ks_statistic": 0.0796,
-      "p_value": 0.006898,
-      "drifted": false
+      "ks_statistic": 0.1602,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "dist_vice_kebab",
-      "ks_statistic": 0.0702,
-      "p_value": 0.024089,
+      "ks_statistic": 0.0923,
+      "p_value": 4e-06,
       "drifted": false
     },
     {
       "feature": "dist_gentrification_crèche",
-      "ks_statistic": 0.0737,
-      "p_value": 0.015396,
+      "ks_statistic": 0.0364,
+      "p_value": 0.256271,
       "drifted": false
     },
     {
       "feature": "dist_nuisance_école",
-      "ks_statistic": 0.0418,
-      "p_value": 0.408373,
+      "ks_statistic": 0.1075,
+      "p_value": 0.0,
       "drifted": false
     },
     {
       "feature": "dist_vice_casino",
-      "ks_statistic": 0.0604,
-      "p_value": 0.075566,
-      "drifted": false
+      "ks_statistic": 0.2527,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "dist_gentrification_yoga",
-      "ks_statistic": 0.0531,
-      "p_value": 0.157758,
-      "drifted": false
+      "ks_statistic": 0.1568,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "dist_gentrification_torréfacteur",
-      "ks_statistic": 0.0524,
-      "p_value": 0.169173,
+      "ks_statistic": 0.0677,
+      "p_value": 0.001699,
       "drifted": false
     },
     {
       "feature": "dist_gentrification_fleuriste",
-      "ks_statistic": 0.0539,
-      "p_value": 0.146495,
-      "drifted": false
+      "ks_statistic": 0.1872,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "dist_nuisance_salle_de_concert",
-      "ks_statistic": 0.0442,
-      "p_value": 0.341134,
-      "drifted": false
+      "ks_statistic": 0.2289,
+      "p_value": 0.0,
+      "drifted": true
     },
     {
       "feature": "dist_nuisance_station_service",
-      "ks_statistic": 0.0503,
-      "p_value": 0.205207,
+      "ks_statistic": 0.0395,
+      "p_value": 0.177354,
       "drifted": false
     },
     {
       "feature": "dist_superstition_cimetière",
-      "ks_statistic": 0.0852,
-      "p_value": 0.003054,
+      "ks_statistic": 0.0537,
+      "p_value": 0.023265,
       "drifted": false
     }
   ],
   "target_drift": {
     "feature": "prix",
-    "ks_statistic": 0.0818,
-    "p_value": 0.005049,
-    "drifted": false
+    "ks_statistic": 0.1588,
+    "p_value": 0.0,
+    "drifted": true
   },
-  "any_drift_detected": false
+  "any_drift_detected": true
 }
