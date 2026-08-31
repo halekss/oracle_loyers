@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-08-24T03:43:31.688120+00:00",
+  "checked_at": "2026-08-31T09:00:06.546284+00:00",
   "status": "drift_detected",
   "reference_snapshot": "master_immo_final_60837a8a0ecd.csv",
   "reference_snapshot_timestamp": "2026-08-03T13:21:36.515946+00:00",
