@@ -80,6 +80,9 @@ function App() {
   // bornage des recherches quartier/historique — les CSV/codes postaux
   // Lyon/Lille restant jamais ambigus entre les deux villes.
   const [ville, setVille] = useState('lyon');
+  // ORA-171 : mae/dataset_size par ville (backend/models/training_metrics_*),
+  // pour ne jamais coder en dur "± 175 €" / "entraîné sur 890 annonces".
+  const [health, setHealth] = useState(null);
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
   const facteurs = result?.facteurs || [];
@@ -97,6 +100,22 @@ function App() {
         if (!cancelled) setListings(data || []);
       })
       .catch((err) => console.error("Listings indisponibles pour le recentrage carte :", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ORA-171 : chargé une fois, indépendant du quartier scanné (les métriques
+  // du modèle ne changent qu'à un ré-entraînement, pas à chaque scan).
+  useEffect(() => {
+    let cancelled = false;
+
+    api.getHealth()
+      .then((data) => {
+        if (!cancelled) setHealth(data);
+      })
+      .catch((err) => console.error("Métriques modèle indisponibles :", err));
 
     return () => {
       cancelled = true;
@@ -168,6 +187,13 @@ function App() {
         confiance,
         facteurs: data.facteurs || [],
         comparables: data.comparables || [],
+        // ORA-171 : "Estimation personnalisée" (maquette 03) ne s'affiche que
+        // lorsqu'une vraie prédiction modèle a eu lieu (confiance non nulle) ;
+        // `surface` sert d'entrée aux scénarios "et si la surface change ?" et
+        // `quartierPrixM2` (moyenne réelle du secteur, avant écrasement par le
+        // modèle ci-dessus) à la comparaison "vs moyenne T{type} du quartier".
+        surface: hasValidSurface ? surfaceValue : undefined,
+        quartierPrixM2: data.prix_m2_moyen,
       });
       setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
       if (data.center?.lat && data.center?.lng) {
@@ -252,8 +278,11 @@ function App() {
             {/* Résultat */}
             {(result || loading) && (
             <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
-              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} />
-              {result && (
+              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} />
+              {/* ORA-171 : le panneau "Estimation personnalisée" affiche déjà
+                  le décompte ("Voir les N →") — cette ligne ne s'applique donc
+                  qu'au repli sans prédiction modèle (pas de surface). */}
+              {result && !(result.surface && result.confiance) && (
                 <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
                   Données réelles ({result.count} biens)
                 </div>

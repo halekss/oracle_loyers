@@ -27,6 +27,20 @@ class HealthRouteTest(unittest.TestCase):
             self.assertIn("trained_at", ville_info)
             self.assertIn("metrics", ville_info)
 
+    def test_health_route_exposes_the_training_dataset_size_per_ville(self):
+        """ORA-171 : "entraîné sur N annonces" (maquette 03) doit venir du
+        dernier run loggé par train_model.py (training_metrics_<ville>.jsonl),
+        pas d'un chiffre codé en dur côté frontend."""
+        client = app.app.test_client()
+
+        response = client.get("/api/health")
+
+        data = response.get_json()
+        for ville_info in data["models"].values():
+            if ville_info["loaded"]:
+                self.assertIn("dataset_size", ville_info["metrics"])
+                self.assertIsInstance(ville_info["metrics"]["dataset_size"], int)
+
 
 if __name__ == "__main__":
     unittest.main()
