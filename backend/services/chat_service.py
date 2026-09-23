@@ -715,6 +715,13 @@ Pour une comparaison, cite les moyennes calculées et le nombre d'annonces avant
             return text
         return text[:max_length]
 
+    def _matched_count(self, df, parsed):
+        """ORA-175 : nombre TOTAL d'annonces correspondant au filtre déduit du
+        message (`parsed` — type, budget...), pas seulement les `recommendations`
+        tronquées à 5 pour la bulle — alimente "Lister les N annonces"."""
+        filtered = self._apply_parsed_filters(df, parsed)
+        return int(len(filtered)) if filtered is not None and not getattr(filtered, "empty", True) else 0
+
     def get_chat_result(self, user_message, context_str, dataframe):
         user_message = self._truncate(user_message, self.MAX_USER_MESSAGE_LENGTH)
         context_str = self._truncate(context_str, self.MAX_CONTEXT_LENGTH)
@@ -723,65 +730,56 @@ Pour une comparaison, cite les moyennes calculées et le nombre d'annonces avant
         postal_code = parsed.get("postal_code")
         comparisons = self._build_comparisons(dataframe, parsed)
         recommendations = self._build_recommendations(dataframe, parsed)
+        matched_count = self._matched_count(dataframe, parsed)
         map_focus = self._map_focus_from(comparisons, recommendations)
         data_text = self._format_listings(dataframe, quartier_cible, postal_code, user_message)
         prompt = self._build_prompt(user_message, context_str, data_text, parsed, comparisons)
         grounded_response = self._build_grounded_response(parsed, comparisons, recommendations)
 
+        # ORA-175 : champs communs à toute réponse (grounded ou LLM, succès ou
+        # repli d'erreur) — `parsed` porte déjà les critères structurés du
+        # filtre (type_local/budget_max) exigés par le ticket ; `matched_count`
+        # est le seul champ réellement nouveau. Fusionné avec `response`/
+        # `intent`, propres à chaque branche ci-dessous.
+        base = {
+            "parsed": parsed,
+            "recommendations": recommendations,
+            "comparisons": comparisons,
+            "map_focus": map_focus,
+            "matched_count": matched_count,
+        }
+
         if grounded_response:
-            return {
-                "response": grounded_response,
-                "intent": parsed["intent"],
-                "parsed": parsed,
-                "recommendations": recommendations,
-                "comparisons": comparisons,
-                "map_focus": map_focus,
-            }
+            return {**base, "response": grounded_response, "intent": parsed["intent"]}
 
         if not self.api_key:
             return {
+                **base,
                 "response": (
                     "La configuration IA est absente côté serveur. "
                     "Ajoutez GEMINI_API_KEY pour activer Immotep."
                 ),
                 "intent": "error",
-                "parsed": parsed,
-                "recommendations": recommendations,
-                "comparisons": comparisons,
-                "map_focus": map_focus,
             }
 
         try:
             response_text = self._generate_with_gemini(prompt)
             if response_text:
-                return {
-                    "response": response_text,
-                    "intent": parsed["intent"],
-                    "parsed": parsed,
-                    "recommendations": recommendations,
-                    "comparisons": comparisons,
-                    "map_focus": map_focus,
-                }
+                return {**base, "response": response_text, "intent": parsed["intent"]}
             return {
+                **base,
                 "response": "Gemini n'a renvoyé aucun texte exploitable. Même le marché lyonnais est plus bavard.",
                 "intent": parsed["intent"],
-                "parsed": parsed,
-                "recommendations": recommendations,
-                "comparisons": comparisons,
-                "map_focus": map_focus,
             }
         except TimeoutError:
             logger.warning("[LLM_UNAVAILABLE] Timeout du provider Gemini sur /api/chat.")
             return {
+                **base,
                 "response": (
                     "Le service IA met trop de temps à répondre. "
                     "Réessaie dans un instant, Immotep range ses dossiers."
                 ),
                 "intent": parsed["intent"],
-                "parsed": parsed,
-                "recommendations": recommendations,
-                "comparisons": comparisons,
-                "map_focus": map_focus,
             }
         except Exception as exc:
             # Détection typée: le SDK google-genai lève des sous-classes de
@@ -793,15 +791,12 @@ Pour une comparaison, cite les moyennes calculées et le nombre d'annonces avant
             )
             if is_quota_exhausted:
                 return {
+                    **base,
                     "response": (
                         "Le quota IA est temporairement atteint. "
                         "Réessaie plus tard, le marché peut attendre deux minutes."
                     ),
                     "intent": parsed["intent"],
-                    "parsed": parsed,
-                    "recommendations": recommendations,
-                    "comparisons": comparisons,
-                    "map_focus": map_focus,
                 }
 
             # Erreur critique : le provider LLM (Gemini) est indisponible pour
@@ -813,15 +808,12 @@ Pour une comparaison, cite les moyennes calculées et le nombre d'annonces avant
                 type(exc).__name__, exc, exc_info=True,
             )
             return {
+                **base,
                 "response": (
                     "Le service IA est indisponible pour le moment. "
                     "Réessaie dans quelques instants."
                 ),
                 "intent": parsed["intent"],
-                "parsed": parsed,
-                "recommendations": recommendations,
-                "comparisons": comparisons,
-                "map_focus": map_focus,
             }
 
     def get_response(self, user_message, context_str, dataframe):
