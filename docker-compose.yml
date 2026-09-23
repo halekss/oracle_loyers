@@ -165,6 +165,7 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - CARTO_API_KEY=${CARTO_API_KEY:-}
     volumes:
       - ./Airflow/dags:/opt/airflow/dags
       - airflow-logs-volume:/opt/airflow/logs

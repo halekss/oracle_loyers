@@ -22,6 +22,19 @@ FRONTEND_DATA_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'public', 'data')
 IMMO_CSV = os.path.join(DATA_DIR, 'master_immo_final.csv')
 ANNONCES_DB_PATH = os.path.join(DATA_DIR, 'annonces.db')
 
+# CARTO exige désormais une clé API sur ses tuiles gratuites (basemaps.cartocdn.com,
+# depuis fin août 2026) : sans elle, les tuiles s'affichent quand même (HTTP 200)
+# mais avec un filigrane "API KEY REQUIRED" incrusté dans l'image. Clé gratuite
+# (5M requêtes/mois) à obtenir sur https://carto.com/basemaps/apikey/.
+CARTO_API_KEY = os.environ.get('CARTO_API_KEY', '')
+CARTO_DARK_MATTER_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+if CARTO_API_KEY:
+    CARTO_DARK_MATTER_URL += f"?key={CARTO_API_KEY}"
+CARTO_ATTRIBUTION = (
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
+    'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+)
+
 # Une carte HTML statique par ville (ORA-71 POC) : `metro_json`/`quartiers_geojson`
 # sont optionnels, absents pour une ville tant que sa couche correspondante n'a
 # pas été produite (chargement gracieux existant, cf. load_geojson_file et le
@@ -344,7 +357,12 @@ def main(ville='lyon'):
 
     # --- 4. CARTE ---
     print(f"🛑 GENERATION CARTE {ville.upper()} (METRO LIGNES AUTO)...")
-    m = folium.Map(location=paths['center'], zoom_start=13, tiles='CartoDB dark_matter', zoom_control=False)
+    m = folium.Map(location=paths['center'], zoom_start=13, tiles=None, zoom_control=False)
+    folium.TileLayer(
+        tiles=CARTO_DARK_MATTER_URL,
+        attr=CARTO_ATTRIBUTION,
+        name='CartoDB dark_matter',
+    ).add_to(m)
 
     # Config partagée des calques (ORA-130) : nom Folium/TOGGLE_LAYER et
     # visibilité par défaut de chaque calque, aussi consommée par
