@@ -71,6 +71,8 @@ SOFT_404_PATTERNS = (
     "annonce n'est plus en ligne",
     "a été retirée",
     "a été supprimée",
+    "a déjà été supprimée",
+    "annonce supprimée",
     "annonce expirée",
     "page introuvable",
     "bien n'est plus disponible",

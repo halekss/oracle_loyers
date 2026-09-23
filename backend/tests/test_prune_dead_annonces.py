@@ -27,6 +27,19 @@ class LooksLikeSoft404Test(unittest.TestCase):
     def test_handles_none_gracefully(self):
         self.assertFalse(prune_dead_annonces.looks_like_soft_404(None))
 
+    def test_detects_seloger_annonce_supprimee(self):
+        # Cas réel constaté (ORA-134) : SeLoger sert "Cette annonce a déjà été
+        # supprimée" (avec "déjà" intercalé) plutôt que "a été supprimée",
+        # ce qui faisait échouer le pattern existant et laissait la page
+        # retomber à tort sur le fallback prix (faux vivant, à cause des
+        # annonces "similaires" suggérées sur la même page).
+        html = (
+            '<div class="css-1fekpzi">Annonce supprimée</div>'
+            '<div class="css-db7sel">Cette annonce a déjà été supprimée, '
+            "mais il y en a bien d'autres qui vous attendent.</div>"
+        )
+        self.assertTrue(prune_dead_annonces.looks_like_soft_404(html))
+
 
 class CheckUrlStatusTest(unittest.TestCase):
     def test_returns_true_on_404(self):
