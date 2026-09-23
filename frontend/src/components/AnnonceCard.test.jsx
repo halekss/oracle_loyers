@@ -41,7 +41,7 @@ describe('AnnonceCard', () => {
 
     expect(screen.getByText('T2 Gerland')).toBeInTheDocument();
     expect(screen.getByText('850 €')).toBeInTheDocument();
-    expect(screen.getByText('45 m²')).toBeInTheDocument();
+    expect(screen.getByText(/45 m²/)).toBeInTheDocument();
     expect(screen.getByText('Lyon')).toBeInTheDocument();
     expect(screen.getByText('Gerland')).toBeInTheDocument();
   });
@@ -194,6 +194,58 @@ describe('AnnonceCard', () => {
       expect(screen.getByRole('button', { name: /retirer des favoris/i })).toBeInTheDocument();
 
       Storage.prototype.setItem = originalSet;
+    });
+  });
+
+  describe('écart % et source (ORA-173, maquette 05)', () => {
+    it('shows the écart % badge against the quartier reference €/m², colored by sign', () => {
+      // 850 / 45 = 18,9 €/m² ; référence 23 €/m² -> écart négatif ("bonne affaire")
+      render(<AnnonceCard annonce={baseAnnonce} referencePrixM2={23} />);
+
+      expect(screen.getByText('-18 %')).toBeInTheDocument();
+    });
+
+    it('shows a positive écart in red when the annonce is above the quartier reference', () => {
+      render(<AnnonceCard annonce={baseAnnonce} referencePrixM2={10} />);
+
+      expect(screen.getByText('+89 %')).toBeInTheDocument();
+    });
+
+    it('does not show an écart badge without a reference €/m² (no active scan)', () => {
+      render(<AnnonceCard annonce={baseAnnonce} />);
+
+      expect(screen.queryByText(/%$/)).not.toBeInTheDocument();
+    });
+
+    it('shows the badge when the annonce type matches referenceType (45 m² -> T2)', () => {
+      render(<AnnonceCard annonce={baseAnnonce} referencePrixM2={23} referenceType="T2" />);
+
+      expect(screen.getByText('-18 %')).toBeInTheDocument();
+    });
+
+    it('hides the badge when comparing a different type than the reference (mixed-type list)', () => {
+      // 45 m² s'infère T2 ; une référence "T4" ne doit pas produire d'écart trompeur.
+      render(<AnnonceCard annonce={baseAnnonce} referencePrixM2={23} referenceType="Grand (T4+)" />);
+
+      expect(screen.queryByText(/%$/)).not.toBeInTheDocument();
+    });
+
+    it('still shows the badge when referenceType is "Tout" (quartier-wide reference, no type filter)', () => {
+      render(<AnnonceCard annonce={baseAnnonce} referencePrixM2={23} referenceType="Tout" />);
+
+      expect(screen.getByText('-18 %')).toBeInTheDocument();
+    });
+
+    it('derives and shows the source label from the listing URL host', () => {
+      render(<AnnonceCard annonce={{ ...baseAnnonce, url: 'https://www.vizzit.fr/fr/property/abc' }} />);
+
+      expect(screen.getByText('Vizzit')).toBeInTheDocument();
+    });
+
+    it('shows no source pill for an unrecognized host', () => {
+      render(<AnnonceCard annonce={baseAnnonce} />);
+
+      expect(screen.queryByText(/Vizzit|PAP|SeLoger|Century 21|ParuVendu|Orpi/)).not.toBeInTheDocument();
     });
   });
 });

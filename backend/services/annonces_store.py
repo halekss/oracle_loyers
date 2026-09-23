@@ -44,6 +44,12 @@ SORT_COLUMNS = {
     "prix": "prix",
     "surface": "surface",
     "date": "date_scraping",
+    # ORA-173 : `annonces` ne stocke pas de colonne prix_m2 dédiée (dérivée à
+    # la volée, comme prix_m2 côté master_immo_final.csv) — expression SQL
+    # plutôt qu'un nom de colonne, whitelistée comme les autres (jamais de
+    # valeur utilisateur interpolée ici). NULLIF évite une division par zéro
+    # sur une surface manquante/nulle (résultat NULL, trié en dernier).
+    "prix_m2": "(prix * 1.0 / NULLIF(surface, 0))",
 }
 
 

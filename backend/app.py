@@ -378,7 +378,7 @@ def get_annonces():
     order = request.args.get('order', 'desc')
 
     if sort is not None and sort not in annonces_store.SORT_COLUMNS:
-        return jsonify({"error": "sort doit être 'prix', 'surface' ou 'date'"}), 400
+        return jsonify({"error": "sort doit être 'prix', 'surface', 'date' ou 'prix_m2'"}), 400
     if order not in ('asc', 'desc'):
         return jsonify({"error": "order doit être 'asc' ou 'desc'"}), 400
 
