@@ -8,7 +8,7 @@ vi.mock('../services/api', async () => {
   const actual = await vi.importActual('../services/api');
   return {
     ...actual,
-    api: { exportEstimationPdf: vi.fn() },
+    api: { exportEstimationPdf: vi.fn(), predict: vi.fn() },
   };
 });
 
@@ -28,6 +28,7 @@ const baseData = {
 describe('ResultCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.predict.mockResolvedValue({ estimated_price: 900 });
   });
 
   it('shows a loading skeleton while loading', () => {
@@ -180,5 +181,95 @@ describe('ResultCard', () => {
     render(<ResultCard data={baseData} loading={false} />);
 
     expect(screen.queryByRole('button', { name: /voir les annonces/i })).not.toBeInTheDocument();
+  });
+
+  describe('estimation personnalisée (ORA-171, surface + prédiction modèle)', () => {
+    const health = {
+      models: {
+        Lyon: { metrics: { mae: 175, dataset_size: 890 } },
+      },
+    };
+    const modelData = {
+      estimated_price: 1001,
+      stats: { prix_m2: 22.2 },
+      quartier: 'Ainay',
+      type: 'T2',
+      surface: 45,
+      confiance: 'Élevée',
+      quartierPrixM2: 19.4,
+      count: 12,
+      facteurs: [],
+      comparables: [{ type_local: 'T2', prix: 1300, surface: 45 }],
+    };
+
+    it('renders the "Estimation personnalisée" panel instead of the generic card when a real prediction was made', () => {
+      render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+      expect(screen.getByText('Estimation personnalisée')).toBeInTheDocument();
+      expect(screen.getByText(/Ainay · T2 · 45 m²/)).toBeInTheDocument();
+      expect(screen.getByText('1 001')).toBeInTheDocument();
+    });
+
+    it('shows the model error margin and dataset size from /api/health, not hardcoded', () => {
+      render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+      expect(screen.getByText(/± 175 € \(erreur moyenne du modèle XGBoost Lyon\)/)).toBeInTheDocument();
+      expect(screen.getByText(/entraîné sur 890 annonces lyonnaises/)).toBeInTheDocument();
+    });
+
+    it('compares the model price/m² against the quartier average for the same type', () => {
+      render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+      expect(screen.getByText(/médiane T2 : 19,4 €/)).toBeInTheDocument();
+    });
+
+    it('falls back to the generic card when there is no surface (no real model prediction)', () => {
+      render(<ResultCard data={baseData} loading={false} ville="lyon" health={health} />);
+
+      expect(screen.queryByText('Estimation personnalisée')).not.toBeInTheDocument();
+      expect(screen.getByText('Estimation Loyer')).toBeInTheDocument();
+    });
+
+    it('fetches "et si la surface change" scenarios at surface -15/=/+15 via api.predict', async () => {
+      api.predict.mockImplementation(({ surface }) => Promise.resolve({ estimated_price: surface * 20 }));
+
+      render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+      await waitFor(() => {
+        expect(api.predict).toHaveBeenCalledWith(
+          expect.objectContaining({ surface: 30, quartier: 'Ainay', type_local: 'T2' }),
+        );
+        expect(api.predict).toHaveBeenCalledWith(
+          expect.objectContaining({ surface: 60, quartier: 'Ainay', type_local: 'T2' }),
+        );
+      });
+      // La surface courante (45) n'appelle pas l'API : déjà connue via `estimated_price`.
+      expect(api.predict).not.toHaveBeenCalledWith(expect.objectContaining({ surface: 45 }));
+      await waitFor(() => expect(screen.getByText('600 €')).toBeInTheDocument()); // 30 * 20
+    });
+
+    it('shows the écart % of each comparable against the model estimate for its surface', () => {
+      render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+      // 1300 vs (22.2 * 45 = 999) attendu -> ~+30 %
+      expect(screen.getByText(/\+30 %/)).toBeInTheDocument();
+    });
+
+    it('still exports a PDF from the estimation personnalisée panel', async () => {
+      api.exportEstimationPdf.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+      URL.revokeObjectURL = vi.fn();
+      const user = userEvent.setup();
+
+      render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+      await user.click(screen.getByRole('button', { name: /exporter en pdf/i }));
+
+      await waitFor(() => {
+        expect(api.exportEstimationPdf).toHaveBeenCalledWith(
+          expect.objectContaining({ quartier: 'Ainay', estimated_price: 1001 }),
+        );
+      });
+    });
   });
 });

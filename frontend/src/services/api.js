@@ -126,6 +126,20 @@ export const api = {
     }
   },
 
+  // État des modèles chargés — GET /api/health (ORA-171 : mae/dataset_size
+  // par ville pour "± N € (erreur moyenne du modèle XGBoost <Ville>)" et
+  // "entraîné sur N annonces", plutôt que des chiffres codés en dur).
+  getHealth: async () => {
+    try {
+      const response = await fetchWithClassification(`${API_URL}/health`);
+
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Erreur Health:", error);
+      throw error;
+    }
+  },
+
   // Annonces avec coordonnées (toutes, non paginées) — GET /api/listings.
   // Utilisé pour calculer la bounding-box carte des résultats filtrés (ORA-105).
   getListings: async () => {

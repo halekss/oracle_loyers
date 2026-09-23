@@ -246,6 +246,25 @@ def health():
             info["metrics"] = meta.get("metrics")
         except Exception:
             pass
+
+        # ORA-171 : "entraîné sur N annonces" (maquette 03) vient du dernier
+        # run loggé par train_model.py, pas d'un chiffre codé en dur — ce
+        # fichier n'a pas vocation à bloquer /api/health si absent/corrompu.
+        try:
+            metrics_log_path = model_path.replace('price_predictor_', 'training_metrics_').replace('.pkl', '.jsonl')
+            with open(metrics_log_path, encoding='utf-8') as f:
+                last_line = None
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        last_line = line
+            if last_line and info["metrics"] is not None:
+                dataset_size = json.loads(last_line).get("dataset_size")
+                if dataset_size is not None:
+                    info["metrics"]["dataset_size"] = dataset_size
+        except Exception:
+            pass
+
         models_info[ville_nom] = info
 
     any_model_loaded = any(m is not None for m in models.values())
