@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
-import SearchForm from './components/SearchForm';
+import { useState, useEffect, useMemo } from 'react';
 import ResultCard from './components/ResultCard';
 import PriceHistory from './components/PriceHistory';
 import MapComponent from './components/MapComponent';
 import ChatOracle from './components/ChatOracle';
 import AnnoncesList from './components/AnnoncesList';
 import ErrorBoundary from './components/ErrorBoundary';
+import Topbar from './components/Topbar';
+import HomeOverview from './components/HomeOverview';
 import { api, describeApiError } from './services/api';
 import { computeBoundsForQuartiers } from './services/mapBounds';
+import { computeHomeStats } from './services/homeStats';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
 // l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
@@ -81,6 +83,9 @@ function App() {
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
   const facteurs = result?.facteurs || [];
+  // ORA-170 : agrégats "Le marché en un coup d'œil", affichés tant qu'aucun
+  // quartier n'a été scanné (état par défaut de la colonne Oracle).
+  const homeStats = useMemo(() => computeHomeStats(listings, ville), [listings, ville]);
 
   // ORA-105 : chargé une fois, sert à résoudre les coordonnées des quartiers
   // des annonces affichées (AnnoncesList n'a pas de latitude/longitude).
@@ -185,7 +190,18 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-200 overflow-hidden font-sans selection:bg-purple-500/30">
+    <div className="flex flex-col h-screen w-screen bg-ink-950 text-slate-200 overflow-hidden font-sans selection:bg-violet-500/30">
+
+      {/* Topbar (ORA-170) : logo, ville, recherche quartier, filtres type,
+          surface et bouton SCAN — pleine largeur, persistante au-dessus de
+          la carte ET du panneau latéral, quel que soit l'onglet mobile actif. */}
+      <Topbar ville={ville} onVilleChange={setVille} onScan={handleScan} isLoading={loading} />
+
+      {error && (
+        <div className="shrink-0 mx-3 md:mx-4 mt-2 text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
+          {error}
+        </div>
+      )}
 
       {/* Zone de contenu principale */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
@@ -209,43 +225,8 @@ function App() {
           id="panel-oracle"
           role="tabpanel"
           aria-labelledby="tab-oracle"
-          className={`${activeTab === 'oracle' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[40%] h-full bg-slate-900/95 backdrop-blur-md relative z-10`}
+          className={`${activeTab === 'oracle' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[40%] h-full bg-ink-900/95 backdrop-blur-md relative z-10`}
         >
-
-          {/* En-tête / Recherche */}
-          <div className="shrink-0 p-4 md:p-5 border-b border-slate-800 bg-slate-950/50 z-20">
-            <h1 className="text-xl font-black tracking-tighter text-white mb-4">
-              ORACLE <span className="text-purple-500">DES LOYERS</span>
-            </h1>
-
-            {/* Sélecteur de ville (ORA-71 POC) : ne change que la carte
-                affichée, la recherche par quartier fonctionne sans distinction
-                de ville (codes postaux Lyon/Lille jamais ambigus). */}
-            <div className="flex gap-2 mb-4">
-              {['lyon', 'lille'].map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setVille(v)}
-                  className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${
-                    ville === v
-                      ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/40'
-                      : 'bg-transparent border-slate-700 text-slate-400 hover:bg-slate-800'
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            <SearchForm onScan={handleScan} isLoading={loading} />
-
-            {error && (
-              <div className="mt-3 text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
-                {error}
-              </div>
-            )}
-          </div>
 
           {/* Résultat + détails (cavaliers/historique/annonces) — bloc
               scrollable indépendant occupant toute la hauteur restante de la
@@ -256,7 +237,15 @@ function App() {
             className="flex-1 min-h-0 overflow-y-auto custom-scrollbar"
           >
           <ErrorBoundary fallback={makePanelFallback("Le panneau d'estimation")}>
+            {/* ORA-170 : tant qu'aucun quartier n'a été scanné, la colonne
+                Oracle affiche l'aperçu marché de la ville sélectionnée
+                (maquette 01) plutôt qu'un résultat vide. */}
+            {!result && !loading && (
+              <HomeOverview stats={homeStats} ville={ville} onOpenChat={() => setIsChatOpen(true)} />
+            )}
+
             {/* Résultat */}
+            {(result || loading) && (
             <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
               <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} />
               {result && (
@@ -265,11 +254,13 @@ function App() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Détails du quartier — Les 4 Cavaliers, historique des prix et
                 annonces récentes, regroupés dans un seul dropdown (desktop
                 uniquement, l'onglet mobile "Annonces" joue ce rôle en plein
                 écran sur mobile pour les annonces). */}
+            {(result || loading) && (
             <details className="hidden md:block border-b border-slate-800 group" open>
               <summary className="px-4 md:px-5 py-2.5 bg-slate-900/20 text-[9px] uppercase text-slate-500 font-bold tracking-widest cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-slate-300 transition-colors">
                 <span>Détails du quartier</span>
@@ -312,6 +303,7 @@ function App() {
                 </div>
               </div>
             </details>
+            )}
           </ErrorBoundary>
           </div>
 

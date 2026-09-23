@@ -293,8 +293,14 @@ def get_listings():
     if 'statut' in df.columns:
         df = df[df['statut'] != 'inactive']
 
-    # On renvoie les colonnes nécessaires uniquement et on gère les NaN
-    data = df[['latitude', 'longitude', 'prix', 'type_local', 'quartier']].fillna('').to_dict(orient='records')
+    # On renvoie les colonnes nécessaires uniquement et on gère les NaN.
+    # ville/code_postal/prix_m2 (ORA-170) alimentent l'agrégation "Le marché
+    # en un coup d'œil" (médianes par arrondissement, quartiers extrêmes).
+    columns = ['latitude', 'longitude', 'prix', 'type_local', 'quartier']
+    for extra in ('ville', 'code_postal', 'prix_m2'):
+        if extra in df.columns:
+            columns.append(extra)
+    data = df[columns].fillna('').to_dict(orient='records')
     return jsonify(data)
 
 @app.route('/api/annonces', methods=['GET'])
