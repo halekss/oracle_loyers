@@ -7,10 +7,29 @@ function formatEuros(value, digits = 0) {
   return `${value.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} €`;
 }
 
-export default function HomeOverview({ stats, ville, onOpenChat }) {
+function QuartierRow({ q, onSelectQuartier, formatEuros }) {
+  const Row = onSelectQuartier ? 'button' : 'div';
+  return (
+    <Row
+      type={onSelectQuartier ? 'button' : undefined}
+      onClick={onSelectQuartier ? () => onSelectQuartier(q.label) : undefined}
+      className={`flex items-center justify-between text-[11px] w-full ${onSelectQuartier ? 'hover:text-white cursor-pointer' : ''}`}
+    >
+      <span className="text-slate-300 truncate text-left">{q.label}</span>
+      <span className="text-yellow-400 font-bold shrink-0">{formatEuros(q.prixM2Median, 1)}/m²</span>
+    </Row>
+  );
+}
+
+export default function HomeOverview({ stats, ville, onOpenChat, onSelectQuartier }) {
   const villeLabel = ville === 'lille' ? 'LILLE' : 'LYON';
   const districtUnit = stats.districtLabel === 'PAR ARRONDISSEMENT' ? 'ARRONDISSEMENTS' : 'QUARTIERS';
   const maxPrixM2 = Math.max(1, ...stats.districts.map((d) => d.prixM2Median));
+  // Les libellés d'arrondissement ("6e", "1er") ne sont pas des quartiers
+  // scannables par l'API (un arrondissement en contient plusieurs) : seules
+  // les lignes groupées par quartier (Lille, et les extrêmes ci-dessous)
+  // déclenchent un scan au clic.
+  const districtsAreQuartiers = stats.districtLabel === 'PAR QUARTIER';
 
   return (
     <div className="p-4 md:p-5 space-y-4">
@@ -47,23 +66,32 @@ export default function HomeOverview({ stats, ville, onOpenChat }) {
             <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Annonces</p>
           </div>
           <div className="space-y-1.5">
-            {stats.districts.map((d) => (
-              <div key={d.label} className="flex items-center gap-2">
-                <span className="w-20 shrink-0 text-[11px] font-bold text-slate-300 truncate" title={d.label}>
-                  {d.label}
-                </span>
-                <div className="flex-1 h-4 bg-ink-800 rounded overflow-hidden">
-                  <div
-                    className="h-full bg-violet-600 rounded"
-                    style={{ width: `${Math.max(6, (d.prixM2Median / maxPrixM2) * 100)}%` }}
-                  />
-                </div>
-                <span className="w-14 shrink-0 text-right text-[11px] font-bold text-yellow-400">
-                  {formatEuros(d.prixM2Median, 1)}
-                </span>
-                <span className="w-8 shrink-0 text-right text-[10px] text-slate-500">{d.count}</span>
-              </div>
-            ))}
+            {stats.districts.map((d) => {
+              const clickable = districtsAreQuartiers && onSelectQuartier;
+              const Row = clickable ? 'button' : 'div';
+              return (
+                <Row
+                  key={d.label}
+                  type={clickable ? 'button' : undefined}
+                  onClick={clickable ? () => onSelectQuartier(d.label) : undefined}
+                  className={`flex items-center gap-2 w-full ${clickable ? 'hover:bg-ink-800/60 rounded cursor-pointer' : ''}`}
+                >
+                  <span className="w-20 shrink-0 text-[11px] font-bold text-slate-300 truncate text-left" title={d.label}>
+                    {d.label}
+                  </span>
+                  <div className="flex-1 h-4 bg-ink-800 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-violet-600 rounded"
+                      style={{ width: `${Math.max(6, (d.prixM2Median / maxPrixM2) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-14 shrink-0 text-right text-[11px] font-bold text-yellow-400">
+                    {formatEuros(d.prixM2Median, 1)}
+                  </span>
+                  <span className="w-8 shrink-0 text-right text-[10px] text-slate-500">{d.count}</span>
+                </Row>
+              );
+            })}
           </div>
         </div>
       )}
@@ -84,10 +112,7 @@ export default function HomeOverview({ stats, ville, onOpenChat }) {
           <p className="text-[9px] uppercase tracking-widest text-green-400 font-bold mb-1.5">Les plus abordables</p>
           <div className="space-y-1">
             {stats.quartiersAbordables.map((q) => (
-              <div key={q.label} className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-300 truncate">{q.label}</span>
-                <span className="text-yellow-400 font-bold shrink-0">{formatEuros(q.prixM2Median, 1)}/m²</span>
-              </div>
+              <QuartierRow key={q.label} q={q} onSelectQuartier={onSelectQuartier} formatEuros={formatEuros} />
             ))}
           </div>
         </div>
@@ -95,10 +120,7 @@ export default function HomeOverview({ stats, ville, onOpenChat }) {
           <p className="text-[9px] uppercase tracking-widest text-red-400 font-bold mb-1.5">Les plus chers</p>
           <div className="space-y-1">
             {stats.quartiersChers.map((q) => (
-              <div key={q.label} className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-300 truncate">{q.label}</span>
-                <span className="text-yellow-400 font-bold shrink-0">{formatEuros(q.prixM2Median, 1)}/m²</span>
-              </div>
+              <QuartierRow key={q.label} q={q} onSelectQuartier={onSelectQuartier} formatEuros={formatEuros} />
             ))}
           </div>
         </div>

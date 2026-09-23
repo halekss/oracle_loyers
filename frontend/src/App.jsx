@@ -241,7 +241,12 @@ function App() {
                 Oracle affiche l'aperçu marché de la ville sélectionnée
                 (maquette 01) plutôt qu'un résultat vide. */}
             {!result && !loading && (
-              <HomeOverview stats={homeStats} ville={ville} onOpenChat={() => setIsChatOpen(true)} />
+              <HomeOverview
+                stats={homeStats}
+                ville={ville}
+                onOpenChat={() => setIsChatOpen(true)}
+                onSelectQuartier={(quartier) => handleScan(quartier, 'Tout', '')}
+              />
             )}
 
             {/* Résultat */}
