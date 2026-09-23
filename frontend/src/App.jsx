@@ -260,13 +260,36 @@ function App() {
           className={`${activeTab === 'oracle' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[40%] h-full bg-ink-900/95 backdrop-blur-md relative z-10`}
         >
 
+          {/* ORA-175 : le chat Immotep occupe désormais toute la colonne
+              Oracle (maquette 07), à la place du panneau résultat/détails,
+              plutôt qu'une bulle flottante superposée à l'écran — reste monté
+              en permanence (`hidden`/`flex`, pas démonté) pour ne jamais
+              perdre l'historique de conversation en basculant de vue. */}
+          <div id="chat-panel" className={isChatOpen ? 'flex-1 min-h-0' : 'hidden'}>
+            <ErrorBoundary fallback={makePanelFallback('Le chat Immotep')}>
+              <ChatOracle
+                analysis={result?.analysis}
+                context={chatContext}
+                quartier={result?.quartier}
+                onListAnnonces={(quartier) => {
+                  handleViewAnnonces(quartier);
+                  setIsChatOpen(false);
+                }}
+                onInsight={(insight) => {
+                  if (insight?.map_focus?.lat && insight?.map_focus?.lng) {
+                    setMapCenter([insight.map_focus.lat, insight.map_focus.lng, insight.map_focus.zoom || 15]);
+                  }
+                }}
+              />
+            </ErrorBoundary>
+          </div>
+
           {/* Résultat + détails (cavaliers/historique/annonces) — bloc
               scrollable indépendant occupant toute la hauteur restante de la
-              colonne (le chat n'y prend plus de place, cf. bulle flottante
-              plus bas). */}
+              colonne quand le chat n'est pas actif. */}
           <div
             id="oracle-info-panel"
-            className="flex-1 min-h-0 overflow-y-auto custom-scrollbar"
+            className={isChatOpen ? 'hidden' : 'flex-1 min-h-0 overflow-y-auto custom-scrollbar'}
           >
           <ErrorBoundary fallback={makePanelFallback("Le panneau d'estimation")}>
             {/* ORA-170 : tant qu'aucun quartier n'a été scanné, la colonne
@@ -350,51 +373,19 @@ function App() {
         </div>
       </div>
 
-      {/* Chat Immotep — bulle flottante + overlay, superposés à l'écran
-          principal quel que soit l'onglet actif (pas de fenêtre ni de page
-          séparée). ChatOracle reste monté en permanence, seule sa visibilité
-          bascule, pour ne jamais perdre l'historique de conversation entre
-          deux ouvertures. */}
-      <div
-        id="chat-overlay"
-        className={`fixed z-[60] bottom-36 md:bottom-24 right-4 md:right-6 w-[calc(100vw-2rem)] max-w-sm h-[70vh] max-h-[560px] flex-col rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/50 overflow-hidden ${isChatOpen ? 'flex' : 'hidden'}`}
-      >
-        <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-slate-950/80 border-b border-slate-800">
-          <span className="text-xs font-black uppercase tracking-widest text-white">
-            Immotep <span className="text-purple-400">— Oracle</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setIsChatOpen(false)}
-            aria-label="Fermer le chat"
-            className="text-slate-500 hover:text-white transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div className="flex-1 min-h-0">
-          <ErrorBoundary fallback={makePanelFallback('Le chat Immotep')}>
-            <ChatOracle
-              analysis={result?.analysis}
-              context={chatContext}
-              onInsight={(insight) => {
-                if (insight?.map_focus?.lat && insight?.map_focus?.lng) {
-                  setMapCenter([insight.map_focus.lat, insight.map_focus.lng, insight.map_focus.zoom || 15]);
-                }
-              }}
-            />
-          </ErrorBoundary>
-        </div>
-      </div>
-
+      {/* ORA-175 : bouton bascule du chat Immotep — le panneau lui-même vit
+          désormais dans la colonne Oracle (voir #chat-panel ci-dessus),
+          plus dans un overlay flottant séparé. Sur mobile, basculer sur
+          l'onglet "Oracle" en même temps : le chat y est monté, invisible
+          depuis les onglets Carte/Annonces sinon. */}
       <button
         type="button"
-        onClick={() => setIsChatOpen((v) => !v)}
+        onClick={() => {
+          setIsChatOpen((v) => !v);
+          setActiveTab('oracle');
+        }}
         aria-expanded={isChatOpen}
-        aria-controls="chat-overlay"
+        aria-controls="chat-panel"
         aria-label={isChatOpen ? 'Fermer le chat Immotep' : 'Ouvrir le chat Immotep'}
         className="fixed z-[60] bottom-20 md:bottom-6 right-4 md:right-6 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-lg shadow-indigo-900/40 flex items-center justify-center transition-all transform active:scale-95"
       >

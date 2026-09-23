@@ -29,7 +29,16 @@ const DEFAULT_MESSAGES = [
   }
 ];
 
-export default function ChatOracle({ analysis, context, quartier, onInsight }) {
+// ORA-175 : types de bien connus, pour générer une suggestion "Et en T3 ?"
+// après une réponse qui portait sur un autre type précis.
+const ALL_TYPES = ['T1', 'T2', 'T3', 'T4+'];
+
+// `onListAnnonces` (optionnel, ORA-175) : appelé avec le quartier dominant
+// des recommandations quand l'utilisateur clique "Lister les N annonces" —
+// le parent (App.jsx) bascule vers la liste des annonces sur ce quartier.
+// Filtrer la liste par type/budget précis dépasse le périmètre de ce ticket
+// (AnnoncesList n'accepte aujourd'hui qu'un filtre quartier, cf. ORA-115).
+export default function ChatOracle({ analysis, context, quartier, onInsight, onListAnnonces }) {
   // ORA-117 : restaure l'historique de la session (sessionStorage) au
   // montage — vide dans un nouvel onglet, conservé au refresh de page.
   const [messages, setMessages] = useState(() => loadChatHistory() || DEFAULT_MESSAGES);
@@ -69,13 +78,26 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
       const oracleResponse = await api.sendChatMessage(userMsg, buildChatContext(context, latestInsight));
       const responseText = typeof oracleResponse === 'string' ? oracleResponse : oracleResponse.response;
 
+      // ORA-175 : la bulle garde les données structurées de sa réponse
+      // (recommandations/compteur/filtre) — persistées avec le message dans
+      // l'historique (sessionStorage), pas seulement dans `latestInsight`
+      // (qui ne retient que la toute dernière réponse).
+      const structured = typeof oracleResponse === 'object' ? oracleResponse : null;
+
       // Affiche la réponse d'Immotep, et lève le marqueur d'échec éventuel
       setMessages(prev => {
         const next = [...prev];
         if (next[messageIndex]?.sender === 'user') {
           next[messageIndex] = { ...next[messageIndex], failed: false };
         }
-        return [...next, { sender: 'oracle', text: responseText }];
+        return [...next, {
+          sender: 'oracle',
+          text: responseText,
+          recommendations: structured?.recommendations,
+          comparisons: structured?.comparisons,
+          matchedCount: structured?.matched_count,
+          parsed: structured?.parsed,
+        }];
       });
       if (typeof oracleResponse === 'object') {
         setLatestInsight(oracleResponse);
@@ -129,6 +151,15 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
     attemptSend(text, messageIndex);
   };
 
+  // ORA-175 : puce de suggestion cliquable ("Et en T3 ?") — envoie le texte
+  // comme un vrai message utilisateur, exactement comme handleSend.
+  const handleSuggestionClick = (text) => {
+    if (isLoading) return;
+    const messageIndex = messages.length;
+    setMessages(prev => [...prev, { sender: 'user', text }]);
+    attemptSend(text, messageIndex);
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-slate-950/50">
       
@@ -165,6 +196,55 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
                 <p>{msg.text}</p>
               )}
             </div>
+
+            {/* ORA-175 : résultats riches dans la bulle (maquette 07) — les
+                comparaisons (intent "compare") priment sur les recommandations
+                individuelles quand les deux sont présentes, comme l'ancien
+                InsightPanel qu'elles remplacent (résultats désormais dans la
+                bulle plutôt que dans un panneau séparé sous la zone de saisie). */}
+            {msg.sender === 'oracle' && (msg.comparisons?.length > 0 || msg.recommendations?.length > 0) && (
+              <div className="mt-2 w-full max-w-[88%] md:max-w-[82%] space-y-1.5">
+                {(msg.comparisons?.length > 0 ? msg.comparisons : msg.recommendations).slice(0, 4).map((item, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 bg-ink-900 border border-ink-700 rounded-lg px-2.5 py-1.5 text-[11px]">
+                    <span className="text-slate-300 truncate">
+                      {item.quartier}
+                      {item.type_local ? ` · ${item.type_local}` : ''}
+                      {item.surface ? ` · ${item.surface} m²` : item.surface_moyenne ? ` · ${item.surface_moyenne} m² moy.` : ''}
+                      {item.count ? ` · ${item.count} annonces` : ''}
+                    </span>
+                    <span className="font-bold text-white shrink-0">
+                      {Math.round(item.prix ?? item.prix_moyen ?? 0).toLocaleString('fr-FR')} €
+                    </span>
+                  </div>
+                ))}
+                {!msg.comparisons?.length && msg.matchedCount > msg.recommendations.length && (
+                  <button
+                    type="button"
+                    onClick={() => onListAnnonces?.(msg.recommendations[0]?.quartier)}
+                    className="w-full text-[10px] uppercase tracking-widest font-bold text-violet-400 hover:text-violet-300 text-center py-1"
+                  >
+                    Lister les {msg.matchedCount} annonces →
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ORA-175 : suggestion contextuelle ("Et en T3 ?"), uniquement
+                sur le tout dernier message pour ne pas encombrer l'historique. */}
+            {msg.sender === 'oracle' && idx === messages.length - 1 && !isLoading && msg.parsed?.type_local && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {ALL_TYPES.filter((t) => t !== msg.parsed.type_local).slice(0, 2).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => handleSuggestionClick(`Et en ${t} ?`)}
+                    className="text-[10px] font-bold text-violet-300 bg-violet-900/30 border border-violet-700/50 rounded-full px-2.5 py-1 hover:bg-violet-900/50 transition-colors"
+                  >
+                    Et en {t} ?
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* ORA-120 : bouton réessayer sur le message utilisateur en échec d'envoi */}
             {msg.sender === 'user' && msg.failed && (
@@ -203,10 +283,12 @@ export default function ChatOracle({ analysis, context, quartier, onInsight }) {
 
       {/* --- ZONE DE SAISIE (Input) --- */}
       <div className="p-3 bg-slate-900 border-t border-slate-800">
-        {latestInsight && (
-          <InsightPanel insight={latestInsight} />
-        )}
-        
+        {/* ORA-175 : les recommandations s'affichent désormais dans la bulle
+            elle-même (maquette 07), plus dans un panneau séparé ici — l'ancien
+            InsightPanel dupliquait ce que la bulle du dernier message montre déjà.
+            `latestInsight` reste utile pour enrichir le contexte envoyé au
+            prochain message (buildChatContext, plus bas). */}
+
         {/* Indicateur de Contexte (Si un scan est actif) */}
         {context && (
           <div className="flex items-center gap-2 mb-2 px-2 opacity-70">
@@ -273,66 +355,4 @@ function buildChatContext(baseContext, insight) {
   }
 
   return parts.join('. ');
-}
-
-function InsightPanel({ insight }) {
-  const [isOpen, setIsOpen] = useState(true);
-  const comparisons = insight.comparisons || [];
-  const recommendations = insight.recommendations || [];
-  const hasComparisons = comparisons.length > 0;
-  const items = hasComparisons ? comparisons : recommendations;
-
-  if (!items.length) return null;
-
-  return (
-    <div className="mb-3 border border-slate-700/70 bg-slate-950/70 rounded-lg overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setIsOpen((value) => !value)}
-        className="w-full px-3 py-2 border-b border-slate-800 flex items-center justify-between text-left hover:bg-slate-900/70 transition-colors"
-        aria-expanded={isOpen}
-      >
-        <span className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] uppercase tracking-widest text-cyan-300 font-bold">
-            {hasComparisons ? 'Comparaison Immotep' : 'Suggestions Immotep'}
-          </span>
-          {insight.map_focus?.quartier && (
-            <span className="text-[10px] text-slate-500 truncate">
-              Focus: {insight.map_focus.quartier}
-            </span>
-          )}
-        </span>
-        <span className="text-slate-500 text-xs font-mono">
-          {isOpen ? '−' : '+'}
-        </span>
-      </button>
-
-      {isOpen && (
-        <div className="divide-y divide-slate-800 max-h-48 overflow-y-auto">
-          {items.slice(0, 4).map((item, index) => (
-            <div key={`${item.quartier}-${index}`} className="px-3 py-2 text-xs">
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold text-slate-100 truncate">
-                  {item.quartier}
-                </span>
-                <span className="font-mono text-amber-300 whitespace-nowrap">
-                  {Math.round(item.prix_moyen ?? item.prix ?? 0).toLocaleString('fr-FR')} €
-                </span>
-              </div>
-              <div className="mt-1 text-slate-400 flex flex-wrap gap-x-3 gap-y-1">
-                {item.type_local && <span>{item.type_local}</span>}
-                {item.surface && <span>{item.surface} m²</span>}
-                {item.surface_moyenne && <span>{item.surface_moyenne} m² moy.</span>}
-                {item.prix_m2_moyen && <span>{item.prix_m2_moyen} €/m²</span>}
-                {item.count && <span>{item.count} annonces</span>}
-              </div>
-              {item.why && (
-                <p className="mt-1 text-slate-500 leading-snug">{item.why}</p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }

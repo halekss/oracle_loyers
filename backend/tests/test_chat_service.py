@@ -351,6 +351,35 @@ class ChatServiceTest(unittest.TestCase):
         self.assertEqual(result["recommendations"][0]["quartier"], "Part-Dieu / Villette")
         self.assertIn("bar", result["recommendations"][0]["why"])
 
+    def test_matched_count_reflects_the_full_filtered_total_not_just_the_5_recommendations(self):
+        """ORA-175 : "Lister les N annonces" a besoin du total réel, pas de
+        `len(recommendations)` tronqué à 5 pour la bulle."""
+        rows = [
+            {
+                "quartier": "Guillotière / Jean Macé", "code_postal": 69007,
+                "prix": 550 + i * 10, "surface": 38, "type_local": "T2",
+                "latitude": 45.75, "longitude": 4.85,
+            }
+            for i in range(7)
+        ]
+        df = pd.DataFrame(rows)
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True), patch.dict(
+            sys.modules, self._fake_google_modules()
+        ):
+            service = ChatService()
+            result = service.get_chat_result("Un T2 sous 1000 euros", "", df)
+
+        self.assertEqual(result["matched_count"], 7)
+        self.assertLessEqual(len(result["recommendations"]), 5)
+
+    def test_matched_count_is_zero_for_an_empty_dataset(self):
+        with patch.dict(os.environ, {}, clear=True):
+            service = ChatService()
+            result = service.get_chat_result("Un T2 à Gerland", "", pd.DataFrame())
+
+        self.assertEqual(result["matched_count"], 0)
+
     def test_returns_professional_message_on_provider_timeout(self):
         class TimeoutModels(FakeModels):
             def generate_content(self, **kwargs):

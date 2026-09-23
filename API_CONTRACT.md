@@ -405,6 +405,9 @@ Route du chatbot "Immotep" : combine une réponse "groundée" sur les données r
 | `recommendations` | array | Annonces recommandées en lien avec la requête, s'il y en a |
 | `comparisons` | array | Annonces utilisées pour comparaison, s'il y en a |
 | `map_focus` | object \| null | `{ "lat", "lng", "zoom" }` si la réponse doit recentrer la carte |
+| `matched_count` | number | ORA-175 : nombre **total** d'annonces correspondant au filtre déduit de `parsed` (type/budget/quartier...), avant troncature à 5 pour `recommendations` — alimente un CTA type "Lister les N annonces" côté frontend |
+
+`parsed` porte les critères structurés du filtre exigés par la maquette 07 : `parsed.type_local`/`parsed.type_locals` (type de bien), `parsed.budget_max` (prix max en €). Pas de filtre par distance au métro à ce jour — `master_immo_final.csv` ne stocke aucune distance annonce↔station la rendant calculable sans coût supplémentaire (nouvelle fonctionnalité hors périmètre ORA-175).
 
 ```json
 {
@@ -413,7 +416,8 @@ Route du chatbot "Immotep" : combine une réponse "groundée" sur les données r
   "parsed": { "...": "..." },
   "recommendations": [],
   "comparisons": [],
-  "map_focus": { "lat": 45.735, "lng": 4.831, "zoom": 15 }
+  "map_focus": { "lat": 45.735, "lng": 4.831, "zoom": 15 },
+  "matched_count": 0
 }
 ```
 

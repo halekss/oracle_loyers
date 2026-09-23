@@ -202,4 +202,85 @@ describe('ChatOracle', () => {
     rerender(<ChatOracle analysis="Analyse du secteur Gerland." />);
     expect(screen.getByText('Analyse du secteur Gerland.')).toBeInTheDocument();
   });
+
+  describe('résultats riches, "Lister les N annonces" et suggestions (ORA-175)', () => {
+    const structuredResponse = {
+      response: 'Voici ce que je trouve.',
+      recommendations: [
+        { quartier: 'Guillotière / Jean Macé', type_local: 'T2', surface: 38, prix: 570 },
+        { quartier: 'Montchat', type_local: 'T2', surface: 40, prix: 612 },
+      ],
+      matched_count: 67,
+      parsed: { type_local: 'T2' },
+    };
+
+    it('shows the recommended listings as cards inside the oracle bubble', async () => {
+      api.sendChatMessage.mockResolvedValue(structuredResponse);
+      const user = userEvent.setup();
+
+      render(<ChatOracle />);
+      await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Un T2 sous 1000€');
+      await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+      expect(await screen.findByText(/Guillotière \/ Jean Macé · T2 · 38 m²/)).toBeInTheDocument();
+      expect(screen.getByText('570 €')).toBeInTheDocument();
+    });
+
+    it('shows "Lister les N annonces" when matched_count exceeds the shown recommendations', async () => {
+      api.sendChatMessage.mockResolvedValue(structuredResponse);
+      const onListAnnonces = vi.fn();
+      const user = userEvent.setup();
+
+      render(<ChatOracle onListAnnonces={onListAnnonces} />);
+      await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Un T2 sous 1000€');
+      await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+      const listButton = await screen.findByRole('button', { name: /lister les 67 annonces/i });
+      await user.click(listButton);
+
+      expect(onListAnnonces).toHaveBeenCalledWith('Guillotière / Jean Macé');
+    });
+
+    it('does not show the "Lister" CTA when all matches are already shown', async () => {
+      api.sendChatMessage.mockResolvedValue({ ...structuredResponse, matched_count: 2 });
+      const user = userEvent.setup();
+
+      render(<ChatOracle />);
+      await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Un T2 sous 1000€');
+      await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+      await screen.findByText(/Guillotière/);
+      expect(screen.queryByRole('button', { name: /lister les/i })).not.toBeInTheDocument();
+    });
+
+    it('offers a type suggestion chip and sends it as a new message when clicked', async () => {
+      api.sendChatMessage
+        .mockResolvedValueOnce(structuredResponse)
+        .mockResolvedValueOnce({ response: 'Et voici pour un T3.' });
+      const user = userEvent.setup();
+
+      render(<ChatOracle />);
+      await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Un T2 sous 1000€');
+      await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+      await screen.findByText(/Voici ce que je trouve/);
+
+      const chip = screen.getByRole('button', { name: 'Et en T3 ?' });
+      await user.click(chip);
+
+      await waitFor(() => expect(screen.getByText('Et voici pour un T3.')).toBeInTheDocument());
+      expect(api.sendChatMessage).toHaveBeenLastCalledWith('Et en T3 ?', expect.anything());
+    });
+
+    it('does not show a suggestion chip when the response has no specific type', async () => {
+      api.sendChatMessage.mockResolvedValue({ response: 'Réponse générale.', parsed: {} });
+      const user = userEvent.setup();
+
+      render(<ChatOracle />);
+      await user.type(screen.getByPlaceholderText('Prix, surface, quartier...'), 'Salut');
+      await user.click(screen.getByRole('button', { name: /envoyer le message/i }));
+
+      await screen.findByText('Réponse générale.');
+      expect(screen.queryByRole('button', { name: /^Et en /i })).not.toBeInTheDocument();
+    });
+  });
 });
