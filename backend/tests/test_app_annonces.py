@@ -2,6 +2,9 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+
+import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -89,6 +92,27 @@ class AnnoncesRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertIn("error", response.get_json())
+
+    def test_get_annonce_detail_is_enriched_with_dataset_fields(self):
+        """ORA-174 : coordonnées, €/m² moyen du quartier et cavaliers viennent
+        du dataset d'entraînement (data_loader), résolus par url."""
+        created = annonces_store.upsert_annonce(
+            titre="T2 Ainay", url="https://example.com/enriched", db_path=self.db_path,
+        )
+        dataset_row = {
+            'url': 'https://example.com/enriched',
+            'latitude': 45.75, 'longitude': 4.83,
+            'type_local': 'T2', 'quartier': 'Ainay', 'prix_m2': 19.4,
+            'dist_vice_bar': 46, 'nb_vice_bar_500m': 2,
+        }
+
+        with patch.object(app.data_loader, 'get_data', return_value=pd.DataFrame([dataset_row])):
+            response = self.client.get(f"/api/annonces/{created['id']}")
+
+        data = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data['latitude'], 45.75)
+        self.assertIn('cavaliers_detail', data)
 
     def test_log_click_returns_the_updated_view_count(self):
         created = annonces_store.upsert_annonce(url="https://example.com/click", db_path=self.db_path)

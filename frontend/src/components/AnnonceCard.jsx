@@ -3,37 +3,9 @@ import { api } from '../services/api';
 import { sanitizeListingUrl } from '../services/sanitizeUrl';
 import AnnonceDetailModal from './AnnonceDetailModal';
 import { useFavorites } from '../hooks/useFavorites';
-import { getTypeCategory } from '../services/annonceType';
+import { getTypeCategory, deriveSource } from '../services/annonceType';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
-
-// ORA-173 : `annonces` (SQLite) ne stocke pas la source du scrape — dérivée
-// du nom de domaine de `url` (les scrapers sont nommés à l'identique,
-// cf. backend/scripts/scraper_*.py), plutôt qu'une colonne à ajouter pour
-// un simple libellé d'affichage.
-const SOURCE_BY_HOST = {
-  'vizzit.fr': 'Vizzit',
-  'www.vizzit.fr': 'Vizzit',
-  'pap.fr': 'PAP',
-  'www.pap.fr': 'PAP',
-  'seloger.com': 'SeLoger',
-  'www.seloger.com': 'SeLoger',
-  'century21.fr': 'Century 21',
-  'www.century21.fr': 'Century 21',
-  'paruvendu.fr': 'ParuVendu',
-  'www.paruvendu.fr': 'ParuVendu',
-  'orpi.com': 'Orpi',
-  'www.orpi.com': 'Orpi',
-};
-
-function deriveSource(url) {
-  if (typeof url !== 'string') return null;
-  try {
-    return SOURCE_BY_HOST[new URL(url).hostname] || null;
-  } catch {
-    return null;
-  }
-}
 
 const ILLUSTRATION_BY_CATEGORY = {
   'Studio/T1': 'from-sky-900/50 to-slate-900 text-sky-400',

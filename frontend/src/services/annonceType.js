@@ -24,3 +24,31 @@ export const getTypeCategory = (titre, surface) => {
   if (s < 75) return 'T3';
   return 'Grand (T4+)';
 };
+
+// `annonces` (SQLite) ne stocke pas la source du scrape — dérivée du nom de
+// domaine de `url` (les scrapers sont nommés à l'identique, cf.
+// backend/scripts/scraper_*.py), plutôt qu'une colonne à ajouter pour un
+// simple libellé d'affichage (ORA-173, réutilisé par ORA-174).
+const SOURCE_BY_HOST = {
+  'vizzit.fr': 'Vizzit',
+  'www.vizzit.fr': 'Vizzit',
+  'pap.fr': 'PAP',
+  'www.pap.fr': 'PAP',
+  'seloger.com': 'SeLoger',
+  'www.seloger.com': 'SeLoger',
+  'century21.fr': 'Century 21',
+  'www.century21.fr': 'Century 21',
+  'paruvendu.fr': 'ParuVendu',
+  'www.paruvendu.fr': 'ParuVendu',
+  'orpi.com': 'Orpi',
+  'www.orpi.com': 'Orpi',
+};
+
+export function deriveSource(url) {
+  if (typeof url !== 'string') return null;
+  try {
+    return SOURCE_BY_HOST[new URL(url).hostname] || null;
+  } catch {
+    return null;
+  }
+}
