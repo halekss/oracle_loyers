@@ -98,6 +98,30 @@ class AnnoncesStoreTest(unittest.TestCase):
 
         self.assertEqual([item["prix"] for item in result["items"]], [800, 1000, 1200])
 
+    def test_list_annonces_sorts_by_prix_m2_ascending(self):
+        """ORA-173 : "€/m² croissant" (tri par défaut de la maquette 05) —
+        prix_m2 n'est pas une colonne stockée, dérivée à la volée en SQL."""
+        annonces_store.upsert_annonce(url="https://example.com/a", prix=1000, surface=50, db_path=self.db_path)  # 20 €/m²
+        annonces_store.upsert_annonce(url="https://example.com/b", prix=900, surface=100, db_path=self.db_path)  # 9 €/m²
+        annonces_store.upsert_annonce(url="https://example.com/c", prix=1200, surface=40, db_path=self.db_path)  # 30 €/m²
+
+        result = annonces_store.list_annonces(sort="prix_m2", order="asc", db_path=self.db_path)
+
+        self.assertEqual([item["url"] for item in result["items"]], [
+            "https://example.com/b", "https://example.com/a", "https://example.com/c",
+        ])
+
+    def test_list_annonces_sorts_by_prix_m2_does_not_crash_on_a_missing_surface(self):
+        """`NULLIF(surface, 0)` -> NULL pour une surface manquante : SQLite
+        trie NULL avant toute valeur numérique en ASC (comportement par
+        défaut du moteur, pas une règle produit spécifique ici)."""
+        annonces_store.upsert_annonce(url="https://example.com/a", prix=1000, surface=50, db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/b", prix=900, surface=None, db_path=self.db_path)
+
+        result = annonces_store.list_annonces(sort="prix_m2", order="asc", db_path=self.db_path)
+
+        self.assertEqual({item["url"] for item in result["items"]}, {"https://example.com/a", "https://example.com/b"})
+
     def test_list_annonces_sorts_by_surface_descending(self):
         annonces_store.upsert_annonce(url="https://example.com/a", surface=30, db_path=self.db_path)
         annonces_store.upsert_annonce(url="https://example.com/b", surface=50, db_path=self.db_path)

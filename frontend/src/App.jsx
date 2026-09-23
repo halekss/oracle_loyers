@@ -325,7 +325,7 @@ function App() {
                   <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
                     Annonces récentes
                   </p>
-                  <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} />
+                  <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} />
                 </div>
               </div>
             </details>
@@ -346,7 +346,7 @@ function App() {
           <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-3">
             Annonces récentes
           </p>
-          <AnnoncesList focusedQuartier={focusedQuartier} />
+          <AnnoncesList focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} />
         </div>
       </div>
 

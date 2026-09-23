@@ -3,31 +3,37 @@ import { api } from '../services/api';
 import { sanitizeListingUrl } from '../services/sanitizeUrl';
 import AnnonceDetailModal from './AnnonceDetailModal';
 import { useFavorites } from '../hooks/useFavorites';
+import { getTypeCategory } from '../services/annonceType';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
 
-// `annonces.db` ne stocke pas de colonne `type_local` séparée, mais
-// `build_titre` (clean_immo.py) préfixe déjà le titre avec elle
-// ("T3 — Monplaisir / Bachut") : on la lit là en priorité, pour rester
-// cohérent avec le type réellement affiché dans le titre de la carte (basé
-// sur le texte de l'annonce, plus fiable que la seule surface). Fallback sur
-// les seuils de surface de `determine_type_local` si le titre ne la contient
-// pas (annonce sans quartier, titre de repli sur la description...).
-const KNOWN_CATEGORIES = ['Studio/T1', 'T2', 'T3', 'Grand (T4+)'];
-
-const getTypeCategory = (titre, surface) => {
-  if (typeof titre === 'string') {
-    const prefix = titre.split(' — ')[0].trim();
-    if (KNOWN_CATEGORIES.includes(prefix)) return prefix;
-  }
-
-  const s = Number(surface);
-  if (!Number.isFinite(s)) return null;
-  if (s < 35) return 'Studio/T1';
-  if (s < 55) return 'T2';
-  if (s < 75) return 'T3';
-  return 'Grand (T4+)';
+// ORA-173 : `annonces` (SQLite) ne stocke pas la source du scrape — dérivée
+// du nom de domaine de `url` (les scrapers sont nommés à l'identique,
+// cf. backend/scripts/scraper_*.py), plutôt qu'une colonne à ajouter pour
+// un simple libellé d'affichage.
+const SOURCE_BY_HOST = {
+  'vizzit.fr': 'Vizzit',
+  'www.vizzit.fr': 'Vizzit',
+  'pap.fr': 'PAP',
+  'www.pap.fr': 'PAP',
+  'seloger.com': 'SeLoger',
+  'www.seloger.com': 'SeLoger',
+  'century21.fr': 'Century 21',
+  'www.century21.fr': 'Century 21',
+  'paruvendu.fr': 'ParuVendu',
+  'www.paruvendu.fr': 'ParuVendu',
+  'orpi.com': 'Orpi',
+  'www.orpi.com': 'Orpi',
 };
+
+function deriveSource(url) {
+  if (typeof url !== 'string') return null;
+  try {
+    return SOURCE_BY_HOST[new URL(url).hostname] || null;
+  } catch {
+    return null;
+  }
+}
 
 const ILLUSTRATION_BY_CATEGORY = {
   'Studio/T1': 'from-sky-900/50 to-slate-900 text-sky-400',
@@ -69,7 +75,14 @@ function AnnonceIllustration({ titre, surface }) {
   );
 }
 
-export default function AnnonceCard({ annonce }) {
+// `referencePrixM2` (optionnel, ORA-173) : €/m² moyen du quartier scanné
+// (App.jsx, `result.quartierPrixM2` — ORA-171), pour le badge d'écart de la
+// maquette 05 ("−18 %"). Sans scan actif, aucune référence : pas de badge
+// plutôt qu'une comparaison inventée. `referenceType` (le type_local pour
+// lequel cette référence a été calculée, ex. "T2") : le badge ne s'affiche
+// que si l'annonce est du même type — comparer un T4+ à une référence T2
+// produirait un écart trompeur (types à des gammes de prix différentes).
+export default function AnnonceCard({ annonce, referencePrixM2, referenceType }) {
   const [detailOpen, setDetailOpen] = useState(false);
   // ORA-132 : favoris "Mes favoris" — persistance localStorage uniquement
   // (décision de cadrage, cf. useFavorites.js), pas de compte utilisateur.
@@ -79,6 +92,15 @@ export default function AnnonceCard({ annonce }) {
 
   const { id, titre, prix, surface, ville, quartier, url } = annonce;
   const favorite = isFavorite(id);
+  const source = deriveSource(url);
+
+  const prixM2 = Number.isFinite(prix) && Number.isFinite(surface) && surface > 0 ? prix / surface : null;
+  const sameTypeAsReference =
+    !referenceType || referenceType === 'Tout' || getTypeCategory(titre, surface) === referenceType;
+  const ecart =
+    prixM2 != null && Number.isFinite(referencePrixM2) && referencePrixM2 > 0 && sameTypeAsReference
+      ? Math.round(((prixM2 - referencePrixM2) / referencePrixM2) * 100)
+      : null;
 
   const handleToggleFavorite = (e) => {
     e.stopPropagation();
@@ -142,12 +164,35 @@ export default function AnnonceCard({ annonce }) {
           </div>
         </div>
 
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-xl font-black text-white">{formatPrice(prix)} €</span>
-          {surface != null && <span className="text-xs text-slate-500">{surface} m²</span>}
+        <div className="mt-2 flex items-baseline justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-xl font-black text-white">{formatPrice(prix)} €</span>
+            {surface != null && (
+              <span className="text-xs text-slate-500">
+                {surface} m²{prixM2 != null && ` · ${prixM2.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} €/m²`}
+              </span>
+            )}
+          </div>
+          {ecart != null && (
+            <span
+              className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                ecart > 0 ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'
+              }`}
+              title="Écart vs €/m² moyen du quartier scanné"
+            >
+              {ecart > 0 ? '+' : ''}{ecart} %
+            </span>
+          )}
         </div>
 
-        {ville && <p className="mt-1 text-[10px] text-slate-500">{ville}</p>}
+        <div className="mt-1 flex items-center gap-1.5">
+          {ville && <p className="text-[10px] text-slate-500">{ville}</p>}
+          {source && (
+            <span className="text-[9px] uppercase font-bold tracking-wide px-1.5 py-0.5 rounded bg-ink-800 text-slate-400">
+              {source}
+            </span>
+          )}
+        </div>
 
         <div className="mt-2 flex items-center justify-between gap-2">
           <p className="text-[10px] uppercase tracking-widest font-bold text-purple-400 group-hover:text-purple-300">

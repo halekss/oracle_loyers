@@ -2,10 +2,18 @@ import { useState, useEffect } from 'react';
 import AnnonceCard from './AnnonceCard';
 import { api, describeApiError } from '../services/api';
 import { useFavorites } from '../hooks/useFavorites';
+import { getTypeCategory } from '../services/annonceType';
 
 // ORA-127 : options de tri exposées à l'utilisateur (label FR + clé/ordre
 // envoyés au backend, qui trie côté SQL avant de paginer — cf. api.getAnnonces).
+// ORA-173 (maquette 05) : "€/m² croissant" est le tri par défaut (premier de
+// la liste, cf. `sortValue` initial ci-dessous) ; "Meilleures affaires" s'appuie
+// sur le même tri serveur (prix_m2 asc — pas de médiane par annonce stockée
+// en base) puis, quand un quartier est scanné (`referencePrixM2` fourni),
+// réordonne la page reçue par écart croissant au lieu du simple €/m².
 const SORT_OPTIONS = [
+  { value: 'prix_m2-asc', label: '€/m² croissant', sort: 'prix_m2', order: 'asc' },
+  { value: 'meilleures-affaires', label: 'Meilleures affaires', sort: 'prix_m2', order: 'asc' },
   { value: '', label: 'Plus récentes', sort: undefined, order: undefined },
   { value: 'prix-asc', label: 'Prix croissant', sort: 'prix', order: 'asc' },
   { value: 'prix-desc', label: 'Prix décroissant', sort: 'prix', order: 'desc' },
@@ -25,14 +33,20 @@ const SORT_OPTIONS = [
 // quartier et sauter directement sur ses annonces. `token` doit changer à
 // chaque nouvelle demande (même quartier scanné deux fois de suite compris)
 // pour redéclencher le saut.
-export default function AnnoncesList({ compact = false, onItemsChange, focusedQuartier }) {
+// `referencePrixM2`/`referenceType` (optionnels, ORA-173) : €/m² moyen et
+// type_local du quartier scanné (App.jsx, `result.quartierPrixM2`/`result.type`)
+// — alimentent le badge d'écart de chaque AnnonceCard et le tri "Meilleures
+// affaires" ci-dessous. `referenceType` évite de comparer un T4+ à une
+// référence calculée pour des T2 (gammes de prix différentes).
+export default function AnnoncesList({ compact = false, onItemsChange, focusedQuartier, referencePrixM2, referenceType }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [quartierFilter, setQuartierFilter] = useState('');
-  const [sortValue, setSortValue] = useState('');
+  const [sortValue, setSortValue] = useState('prix_m2-asc');
   // ORA-115 : options dérivées de /api/listings (même liste de quartiers
   // canoniques que celle écrite dans annonces.db par clean_immo.py) —
   // annonces.db n'a pas d'endpoint dédié pour lister les quartiers connus.
@@ -40,7 +54,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
   // ORA-132 : filtre additif "Mes favoris" — n'affecte ni le tri, ni la
   // pagination/le fetch (filtre client-side sur la page déjà chargée).
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const { isFavorite } = useFavorites();
+  const { isFavorite, favoriteIds } = useFavorites();
 
   const perPage = compact ? 4 : 12;
   const activeSort = SORT_OPTIONS.find((opt) => opt.value === sortValue) || SORT_OPTIONS[0];
@@ -88,6 +102,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
         });
         if (cancelled) return;
         setItems(data.items || []);
+        setTotal(data.total || 0);
         setTotalPages(data.total_pages || 0);
         onItemsChange?.(data.items || []);
       } catch (err) {
@@ -169,7 +184,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
             : 'text-slate-500 border-slate-700 hover:text-slate-300'
         }`}
       >
-        Toutes
+        Toutes · {total}
       </button>
       <button
         type="button"
@@ -182,7 +197,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
             : 'text-slate-500 border-slate-700 hover:text-slate-300'
         }`}
       >
-        ★ Mes favoris
+        ★ Mes favoris · {favoriteIds.size}
       </button>
     </div>
   );
@@ -223,7 +238,27 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
     );
   }
 
-  const displayedItems = showFavoritesOnly ? items.filter((annonce) => isFavorite(annonce.id)) : items;
+  const favoriteFiltered = showFavoritesOnly ? items.filter((annonce) => isFavorite(annonce.id)) : items;
+
+  // ORA-173 : "Meilleures affaires" — le tri serveur (prix_m2 asc) est déjà
+  // une bonne approximation ; avec une référence quartier disponible (scan en
+  // cours), on affine par écart croissant plutôt que par €/m² brut, pour un
+  // classement qui tient compte du niveau de prix propre au quartier. Ne
+  // classe que les annonces du même type que la référence (sinon un T4+ moins
+  // cher au m² qu'un T2 remonterait en tête pour une raison trompeuse) ; les
+  // autres types restent en fin de liste, à leur ordre de tri serveur.
+  const displayedItems =
+    sortValue === 'meilleures-affaires' && Number.isFinite(referencePrixM2) && referencePrixM2 > 0
+      ? [...favoriteFiltered].sort((a, b) => {
+          const ecart = (item) => {
+            if (referenceType && referenceType !== 'Tout' && getTypeCategory(item.titre, item.surface) !== referenceType) return Infinity;
+            return Number.isFinite(item.prix) && Number.isFinite(item.surface) && item.surface > 0
+              ? (item.prix / item.surface - referencePrixM2) / referencePrixM2
+              : Infinity;
+          };
+          return ecart(a) - ecart(b);
+        })
+      : favoriteFiltered;
 
   return (
     <div className={compact ? 'max-h-72 overflow-y-auto pr-1' : ''}>
@@ -237,7 +272,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
       ) : (
         <div className="grid grid-cols-2 gap-3">
           {displayedItems.map((annonce) => (
-            <AnnonceCard key={annonce.id} annonce={annonce} />
+            <AnnonceCard key={annonce.id} annonce={annonce} referencePrixM2={referencePrixM2} referenceType={referenceType} />
           ))}
         </div>
       )}

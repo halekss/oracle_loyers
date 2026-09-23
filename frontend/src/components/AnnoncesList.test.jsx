@@ -294,9 +294,70 @@ describe('AnnoncesList', () => {
       await user.click(screen.getByRole('tab', { name: /mes favoris/i }));
       expect(screen.getByText(/aucun favori pour le moment/i)).toBeInTheDocument();
 
-      await user.click(screen.getByRole('tab', { name: /^toutes$/i }));
+      await user.click(screen.getByRole('tab', { name: /^toutes/i }));
       expect(screen.getByText('Annonce 1')).toBeInTheDocument();
       expect(screen.getByText('Annonce 2')).toBeInTheDocument();
+    });
+  });
+
+  describe('tri "€/m² croissant" par défaut, compteurs et "Meilleures affaires" (ORA-173)', () => {
+    it('sorts by prix_m2 ascending by default (maquette 05), before any user interaction', async () => {
+      api.getAnnonces.mockResolvedValue({ items: [makeAnnonce(1)], page: 1, total: 1, total_pages: 1 });
+
+      render(<AnnoncesList />);
+
+      await waitFor(() => {
+        expect(api.getAnnonces).toHaveBeenCalledWith(
+          expect.objectContaining({ sort: 'prix_m2', order: 'asc' }),
+        );
+      });
+    });
+
+    it('shows the real total and favorites count on the tabs, not a page-local count', async () => {
+      api.getAnnonces.mockResolvedValue({
+        items: [makeAnnonce(1), makeAnnonce(2)],
+        page: 1,
+        total: 37,
+        total_pages: 19,
+      });
+
+      render(<AnnoncesList />);
+
+      expect(await screen.findByRole('tab', { name: /toutes · 37/i })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /mes favoris · 0/i })).toBeInTheDocument();
+    });
+
+    it('reorders the fetched page by écart to referencePrixM2 when "Meilleures affaires" is selected', async () => {
+      // écart : #1 40m²/900€ -> 22,5€/m² (+12,5%) ; #2 40m²/760€ -> 19€/m² (-5%)
+      api.getAnnonces.mockResolvedValue({
+        items: [{ ...makeAnnonce(1), prix: 900 }, { ...makeAnnonce(2), prix: 760 }],
+        page: 1,
+        total: 2,
+        total_pages: 1,
+      });
+      const user = userEvent.setup();
+
+      render(<AnnoncesList referencePrixM2={20} />);
+      await waitFor(() => expect(screen.getByText('Annonce 1')).toBeInTheDocument());
+
+      await user.selectOptions(screen.getByLabelText(/trier/i), 'meilleures-affaires');
+
+      const titles = screen.getAllByText(/^Annonce \d$/).map((el) => el.textContent);
+      expect(titles).toEqual(['Annonce 2', 'Annonce 1']);
+    });
+
+    it('passes referencePrixM2 through to each AnnonceCard for its écart badge', async () => {
+      api.getAnnonces.mockResolvedValue({
+        items: [{ ...makeAnnonce(1), prix: 900, surface: 45 }],
+        page: 1,
+        total: 1,
+        total_pages: 1,
+      });
+
+      render(<AnnoncesList referencePrixM2={25} />);
+
+      // 900 / 45 = 20 €/m² vs référence 25 -> -20 %
+      expect(await screen.findByText('-20 %')).toBeInTheDocument();
     });
   });
 });
