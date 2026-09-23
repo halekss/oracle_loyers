@@ -11,6 +11,7 @@ from logging_config import configure_logging, init_sentry
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence, is_physically_implausible_price
+from services.annonce_detail import enrich_annonce_detail
 from services.cavaliers_factors import detail_cavaliers, summarize_cavaliers
 from services.price_history import compute_price_history
 from services.quartier_search import resolve_quartier_filter
@@ -414,7 +415,10 @@ def get_annonce_detail(annonce_id):
     annonce = annonces_store.get_annonce_by_id(annonce_id, db_path=ANNONCES_DB_PATH)
     if annonce is None:
         return jsonify({"error": "Annonce introuvable"}), 404
-    return jsonify(annonce)
+    # ORA-174 : coordonnées, type_local, €/m² moyen du quartier et détail des
+    # 4 Cavaliers — dérivés du dataset d'entraînement (non stockés dans
+    # annonces.db), résolus par url comme generate_map.py (ORA-107).
+    return jsonify(enrich_annonce_detail(annonce, data_loader.get_data()))
 
 @app.route('/api/annonces/<int:annonce_id>/click', methods=['POST'])
 def log_annonce_click(annonce_id):
