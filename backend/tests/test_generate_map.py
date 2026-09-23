@@ -12,6 +12,36 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from scripts import generate_map
 
 
+class ComputeLayerCountsTest(unittest.TestCase):
+    def test_counts_poi_by_category_substring_case_insensitive(self):
+        """ORA-172 : même logique de correspondance que le rendu des
+        marqueurs (mapping_simple) — "Vice - Bar" compte pour Vice."""
+        df_poi = pd.DataFrame({'type': ['Vice - Bar', 'vice - kebab', 'Gentrification - Yoga']})
+        df_immo = pd.DataFrame({'type_local': []})
+
+        counts = generate_map.compute_layer_counts(df_poi, df_immo)
+
+        self.assertEqual(counts['Vice'], 2)
+        self.assertEqual(counts['Gentrification'], 1)
+        self.assertEqual(counts['Nuisance'], 0)
+        self.assertEqual(counts['Superstition'], 0)
+
+    def test_counts_immo_by_exact_type_local_bucket(self):
+        df_poi = pd.DataFrame({'type': []})
+        df_immo = pd.DataFrame({'type_local': ['Studio/T1', 'T2', 'T2', 'T3', 'Grand (T4+)', 'Grand (T4+)']})
+
+        counts = generate_map.compute_layer_counts(df_poi, df_immo)
+
+        self.assertEqual(counts['Studio'], 1)
+        self.assertEqual(counts['T2'], 2)
+        self.assertEqual(counts['T3'], 1)
+        self.assertEqual(counts['T4'], 2)
+
+    def test_returns_an_empty_dict_when_neither_dataframe_has_the_expected_column(self):
+        counts = generate_map.compute_layer_counts(pd.DataFrame(), pd.DataFrame())
+        self.assertEqual(counts, {})
+
+
 class WriteMapMetadataTest(unittest.TestCase):
     """Vérifie le contrôle de fraîcheur de la carte statique (ORA-54) :
     `write_map_metadata` doit écrire un JSON avec un timestamp ISO valide,
@@ -211,7 +241,7 @@ class LoadLayersConfigTest(unittest.TestCase):
         keys = {layer["key"] for layer in layers}
         self.assertEqual(
             keys,
-            {"Studio", "T2", "T3", "T4", "Metro", "Vice", "Gentrification", "Nuisance", "Superstition", "Quartiers"},
+            {"Studio", "T2", "T3", "T4", "Metro", "Funicular", "Vice", "Gentrification", "Nuisance", "Superstition", "Quartiers"},
         )
 
     def test_each_layer_has_the_fields_required_by_both_sides(self):

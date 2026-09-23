@@ -40,6 +40,14 @@
     "uiColor": "#818181"
   },
   {
+    "key": "Funicular",
+    "name": "Funiculaires",
+    "label": "Funiculaires",
+    "group": "transports",
+    "defaultVisible": true,
+    "uiColor": "#888888"
+  },
+  {
     "key": "Vice",
     "name": "Vice",
     "label": "Vice",

@@ -11,7 +11,7 @@ from logging_config import configure_logging, init_sentry
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence, is_physically_implausible_price
-from services.cavaliers_factors import summarize_cavaliers
+from services.cavaliers_factors import detail_cavaliers, summarize_cavaliers
 from services.price_history import compute_price_history
 from services.quartier_search import resolve_quartier_filter
 from services.pdf_report import render_estimation_pdf
@@ -598,6 +598,9 @@ def get_quartier_stats():
             "prix_m2_moyen": round(float(mean_price_m2), 0),
             "center": center,
             "facteurs": summarize_cavaliers(filtered_df),
+            # ORA-172 : détail complet (tous les sous-types, pas juste le plus
+            # présent) pour le panneau "Les 4 Cavaliers · rayon 500 m".
+            "cavaliers_detail": detail_cavaliers(filtered_df),
             "comparables": comparables,
         })
 

@@ -7,6 +7,7 @@ import AnnoncesList from './components/AnnoncesList';
 import ErrorBoundary from './components/ErrorBoundary';
 import Topbar from './components/Topbar';
 import HomeOverview from './components/HomeOverview';
+import CavaliersDetail from './components/CavaliersDetail';
 import { api, describeApiError } from './services/api';
 import { computeBoundsForQuartiers } from './services/mapBounds';
 import { computeHomeStats } from './services/homeStats';
@@ -86,7 +87,6 @@ function App() {
   const [health, setHealth] = useState(null);
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
-  const facteurs = result?.facteurs || [];
   // ORA-170 : agrégats "Le marché en un coup d'œil", affichés tant qu'aucun
   // quartier n'a été scanné (état par défaut de la colonne Oracle).
   const homeStats = useMemo(() => computeHomeStats(listings, ville), [listings, ville]);
@@ -189,6 +189,9 @@ function App() {
         type: data.type_filtre,
         confiance,
         facteurs: data.facteurs || [],
+        // ORA-172 : détail complet (tous les sous-types) pour le panneau
+        // "Les 4 Cavaliers", en plus des phrases résumées ci-dessus (PDF).
+        cavaliersDetail: data.cavaliers_detail || [],
         comparables: data.comparables || [],
         // ORA-171 : "Estimation personnalisée" (maquette 03) ne s'affiche que
         // lorsqu'une vraie prédiction modèle a eu lieu (confiance non nulle) ;
@@ -307,22 +310,8 @@ function App() {
               </summary>
 
               <div className="p-4 md:p-5 pt-3 space-y-4">
-                {/* Les 4 Cavaliers */}
-                {facteurs.length > 0 && (
-                  <div>
-                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-1.5">
-                      Les 4 Cavaliers
-                    </p>
-                    <div className="space-y-1.5">
-                      {facteurs.map((f) => (
-                        <div key={f.categorie} className="text-[11px] text-slate-400 bg-slate-900/50 rounded-lg px-2 py-1.5 border border-slate-800">
-                          <span className="text-purple-400 font-bold">{f.categorie} — </span>
-                          {f.phrase}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Les 4 Cavaliers (ORA-172, maquette 04) */}
+                <CavaliersDetail detail={result?.cavaliersDetail} quartier={result?.quartier} />
 
                 {/* Historique du prix moyen/m² (ORA-72) */}
                 <PriceHistory

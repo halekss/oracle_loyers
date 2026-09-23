@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../services/api', async () => {
   const actual = await vi.importActual('../services/api');
@@ -282,5 +282,50 @@ describe('MapComponent', () => {
     }));
 
     expect(api.logAnnonceClick).not.toHaveBeenCalled();
+  });
+
+  describe('panneau "Les 4 Cavaliers" et compteurs (ORA-172)', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('renames the old generic "Contexte" group to "Les 4 Cavaliers" (maquette 04), always expanded', () => {
+      render(<MapComponent center={null} />);
+
+      expect(screen.getByText('Les 4 Cavaliers')).toBeInTheDocument();
+      expect(screen.queryByText('Contexte')).not.toBeInTheDocument();
+      expect(screen.getByText('Vice')).toBeInTheDocument();
+    });
+
+    it('fetches layer counts from the ville-scoped static map metadata', () => {
+      global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ layer_counts: {} }) });
+
+      render(<MapComponent center={null} ville="lille" />);
+
+      expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/data\/map_metadata_lille\.json/));
+    });
+
+    it('shows the count next to a layer once map_metadata layer_counts resolves', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ layer_counts: { Vice: 526, T2: 300 } }),
+      });
+
+      render(<MapComponent center={null} />);
+
+      expect(await screen.findByText('526')).toBeInTheDocument();
+      expect(screen.getByText('300')).toBeInTheDocument();
+    });
+
+    it('does not throw and shows no count when the metadata fetch fails', async () => {
+      global.fetch = vi.fn().mockRejectedValue(new Error('network down'));
+
+      render(<MapComponent center={null} />);
+
+      await new Promise((r) => setTimeout(r, 0));
+      expect(screen.queryByText('526')).not.toBeInTheDocument();
+    });
   });
 });
