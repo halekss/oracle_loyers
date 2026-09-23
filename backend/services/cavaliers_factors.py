@@ -120,3 +120,67 @@ def summarize_cavaliers(df_subset):
         factors.append({"categorie": CATEGORY_LABELS[category], "phrase": phrase})
 
     return factors
+
+
+def detail_cavaliers(df_subset):
+    """Détail complet des 4 Cavaliers pour un sous-ensemble d'annonces (ORA-172,
+    panneau "Les 4 Cavaliers · rayon 500 m") : contrairement à
+    `summarize_cavaliers` (une phrase, le POI le plus présent), renvoie TOUS
+    les sous-types avec leur compte (densité moyenne à 500m, arrondie) et leur
+    distance minimale observée dans le sous-ensemble — pour lister "Bar 12 ·
+    dès 46 m", "Tabac 3 · dès 158 m", etc.
+
+    Renvoie une liste de dicts `{"categorie", "total", "items": [{"poi",
+    "count", "dist_m"}, ...], "empty_message"}`, `items` triés par `count`
+    décroissant, `empty_message` renseigné (sinon None) quand aucun sous-type
+    n'atteint PRESENCE_THRESHOLD — nommant le POI le plus proche tous types
+    confondus, à défaut de densité notable (ex. "Rien dans le rayon. Pompes
+    funèbres les plus proches à 573 m.").
+    """
+    poi_types_by_category = list_poi_types(df_subset)
+    result = []
+
+    for category in CATEGORY_ORDER:
+        poi_types = poi_types_by_category.get(category)
+        if not poi_types:
+            continue
+
+        items = []
+        closest = None  # (poi, dist_m) le plus proche tous types confondus
+        for poi in poi_types:
+            nb_col = f"nb_{category}_{poi}_500m"
+            dist_col = f"dist_{category}_{poi}"
+            n_mean = df_subset[nb_col].mean() if nb_col in df_subset.columns else 0
+            if n_mean != n_mean:  # NaN
+                n_mean = 0
+
+            dist_min = df_subset[dist_col].min() if dist_col in df_subset.columns else None
+            dist_m = round(float(dist_min)) if dist_min is not None and dist_min == dist_min else None
+            if dist_m is not None and (closest is None or dist_m < closest[1]):
+                closest = (poi, dist_m)
+
+            n_rounded = round(float(n_mean))
+            if n_rounded >= PRESENCE_THRESHOLD:
+                items.append({
+                    "poi": poi.replace('_', ' ').capitalize(),
+                    "count": n_rounded,
+                    "dist_m": dist_m,
+                })
+
+        items.sort(key=lambda item: item["count"], reverse=True)
+
+        empty_message = None
+        if not items:
+            if closest is not None:
+                empty_message = f"Rien dans le rayon. {closest[0].replace('_', ' ').capitalize()} les plus proches à {closest[1]} m."
+            else:
+                empty_message = "Rien dans le rayon."
+
+        result.append({
+            "categorie": CATEGORY_LABELS[category],
+            "total": sum(item["count"] for item in items),
+            "items": items,
+            "empty_message": empty_message,
+        })
+
+    return result

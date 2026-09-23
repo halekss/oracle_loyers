@@ -25,19 +25,24 @@ const LAYER_MAPPING = Object.fromEntries(
 
 const layersByGroup = (group) => mapLayersConfig.filter((layer) => layer.group === group);
 
-const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
-  <div 
-    className={`flex items-center justify-between mb-2 group select-none transition-opacity duration-300 ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} 
+const ToggleItem = ({ label, color, isActive, onToggle, disabled, count }) => (
+  <div
+    className={`flex items-center justify-between mb-2 group select-none transition-opacity duration-300 ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
     onClick={!disabled ? onToggle : undefined}
   >
     <div className="flex items-center gap-2">
-      <div 
+      <div
         className={`w-3 h-3 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-30 grayscale'}`}
         style={{ backgroundColor: color, boxShadow: isActive && !disabled ? `0 0 10px ${color}` : 'none' }}
       ></div>
       <span className={`text-xs font-medium transition-colors ${isActive ? 'text-slate-200' : 'text-slate-500'}`}>
         {label}
       </span>
+      {/* ORA-172 : compteur calculé depuis les données à la génération de la
+          carte (map_metadata_<ville>.json), jamais codé en dur. */}
+      {count != null && (
+        <span className="text-[10px] text-slate-500 font-mono">{count}</span>
+      )}
     </div>
     <div className={`w-9 h-5 flex items-center bg-slate-800 rounded-full p-1 duration-300 ease-in-out ${isActive ? 'bg-slate-700' : 'bg-slate-900 border border-slate-800'}`}>
       <div 
@@ -58,6 +63,25 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
   // MapComponent soit démonté/remonté.
   useEffect(() => {
     setMapUrl(`/data/map_pings_${ville}_calques.html?t=${Date.now()}`);
+  }, [ville]);
+
+  // ORA-172 : compteurs du panneau de calques (Vice 526, T2 300...), écrits
+  // par generate_map.py dans map_metadata_<ville>.json à chaque génération —
+  // fichier statique servi par Vite/nginx, pas un appel /api/.
+  const [layerCounts, setLayerCounts] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/data/map_metadata_${ville}.json?t=${Date.now()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled) setLayerCounts(data?.layer_counts || {});
+      })
+      .catch(() => {
+        if (!cancelled) setLayerCounts({});
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [ville]);
 
   // ORA-116 : sur mobile (onglet "Carte"), le panneau de calques et le chat
@@ -199,7 +223,6 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
           </div>
 
           <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 font-bold">Transports</h3>
-          {/* BOUTON UNIQUE METRO */}
           {layersByGroup('transports').map((layer) => (
             <ToggleItem
               key={layer.key}
@@ -210,23 +233,21 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
             />
           ))}
 
-          <details className="mt-4 group" open>
-            <summary className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-slate-300 transition-colors">
-              <span>Contexte</span>
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-180">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </summary>
-            {layersByGroup('contexte').map((layer) => (
-              <ToggleItem
-                key={layer.key}
-                label={layer.label}
-                color={layer.uiColor}
-                isActive={layers[layer.key]}
-                onToggle={() => toggleLayer(layer.key)}
-              />
-            ))}
-          </details>
+          {/* ORA-172 : "Les 4 Cavaliers" (maquette 04) — toujours dépliée,
+              contrairement à l'ancien groupe générique "Contexte" repliable
+              (le calque "Quartiers", pas un cavalier, y reste rattaché faute
+              de groupe dédié dans mapLayers.config.json). */}
+          <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Les 4 Cavaliers</h3>
+          {layersByGroup('contexte').map((layer) => (
+            <ToggleItem
+              key={layer.key}
+              label={layer.label}
+              color={layer.uiColor}
+              isActive={layers[layer.key]}
+              onToggle={() => toggleLayer(layer.key)}
+              count={layerCounts[layer.key]}
+            />
+          ))}
 
           <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Offres Immobilières</h3>
           {layersByGroup('immobilier').map((layer) => (
@@ -236,6 +257,7 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
               color={layer.uiColor}
               isActive={layers[layer.key]}
               onToggle={() => toggleLayer(layer.key)}
+              count={layerCounts[layer.key]}
             />
           ))}
         </div>

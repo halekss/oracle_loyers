@@ -31,6 +31,16 @@ class QuartierStatsRouteTest(unittest.TestCase):
             self.assertIn("categorie", facteur)
             self.assertIn("phrase", facteur)
 
+        # ORA-172 : détail complet (tous les sous-types) pour le panneau
+        # "Les 4 Cavaliers · rayon 500 m", en plus des phrases résumées ci-dessus.
+        self.assertIn("cavaliers_detail", data)
+        self.assertEqual(len(data["cavaliers_detail"]), 4)
+        for detail in data["cavaliers_detail"]:
+            self.assertIn("categorie", detail)
+            self.assertIn("total", detail)
+            self.assertIn("items", detail)
+            self.assertIn("empty_message", detail)
+
     def test_route_returns_up_to_3_comparables(self):
         """ORA-122/ORA-128 : quelques biens comparables réels (échantillon),
         pour le rapport PDF et l'explication de la confiance côté frontend."""

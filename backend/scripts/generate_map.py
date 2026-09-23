@@ -221,6 +221,31 @@ def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_ur
     """
 
 
+def compute_layer_counts(df_poi, df_immo):
+    """ORA-172 : compteurs du panneau "Contrôle des calques" (maquette 04,
+    ex. "Vice 526", "T2 300") — calculés depuis les données à chaque
+    génération de carte, jamais codés en dur côté React.
+
+    `df_poi` : POI cavaliers (colonne `type`, ex. "Vice - Bar" — un POI
+    compte pour sa catégorie dès que le nom de la catégorie apparaît dans le
+    type, insensible à la casse, même logique que le rendu des marqueurs
+    ci-dessus). `df_immo` : annonces (colonne `type_local`, valeurs exactes
+    "Studio/T1"/"T2"/"T3"/"Grand (T4+)").
+    """
+    counts = {}
+    if 'type' in df_poi.columns:
+        raw_types = df_poi['type'].astype(str).str.lower()
+        for key in ('vice', 'gentrification', 'nuisance', 'superstition'):
+            counts[key.capitalize()] = int(raw_types.str.contains(key, na=False).sum())
+    if 'type_local' in df_immo.columns:
+        counts_by_type = df_immo['type_local'].value_counts()
+        counts['Studio'] = int(counts_by_type.get('Studio/T1', 0))
+        counts['T2'] = int(counts_by_type.get('T2', 0))
+        counts['T3'] = int(counts_by_type.get('T3', 0))
+        counts['T4'] = int(counts_by_type.get('Grand (T4+)', 0))
+    return counts
+
+
 def write_map_metadata(metadata_path, output_html=None, extra=None):
     """Écrit un petit fichier JSON de métadonnées à côté de la carte générée,
     pour exposer un contrôle de fraîcheur (date de dernière génération) visible
@@ -378,6 +403,10 @@ def main(ville='lyon'):
 
     # Groupe Métro Unifié
     fg_metro = folium.FeatureGroup(name=layer_by_key['Metro']['name'], show=layer_by_key['Metro']['defaultVisible'])
+    # ORA-172 : funiculaires (lignes F1/F2, Lyon) séparés du métro dans le
+    # panneau de calques (maquette 04, groupe "Transports") — même source
+    # GeoJSON, juste un FeatureGroup distinct selon le préfixe de ligne.
+    fg_funicular = folium.FeatureGroup(name=layer_by_key['Funicular']['name'], show=layer_by_key['Funicular']['defaultVisible']) if 'Funicular' in layer_by_key else None
 
     fg_vice = folium.FeatureGroup(name=layer_by_key['Vice']['name'], show=layer_by_key['Vice']['defaultVisible'])
     fg_gentri = folium.FeatureGroup(name=layer_by_key['Gentrification']['name'], show=layer_by_key['Gentrification']['defaultVisible'])
@@ -477,24 +506,30 @@ def main(ville='lyon'):
                     </div>
                     """
 
+                    # ORA-172 : une ligne "F..." (F1/F2) est un funiculaire, pas
+                    # le métro — groupe distinct si le calque existe (sinon repli
+                    # sur fg_metro, ex. config plus ancienne sans "Funicular").
+                    target_group = fg_funicular if ligne.startswith('F') and fg_funicular is not None else fg_metro
+
                     folium.Marker(
                         [lat, lon],
                         icon=folium.DivIcon(html=icon_html, icon_size=(24, 24), icon_anchor=(12, 12)),
                         popup=folium.Popup(popup_txt, max_width=200, className='oracle-popup')
-                    ).add_to(fg_metro)
+                    ).add_to(target_group)
                     count_stations += 1
 
             # 2. DESSINER LES LIGNES EN RELIANT LES POINTS
             # Si le fichier JSON est bien ordonné, cela reliera les stations dans l'ordre
             for ligne, coords in stations_by_line.items():
                 if len(coords) > 1:
+                    target_group = fg_funicular if ligne.startswith('F') and fg_funicular is not None else fg_metro
                     folium.PolyLine(
                         locations=coords,
                         color=METRO_COLORS.get(ligne, '#888888'),
                         weight=4,
                         opacity=0.6,
                         smooth_factor=1.5 # Adoucit un peu les angles
-                    ).add_to(fg_metro)
+                    ).add_to(target_group)
 
             print(f"🚇 Métro chargé : {len(stations_by_line)} lignes tracées, {count_stations} stations.")
 
@@ -558,6 +593,8 @@ def main(ville='lyon'):
     fg_t3.add_to(m)
     fg_t4.add_to(m)
     fg_metro.add_to(m) # Groupe Unique
+    if fg_funicular is not None:
+        fg_funicular.add_to(m)
     fg_vice.add_to(m)
     fg_gentri.add_to(m)
     fg_nuisance.add_to(m)
@@ -601,11 +638,15 @@ def main(ville='lyon'):
 
     print(f"🎉 TERMINÉ : {paths['output_html']} (Métro : Lignes reliées automatiquement)")
 
-    # --- 10. CONTRÔLE DE FRAÎCHEUR (ORA-54) ---
+    # --- 10. CONTRÔLE DE FRAÎCHEUR (ORA-54) + COMPTEURS DE CALQUES (ORA-172) ---
     # Écrit map_metadata_<ville>.json à côté de la carte, avec la date de
     # génération, pour détecter facilement une carte périmée si le pipeline
-    # de données change.
-    write_map_metadata(paths['metadata_json'], output_html=paths['output_html'])
+    # de données change. `layer_counts` (ORA-172) alimente les compteurs du
+    # panneau "Contrôle des calques" (MapComponent.jsx) — calculés depuis les
+    # données à chaque génération plutôt que codés en dur côté React.
+    layer_counts = compute_layer_counts(df_poi, df_immo)
+
+    write_map_metadata(paths['metadata_json'], output_html=paths['output_html'], extra={'layer_counts': layer_counts})
 
 
 if __name__ == "__main__":
