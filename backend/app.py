@@ -316,7 +316,7 @@ def get_listings():
     # ville/code_postal/prix_m2 (ORA-170) alimentent l'agrégation "Le marché
     # en un coup d'œil" (médianes par arrondissement, quartiers extrêmes).
     columns = ['latitude', 'longitude', 'prix', 'type_local', 'quartier']
-    for extra in ('ville', 'code_postal', 'prix_m2'):
+    for extra in ('ville', 'code_postal', 'prix_m2', 'date_dernier_scan'):
         if extra in df.columns:
             columns.append(extra)
     data = df[columns].fillna('').to_dict(orient='records')

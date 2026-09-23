@@ -10,6 +10,7 @@ import HomeOverview from './components/HomeOverview';
 import { api, describeApiError } from './services/api';
 import { computeBoundsForQuartiers } from './services/mapBounds';
 import { computeHomeStats } from './services/homeStats';
+import { computeLatestDataDate } from './services/latestDataDate';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
 // l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
@@ -89,6 +90,8 @@ function App() {
   // ORA-170 : agrégats "Le marché en un coup d'œil", affichés tant qu'aucun
   // quartier n'a été scanné (état par défaut de la colonne Oracle).
   const homeStats = useMemo(() => computeHomeStats(listings, ville), [listings, ville]);
+  // ORA-171 : badge "Données au" de la topbar, repris sur toutes les vues.
+  const latestDataDate = useMemo(() => computeLatestDataDate(listings, ville), [listings, ville]);
 
   // ORA-105 : chargé une fois, sert à résoudre les coordonnées des quartiers
   // des annonces affichées (AnnoncesList n'a pas de latitude/longitude).
@@ -221,7 +224,7 @@ function App() {
       {/* Topbar (ORA-170) : logo, ville, recherche quartier, filtres type,
           surface et bouton SCAN — pleine largeur, persistante au-dessus de
           la carte ET du panneau latéral, quel que soit l'onglet mobile actif. */}
-      <Topbar ville={ville} onVilleChange={setVille} onScan={handleScan} isLoading={loading} />
+      <Topbar ville={ville} onVilleChange={setVille} onScan={handleScan} isLoading={loading} dataAsOf={latestDataDate} />
 
       {error && (
         <div className="shrink-0 mx-3 md:mx-4 mt-2 text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">

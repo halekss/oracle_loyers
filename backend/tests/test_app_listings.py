@@ -21,7 +21,7 @@ class ListingsRouteTest(unittest.TestCase):
         data = response.get_json()
         self.assertIsInstance(data, list)
         self.assertGreater(len(data), 0)
-        for field in ("latitude", "longitude", "prix", "type_local", "quartier", "ville", "code_postal", "prix_m2"):
+        for field in ("latitude", "longitude", "prix", "type_local", "quartier", "ville", "code_postal", "prix_m2", "date_dernier_scan"):
             self.assertIn(field, data[0])
 
 
