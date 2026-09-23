@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
+import pandas as pd
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from scripts import generate_map
@@ -194,6 +196,70 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("e.data.bounds", script)
 
 
+class LoadLayersConfigTest(unittest.TestCase):
+    """ORA-130 : la liste des calques (nom Folium/TOGGLE_LAYER, visibilité par
+    défaut, libellé et couleur du panneau React) vient d'un unique JSON
+    partagé avec frontend/src/config/mapLayers.config.json (import JS direct
+    du même fichier côté React), pour ne plus avoir à synchroniser à la main
+    LAYER_MAPPING (MapComponent.jsx) et les FeatureGroup/GeoJson (ce script)
+    à chaque nouveau calque."""
+
+    def test_loads_the_committed_shared_config_by_default(self):
+        layers = generate_map.load_layers_config()
+
+        self.assertIsInstance(layers, list)
+        keys = {layer["key"] for layer in layers}
+        self.assertEqual(
+            keys,
+            {"Studio", "T2", "T3", "T4", "Metro", "Vice", "Gentrification", "Nuisance", "Superstition", "Quartiers"},
+        )
+
+    def test_each_layer_has_the_fields_required_by_both_sides(self):
+        for layer in generate_map.load_layers_config():
+            self.assertIn("key", layer)
+            self.assertIn("name", layer)
+            self.assertIn("label", layer)
+            self.assertIn("group", layer)
+            self.assertIsInstance(layer["defaultVisible"], bool)
+
+    def test_preserves_current_default_visibility_per_layer(self):
+        """Non-régression ORA-130 : le refactor ne doit rien changer à l'état
+        initial des calques (ex. Quartiers/Nuisance/Gentrification/Superstition
+        off par défaut, cf. ORA-104)."""
+        layers_by_key = {layer["key"]: layer for layer in generate_map.load_layers_config()}
+
+        expected_defaults = {
+            "Studio": True,
+            "T2": True,
+            "T3": True,
+            "T4": True,
+            "Metro": True,
+            "Vice": True,
+            "Gentrification": False,
+            "Nuisance": False,
+            "Superstition": False,
+            "Quartiers": False,
+        }
+        for key, expected in expected_defaults.items():
+            self.assertEqual(layers_by_key[key]["defaultVisible"], expected, key)
+
+    def test_loads_from_an_explicit_path(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "layers.json")
+            payload = [{"key": "Test", "name": "Test", "label": "Test", "group": "contexte", "defaultVisible": True}]
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+
+            self.assertEqual(generate_map.load_layers_config(path), payload)
+
+    def test_raises_when_the_config_file_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            missing_path = os.path.join(tmp_dir, "missing.json")
+
+            with self.assertRaises(FileNotFoundError):
+                generate_map.load_layers_config(missing_path)
+
+
 class LoadGeojsonFileTest(unittest.TestCase):
     """ORA-104 : chargement de la couche GeoJSON des quartiers, versionnée
     dans le repo (pas de dépendance réseau à runtime)."""
@@ -220,6 +286,70 @@ class LoadGeojsonFileTest(unittest.TestCase):
                 f.write("{not valid json")
 
             self.assertIsNone(generate_map.load_geojson_file(path))
+
+
+class BuildImmoTooltipHtmlTest(unittest.TestCase):
+    def test_includes_type_and_price(self):
+        html_out = generate_map.build_immo_tooltip_html(type_local="T2", prix="750")
+
+        self.assertIn("T2", html_out)
+        self.assertIn("750", html_out)
+
+    def test_never_renders_a_link(self):
+        # Un tooltip Leaflet (survol) ne peut pas héberger de contenu cliquable
+        # de façon fiable (cf. ORA-99) : le lien reste réservé au popup (clic).
+        html_out = generate_map.build_immo_tooltip_html(type_local="T2", prix="750")
+
+        self.assertNotIn("<a ", html_out)
+
+    def test_never_renders_an_image_tag(self):
+        html_out = generate_map.build_immo_tooltip_html(type_local="T2", prix="750")
+
+        self.assertNotIn("<img", html_out)
+
+    def test_escapes_hostile_type_value(self):
+        html_out = generate_map.build_immo_tooltip_html(type_local="<script>alert(1)</script>", prix="750")
+
+        self.assertNotIn("<script>alert(1)</script>", html_out)
+
+
+class ResolveVillePathsTest(unittest.TestCase):
+    def test_lyon_paths_match_existing_filenames(self):
+        paths = generate_map.resolve_ville_paths("lyon")
+
+        self.assertTrue(paths["output_html"].endswith("map_pings_lyon_calques.html"))
+        self.assertTrue(paths["metadata_json"].endswith("map_metadata_lyon.json"))
+        self.assertTrue(paths["poi_csv"].endswith("cavaliers_lyon.csv"))
+        self.assertTrue(paths["metro_json"].endswith("metro_lyon.json"))
+        self.assertTrue(paths["quartiers_geojson"].endswith("lyon_arrondissements.geojson"))
+        self.assertEqual(paths["center"], [45.7640, 4.8357])
+
+    def test_lille_paths_are_distinct_from_lyon(self):
+        paths = generate_map.resolve_ville_paths("lille")
+
+        self.assertTrue(paths["output_html"].endswith("map_pings_lille_calques.html"))
+        self.assertTrue(paths["poi_csv"].endswith("cavaliers_lille.csv"))
+        self.assertEqual(paths["center"], [50.6292, 3.0573])
+
+    def test_raises_for_an_undeclared_ville(self):
+        with self.assertRaises(KeyError):
+            generate_map.resolve_ville_paths("marseille")
+
+
+class FilterByVilleTest(unittest.TestCase):
+    def test_keeps_only_rows_matching_the_ville_case_insensitively(self):
+        df = pd.DataFrame({"ville": ["Lyon", "Lille", "Lyon"], "prix": [800, 700, 900]})
+
+        result = generate_map.filter_by_ville(df, "lyon")
+
+        self.assertEqual(list(result["prix"]), [800, 900])
+
+    def test_returns_dataframe_unchanged_when_ville_column_is_missing(self):
+        df = pd.DataFrame({"prix": [800, 700]})
+
+        result = generate_map.filter_by_ville(df, "lyon")
+
+        self.assertEqual(len(result), 2)
 
 
 if __name__ == "__main__":

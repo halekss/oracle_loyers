@@ -21,6 +21,18 @@ describe('PriceHistory', () => {
     expect(screen.getByText(/pas encore assez d'historique/i)).toBeInTheDocument();
   });
 
+  it('surfaces the expected update cadence when history is insufficient (ORA-129)', () => {
+    render(
+      <PriceHistory
+        status="insufficient_history"
+        message="Pas encore assez d'historique de données pour observer une tendance (un seul snapshot enregistré à ce jour). De nouvelles données sont généralement ajoutées chaque semaine."
+        historique={[]}
+      />
+    );
+
+    expect(screen.getByText(/généralement ajoutées chaque semaine/i)).toBeInTheDocument();
+  });
+
   it('renders a table row per historical data point when history is available', () => {
     render(
       <PriceHistory

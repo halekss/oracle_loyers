@@ -35,6 +35,11 @@ class ChatRequestSchema(BaseModel):
 class QuartierStatsRequestSchema(BaseModel):
     quartier: str
     type_local: Optional[str] = "Tout"
+    # Optionnel pour compatibilité (client existant qui ne l'envoie pas) :
+    # ville active dans le frontend (ex: "lyon", "lille"), utilisée pour
+    # borner la recherche à cette ville et permettre une recherche par nom
+    # de ville entière plutôt que par quartier (cf. app.py get_quartier_stats).
+    ville: Optional[str] = None
 
     @field_validator("quartier")
     @classmethod

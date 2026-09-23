@@ -1,27 +1,29 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
+import mapLayersConfig from '../config/mapLayers.config.json';
 
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
 // (générée par backend/scripts/generate_map.py) : voir MAP_CONTRACT.md (ORA-125).
 
-// Centre par défaut de la carte Folium (backend/scripts/generate_map.py) —
-// repli quand la bounding-box des résultats filtrés est vide (ORA-105).
-const LYON_CENTER = { lat: 45.7640, lng: 4.8357, zoom: 13 };
+// Centre par défaut de chaque carte Folium (backend/scripts/generate_map.py,
+// VILLE_CONFIG) — repli quand la bounding-box des résultats filtrés est vide
+// (ORA-105), par ville (ORA-71 POC).
+const VILLE_CENTERS = {
+  lyon: { lat: 45.7640, lng: 4.8357, zoom: 13 },
+  lille: { lat: 50.6292, lng: 3.0573, zoom: 13 },
+};
 
 // --- CONFIGURATION DES CALQUES ---
-const LAYER_MAPPING = {
-  'Studio': 'Immo Studio/T1',
-  'T2': 'Immo T2',
-  'T3': 'Immo T3',
-  'T4': 'Immo Grand (T4+)',
-  
-  'Metro': 'Metro', // Groupe unifié
-  'Vice': 'Vice',
-  'Nuisance': 'Nuisance',
-  'Gentrification': 'Gentrification',
-  'Superstition': 'Superstition',
-  'Quartiers': 'Quartiers' // Limites des arrondissements (ORA-104)
-};
+// Source de vérité unique (frontend/src/config/mapLayers.config.json),
+// consommée aussi par backend/scripts/generate_map.py (ORA-130) : ajouter un
+// calque = éditer ce JSON, pas ce composant ET le script Python séparément.
+// `LAYER_MAPPING` (clé interne React -> libellé du calque Folium/TOGGLE_LAYER)
+// dérive de ce fichier plutôt que d'être recopié à la main.
+const LAYER_MAPPING = Object.fromEntries(
+  mapLayersConfig.map((layer) => [layer.key, layer.name])
+);
+
+const layersByGroup = (group) => mapLayersConfig.filter((layer) => layer.group === group);
 
 const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   <div 
@@ -45,10 +47,18 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled }) => (
   </div>
 );
 
-export default function MapComponent({ center, bounds, chatOpen = false }) {
-  const [mapUrl] = useState(() => `/data/map_pings_lyon_calques.html?t=${Date.now()}`);
+export default function MapComponent({ center, bounds, chatOpen = false, ville = 'lyon' }) {
+  const [mapUrl, setMapUrl] = useState(() => `/data/map_pings_${ville}_calques.html?t=${Date.now()}`);
   const iframeRef = useRef(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+
+  // ORA-71 POC : recharge l'iframe carte statique quand la ville active
+  // change (sélecteur Lyon/Lille) — le `useState` initial ne se réévalue
+  // qu'au montage, insuffisant si l'utilisateur bascule de ville sans que
+  // MapComponent soit démonté/remonté.
+  useEffect(() => {
+    setMapUrl(`/data/map_pings_${ville}_calques.html?t=${Date.now()}`);
+  }, [ville]);
 
   // ORA-116 : sur mobile (onglet "Carte"), le panneau de calques et le chat
   // ouvert se chevauchent entièrement (panneau ~256x444px, chat quasi plein
@@ -60,19 +70,12 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
   }, [chatOpen]);
   
   // --- ETATS ---
-  const [layers, setLayers] = useState({
-    'Studio': true,
-    'T2': true,
-    'T3': true,
-    'T4': true,
-    
-    'Metro': true, // Etat unique pour tout le métro
-    'Vice': true,
-    'Nuisance': false,
-    'Gentrification': false,
-    'Superstition': false,
-    'Quartiers': false
-  });
+  // Visibilité initiale de chaque calque : dérivée de mapLayers.config.json
+  // (`defaultVisible`), même source que le `show=` des FeatureGroup/GeoJson
+  // Folium correspondants côté generate_map.py (ORA-130).
+  const [layers, setLayers] = useState(() =>
+    Object.fromEntries(mapLayersConfig.map((layer) => [layer.key, layer.defaultVisible]))
+  );
 
   useEffect(() => {
     if (center && iframeRef.current && iframeRef.current.contentWindow) {
@@ -93,9 +96,10 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
       return;
     }
     if (bounds === null) {
+      const fallbackCenter = VILLE_CENTERS[ville] || VILLE_CENTERS.lyon;
       iframeRef.current.contentWindow.postMessage({
         type: 'FLY_TO',
-        lat: LYON_CENTER.lat, lng: LYON_CENTER.lng, zoom: LYON_CENTER.zoom
+        lat: fallbackCenter.lat, lng: fallbackCenter.lng, zoom: fallbackCenter.zoom
       }, window.location.origin);
       return;
     }
@@ -103,7 +107,7 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
       type: 'FLY_TO_BOUNDS',
       bounds
     }, window.location.origin);
-  }, [bounds]);
+  }, [bounds, ville]);
 
   // ORA-107 : réception du seul message iframe → React du contrat
   // (ANNONCE_CLICK, MAP_CONTRACT.md) — clic sur un marker carte, tracké
@@ -196,8 +200,16 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
 
           <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 font-bold">Transports</h3>
           {/* BOUTON UNIQUE METRO */}
-          <ToggleItem label="Métro (Lignes & Stations)" color="#818181" isActive={layers['Metro']} onToggle={() => toggleLayer('Metro')} />
-          
+          {layersByGroup('transports').map((layer) => (
+            <ToggleItem
+              key={layer.key}
+              label={layer.label}
+              color={layer.uiColor}
+              isActive={layers[layer.key]}
+              onToggle={() => toggleLayer(layer.key)}
+            />
+          ))}
+
           <details className="mt-4 group" open>
             <summary className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-slate-300 transition-colors">
               <span>Contexte</span>
@@ -205,18 +217,27 @@ export default function MapComponent({ center, bounds, chatOpen = false }) {
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </summary>
-            <ToggleItem label="Vice" color="#e74c3c" isActive={layers['Vice']} onToggle={() => toggleLayer('Vice')} />
-            <ToggleItem label="Gentrification" color="#3b82f6" isActive={layers['Gentrification']} onToggle={() => toggleLayer('Gentrification')} />
-            <ToggleItem label="Nuisance" color="#f39c12" isActive={layers['Nuisance']} onToggle={() => toggleLayer('Nuisance')} />
-            <ToggleItem label="Superstition" color="#9b59b6" isActive={layers['Superstition']} onToggle={() => toggleLayer('Superstition')} />
-            <ToggleItem label="Quartiers" color="#a78bfa" isActive={layers['Quartiers']} onToggle={() => toggleLayer('Quartiers')} />
+            {layersByGroup('contexte').map((layer) => (
+              <ToggleItem
+                key={layer.key}
+                label={layer.label}
+                color={layer.uiColor}
+                isActive={layers[layer.key]}
+                onToggle={() => toggleLayer(layer.key)}
+              />
+            ))}
           </details>
-          
+
           <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 mt-4 font-bold">Offres Immobilières</h3>
-          <ToggleItem label="Studio / T1" color="#22c55e" isActive={layers['Studio']} onToggle={() => toggleLayer('Studio')} />
-          <ToggleItem label="Apparts T2" color="#22c55e" isActive={layers['T2']} onToggle={() => toggleLayer('T2')} />
-          <ToggleItem label="Apparts T3" color="#22c55e" isActive={layers['T3']} onToggle={() => toggleLayer('T3')} />
-          <ToggleItem label="Grands (T4+)" color="#22c55e" isActive={layers['T4']} onToggle={() => toggleLayer('T4')} />
+          {layersByGroup('immobilier').map((layer) => (
+            <ToggleItem
+              key={layer.key}
+              label={layer.label}
+              color={layer.uiColor}
+              isActive={layers[layer.key]}
+              onToggle={() => toggleLayer(layer.key)}
+            />
+          ))}
         </div>
       )}
     </div>

@@ -10,10 +10,10 @@ from flasgger import Swagger
 from logging_config import configure_logging, init_sentry
 from services.data_loader import DataLoader
 from services.chat_service import ChatService
-from services.predictor import build_feature_row, estimate_confidence
+from services.predictor import build_feature_row, estimate_confidence, is_physically_implausible_price
 from services.cavaliers_factors import summarize_cavaliers
 from services.price_history import compute_price_history
-from services.text_matching import match_quartier
+from services.quartier_search import resolve_quartier_filter
 from services.pdf_report import render_estimation_pdf
 from services import annonces_store
 from schemas import (
@@ -178,9 +178,9 @@ def get_request_json():
 # Configuration des chemins
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'master_immo_final.csv')
-MODEL_PATH = os.path.join(BASE_DIR, 'models', 'price_predictor.pkl')
-MODEL_META_PATH = f"{MODEL_PATH}.meta.json"
-CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_lyon.csv')
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
+SCRAPING_CONFIG_PATH = os.path.join(BASE_DIR, '..', 'scripts', 'scraping_config.json')
+CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_all.csv')
 SNAPSHOTS_DIR = os.path.join(BASE_DIR, 'data', 'snapshots')
 SNAPSHOTS_MANIFEST_PATH = os.path.join(SNAPSHOTS_DIR, 'manifest.csv')
 ANNONCES_DB_PATH = os.path.join(BASE_DIR, 'data', 'annonces.db')
@@ -196,7 +196,7 @@ try:
     cavaliers_df = pd.read_csv(CAVALIERS_PATH)
 except Exception as exc:
     logger.warning(
-        "cavaliers_lyon.csv introuvable, features de distance à 0 par défaut : %s - %s",
+        "cavaliers_all.csv introuvable, features de distance à 0 par défaut : %s - %s",
         type(exc).__name__, exc,
     )
     cavaliers_df = None
@@ -204,39 +204,57 @@ except Exception as exc:
 logger.info("Initialisation d'Immotep (Service Chat)...")
 chat_service = ChatService()
 
-# Chargement du modèle IA (XGBoost)
-logger.info("Chargement du modèle IA...")
-try:
-    model = joblib.load(MODEL_PATH)
-except Exception as exc:
-    logger.warning(
-        "Modèle price_predictor.pkl introuvable : %s - %s",
-        type(exc).__name__, exc,
-    )
-    model = None
+# Chargement des modèles IA (XGBoost) — un modèle distinct par ville (ORA-154)
+# plutôt qu'un unique price_predictor.pkl combiné : une dérive de features
+# sur une ville (ex. cavaliers) ne peut plus casser les prédictions des
+# autres, et chaque modèle est comparé à sa propre histoire par le garde-fou
+# de promotion (voir train_model.py).
+logger.info("Chargement des modèles IA...")
+with open(SCRAPING_CONFIG_PATH, encoding='utf-8') as f:
+    VILLES_CONFIG = json.load(f)['villes']
+
+MODEL_PATHS = {}  # nom de ville -> chemin du .pkl
+models = {}       # nom de ville -> modèle chargé, ou None si indisponible
+for slug, ville_config in VILLES_CONFIG.items():
+    ville_nom = ville_config['nom']
+    model_path = os.path.join(MODELS_DIR, f'price_predictor_{slug}.pkl')
+    MODEL_PATHS[ville_nom] = model_path
+    try:
+        models[ville_nom] = joblib.load(model_path)
+    except Exception as exc:
+        logger.warning(
+            "Modèle %s (%s) introuvable : %s - %s",
+            ville_nom, model_path, type(exc).__name__, exc,
+        )
+        models[ville_nom] = None
 
 # --- ROUTES API ---
 
 @app.route('/api/health', methods=['GET'])
 @limiter.exempt
 def health():
-    """Expose la version du modèle de prédiction actuellement chargé (ORA-31)."""
-    model_info = {"model_version": None, "trained_at": None, "metrics": None}
-    try:
-        with open(MODEL_META_PATH, encoding='utf-8') as f:
-            meta = json.load(f)
-        model_info = {
-            "model_version": meta.get("model_version"),
-            "trained_at": meta.get("trained_at"),
-            "metrics": meta.get("metrics"),
-        }
-    except Exception:
-        pass
+    """Expose l'état et la version des modèles de prédiction actuellement
+    chargés, un par ville (ORA-31, ORA-154)."""
+    models_info = {}
+    for ville_nom, model_path in MODEL_PATHS.items():
+        info = {"loaded": models.get(ville_nom) is not None, "model_version": None, "trained_at": None, "metrics": None}
+        try:
+            with open(f"{model_path}.meta.json", encoding='utf-8') as f:
+                meta = json.load(f)
+            info["model_version"] = meta.get("model_version")
+            info["trained_at"] = meta.get("trained_at")
+            info["metrics"] = meta.get("metrics")
+        except Exception:
+            pass
+        models_info[ville_nom] = info
+
+    any_model_loaded = any(m is not None for m in models.values())
+    all_models_loaded = bool(models) and all(m is not None for m in models.values())
 
     return jsonify({
-        "status": "ok" if model is not None else "degraded",
-        "model_loaded": model is not None,
-        "model": model_info,
+        "status": "ok" if all_models_loaded else "degraded",
+        "model_loaded": any_model_loaded,
+        "models": models_info,
     })
 
 @app.route('/api/listings', methods=['GET'])
@@ -305,11 +323,22 @@ def get_annonces():
         type: integer
         required: false
         default: 20
+      - name: sort
+        in: query
+        type: string
+        required: false
+        description: "'prix', 'surface' ou 'date' (ORA-127)"
+      - name: order
+        in: query
+        type: string
+        required: false
+        default: desc
+        description: "'asc' ou 'desc' (ORA-127)"
     responses:
       200:
         description: Page d'annonces correspondant aux filtres
       400:
-        description: Paramètre de pagination invalide
+        description: Paramètre de pagination ou de tri invalide
     """
     try:
         page = int(request.args.get('page', 1))
@@ -320,11 +349,21 @@ def get_annonces():
     if page < 1 or per_page < 1:
         return jsonify({"error": "page et per_page doivent être positifs"}), 400
 
+    sort = request.args.get('sort') or None
+    order = request.args.get('order', 'desc')
+
+    if sort is not None and sort not in annonces_store.SORT_COLUMNS:
+        return jsonify({"error": "sort doit être 'prix', 'surface' ou 'date'"}), 400
+    if order not in ('asc', 'desc'):
+        return jsonify({"error": "order doit être 'asc' ou 'desc'"}), 400
+
     result = annonces_store.list_annonces(
         ville=request.args.get('ville') or None,
         quartier=request.args.get('quartier') or None,
         page=page,
         per_page=per_page,
+        sort=sort,
+        order=order,
         db_path=ANNONCES_DB_PATH,
     )
     return jsonify(result)
@@ -437,10 +476,11 @@ def get_quartier_stats():
         # Nettoyage pour éviter les erreurs sur NaN
         df_clean = df.dropna(subset=['quartier', 'prix', 'surface'])
 
-        # Résolution du quartier saisi (accents/casse/tirets + tolérance aux
-        # fautes de frappe partagées avec le chat et /api/predict, ORA-110)
-        known_quartiers = df_clean['quartier'].unique().tolist()
-        match = match_quartier(quartier_input, known_quartiers)
+        # Résolution du quartier saisi : bornée à la ville active + recherche
+        # par nom de ville entière (ORA-71), avec la même tolérance aux
+        # fautes de frappe que le chat et /api/predict (ORA-110) une fois le
+        # DataFrame borné à la ville.
+        filtered_df, match = resolve_quartier_filter(df_clean, quartier_input, payload.ville)
 
         if not match["found"]:
             # ORA-111 : message différencié — plusieurs quartiers assez proches
@@ -460,9 +500,6 @@ def get_quartier_stats():
                 "suggestions": match["suggestions"],
                 "message": message,
             }), 200
-
-        resolved_quartier = match["match"]
-        filtered_df = df_clean[df_clean['quartier'] == resolved_quartier]
 
         # 2. Filtrage par Type de bien (Si pas 'Tout')
         mapping_types = {
@@ -514,8 +551,10 @@ def get_quartier_stats():
             for _, row in comparables_df.iterrows()
         ]
 
-        # Libellé canonique déjà résolu (ex: "Gerland" au lieu de "greland")
-        nom_officiel = resolved_quartier
+        # Libellé canonique déjà résolu (ex: "Gerland" au lieu de "greland") ;
+        # pour une recherche par ville entière (is_city_search), il n'y a pas
+        # de quartier unique — on affiche le nom de la ville elle-même.
+        nom_officiel = filtered_df['ville'].mode().iloc[0] if match["is_city_search"] else match["match"]
         center = None
         if {'latitude', 'longitude'}.issubset(filtered_df.columns):
             coords = filtered_df.dropna(subset=['latitude', 'longitude'])
@@ -592,14 +631,22 @@ def get_quartier_historique():
     type_filter = payload.type_local
 
     historique, status = compute_price_history(
-        quartier_input, type_filter, SNAPSHOTS_DIR, SNAPSHOTS_MANIFEST_PATH
+        quartier_input, type_filter, SNAPSHOTS_DIR, SNAPSHOTS_MANIFEST_PATH, payload.ville
     )
 
     if status == "insufficient_history":
         return jsonify({
             "found": True,
             "status": "insufficient_history",
-            "message": "Pas encore assez d'historique de données pour observer une tendance (un seul snapshot enregistré à ce jour).",
+            # ORA-129 : cadence honnête, pas garantie — un nouveau snapshot est écrit
+            # à chaque run réussi du pipeline (visé hebdomadaire, voir README section
+            # "Versioning des snapshots de données"), mais rien n'alerte si un run est
+            # sauté, d'où "généralement" plutôt qu'une promesse ferme de délai.
+            "message": (
+                "Pas encore assez d'historique de données pour observer une tendance "
+                "(un seul snapshot enregistré à ce jour). De nouvelles données sont "
+                "généralement ajoutées chaque semaine."
+            ),
             "historique": [],
         })
 
@@ -656,7 +703,7 @@ def predict():
       500:
         description: Modèle ou données de référence indisponibles
     """
-    if model is None:
+    if not any(m is not None for m in models.values()):
         return jsonify({"error": "Modèle de prédiction indisponible sur ce serveur"}), 500
 
     df = data_loader.get_data()
@@ -676,14 +723,41 @@ def predict():
             "details": ["Le format des champs envoyés est incorrect."],
         }), 400
 
-    features_df, result = build_feature_row(payload, df, cavaliers_df, list(model.feature_names_in_))
+    # Un jeu de features par ville (un modèle XGBoost distinct par ville,
+    # ORA-154) : build_feature_row déduit la ville du quartier résolu et
+    # route vers le bon jeu — les villes sans modèle chargé sont simplement
+    # absentes du dict, ce qui produit l'erreur "aucun modèle disponible"
+    # appropriée plutôt qu'un crash.
+    feature_names_by_ville = {
+        ville_nom: list(m.feature_names_in_)
+        for ville_nom, m in models.items()
+        if m is not None
+    }
+    features_df, result = build_feature_row(payload, df, cavaliers_df, feature_names_by_ville)
     if features_df is None:
         return jsonify({"error": "Payload invalide", "details": result}), 400
 
+    model = models[result["ville"]]
     try:
         estimated_price = float(model.predict(features_df)[0])
     except Exception as e:
         return jsonify({"error": f"Erreur lors de la prédiction : {e}"}), 500
+
+    if is_physically_implausible_price(estimated_price):
+        # Un loyer <= 0 n'est jamais une estimation valide (ORA-152) : signale
+        # presque toujours une incohérence du modèle chargé (ex. désérialisation
+        # avec une version XGBoost incompatible de celle utilisée à l'entraînement)
+        # plutôt qu'une vraie prédiction. On refuse de renvoyer cette valeur au
+        # frontend et on journalise bruyamment pour l'observabilité (Sentry inclus).
+        logger.error(
+            "Prédiction de prix physiquement impossible (%.2f€) pour payload=%s — "
+            "modèle potentiellement corrompu ou incompatible (voir ORA-152).",
+            estimated_price,
+            payload,
+        )
+        return jsonify({
+            "error": "Le modèle de prédiction a renvoyé une estimation incohérente (prix <= 0€).",
+        }), 500
 
     surface = result["surface"]
     price_m2 = estimated_price / surface if surface else 0.0

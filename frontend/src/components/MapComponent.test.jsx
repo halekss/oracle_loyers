@@ -12,6 +12,7 @@ vi.mock('../services/api', async () => {
 
 import { api } from '../services/api';
 import MapComponent from './MapComponent';
+import mapLayersConfig from '../config/mapLayers.config.json';
 
 describe('MapComponent', () => {
   beforeEach(() => {
@@ -23,6 +24,21 @@ describe('MapComponent', () => {
     render(<MapComponent center={null} />);
     const iframe = screen.getByTitle('Carte Oracle');
     expect(iframe.getAttribute('src')).toMatch(/^\/data\/map_pings_lyon_calques\.html/);
+  });
+
+  it('points to the lille static map when ville=lille (ORA-71 POC)', () => {
+    render(<MapComponent center={null} ville="lille" />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    expect(iframe.getAttribute('src')).toMatch(/^\/data\/map_pings_lille_calques\.html/);
+  });
+
+  it('reloads the iframe src when ville changes after mount', () => {
+    const { rerender } = render(<MapComponent center={null} ville="lyon" />);
+    expect(screen.getByTitle('Carte Oracle').getAttribute('src')).toMatch(/map_pings_lyon_calques\.html/);
+
+    rerender(<MapComponent center={null} ville="lille" />);
+
+    expect(screen.getByTitle('Carte Oracle').getAttribute('src')).toMatch(/map_pings_lille_calques\.html/);
   });
 
   it('shows the layer control panel open by default', () => {
@@ -225,6 +241,36 @@ describe('MapComponent', () => {
     }));
 
     expect(api.logAnnonceClick).not.toHaveBeenCalled();
+  });
+
+  it('renders one toggle per layer declared in the shared mapLayers.config.json (ORA-130)', () => {
+    render(<MapComponent center={null} />);
+
+    // La liste des calques (nom, libellé, visibilité par défaut) vient d'un
+    // seul JSON partagé avec generate_map.py (ORA-130) : chaque entrée doit
+    // se retrouver dans le panneau, sans qu'il faille l'y recopier à la main.
+    for (const layer of mapLayersConfig) {
+      expect(screen.getByText(layer.label)).toBeInTheDocument();
+    }
+  });
+
+  it('sends TOGGLE_LAYER using the Folium layer name from the shared config, not the internal key (ORA-130)', async () => {
+    const user = userEvent.setup();
+    render(<MapComponent center={null} />);
+    const iframe = screen.getByTitle('Carte Oracle');
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage },
+      configurable: true,
+    });
+
+    const gentrification = mapLayersConfig.find((layer) => layer.key === 'Gentrification');
+    await user.click(screen.getByText(gentrification.label));
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'TOGGLE_LAYER', name: gentrification.name, show: true },
+      window.location.origin,
+    );
   });
 
   it('ignores unrelated message events', () => {

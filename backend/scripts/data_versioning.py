@@ -24,6 +24,25 @@ def snapshot_dataset(csv_path, snapshots_dir):
     quand ce jeu de données a été (ré)utilisé.
 
     Renvoie le sha256 complet du contenu de `csv_path`.
+
+    Cadence (ORA-129) : cette fonction est appelée une fois par exécution
+    de `train_model.py` (voir l'appel en bas de ce script), lui-même la 3e étape du
+    DAG Airflow `oracle_annonces_pipeline` (`Airflow/dags/oracle_annonces_dag.py`,
+    `schedule="0 22 * * 1"` — chaque lundi 22h Europe/Paris). En régime nominal, une
+    nouvelle ligne apparaît donc dans `manifest.csv` environ une fois par semaine,
+    jamais plus d'une fois par run.
+
+    Ce que ceci NE garantit PAS : rien ici ne vérifie que le DAG s'est bel et bien
+    déclenché cette semaine-là. Si la machine hébergeant Airflow est éteinte au
+    créneau planifié, ou si une étape amont du DAG (`data_fusion`/`clean_immo`)
+    échoue avant `train_model.py`, aucune nouvelle ligne n'est écrite et rien
+    n'alerte spécifiquement sur ce run manqué — contrairement au canari scrapers
+    (`.github/workflows/scraper-selector-canary.yml`) ou au monitoring de dérive
+    (`.github/workflows/model-drift-monitor.yml`), qui ont leur propre alerting
+    GitHub Actions indépendant d'Airflow. La cadence hebdomadaire est donc le
+    rythme *visé*, pas un SLA vérifié activement ; `manifest.csv` reste la seule
+    source de vérité sur la fréquence réellement observée (voir README, section
+    "Versioning des snapshots de données").
     """
     os.makedirs(snapshots_dir, exist_ok=True)
 

@@ -38,6 +38,14 @@ DEFAULT_DB_PATH = os.path.join(
 
 MAX_PER_PAGE = 100
 
+# ORA-127 : tri optionnel de la liste paginée, whitelist stricte (clé publique
+# -> colonne réelle) pour ne jamais interpoler une colonne arbitraire dans le SQL.
+SORT_COLUMNS = {
+    "prix": "prix",
+    "surface": "surface",
+    "date": "date_scraping",
+}
+
 
 def get_connection(db_path=DEFAULT_DB_PATH):
     """Ouvre une connexion sqlite3 dédiée (pas de partage entre threads/requêtes),
@@ -173,7 +181,7 @@ def upsert_annonce(
         conn.close()
 
 
-def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, db_path=DEFAULT_DB_PATH):
+def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, sort=None, order="desc", db_path=DEFAULT_DB_PATH):
     """Liste paginée des annonces, filtrable par ville et/ou quartier (ORA-84).
 
     `statut` (ORA-134 bis) : `None` (défaut) exclut uniquement les annonces
@@ -181,6 +189,13 @@ def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, d
     rediriger un utilisateur vers une annonce confirmée morte, mais les
     `a_verifier` restent potentiellement valides donc affichées). Une valeur
     explicite ("active", "a_verifier" ou "inactive") filtre strictement dessus.
+
+    `sort` (ORA-127, optionnel) : une des clés de `SORT_COLUMNS` ("prix",
+    "surface", "date"). Toute autre valeur est ignorée silencieusement (le
+    tri par défaut, id DESC = plus récemment inséré d'abord, s'applique).
+    `order` : "asc" ou "desc" (défaut), n'a d'effet que si `sort` est fourni.
+    `id DESC` est toujours ajouté en tie-breaker pour un ordre stable entre
+    annonces de même prix/surface/date.
 
     Renvoie {"items": [...], "page", "per_page", "total", "total_pages"}.
     """
@@ -202,6 +217,10 @@ def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, d
         where_clauses.append("statut != 'inactive'")
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
+    sort_column = SORT_COLUMNS.get(sort)
+    order_sql = "ASC" if order == "asc" else "DESC"
+    order_by_sql = f"ORDER BY {sort_column} {order_sql}, id DESC" if sort_column else "ORDER BY id DESC"
+
     conn = get_connection(db_path)
     try:
         total = conn.execute(
@@ -211,7 +230,7 @@ def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, d
         rows = conn.execute(
             f"""
             SELECT * FROM annonces {where_sql}
-            ORDER BY id DESC
+            {order_by_sql}
             LIMIT :limit OFFSET :offset
             """,
             {**params, "limit": per_page, "offset": (page - 1) * per_page},

@@ -28,6 +28,7 @@ describe('AnnonceCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.logAnnonceClick.mockResolvedValue({ logged: true, views: 1 });
+    localStorage.clear();
   });
 
   it('renders nothing when no annonce is given', () => {
@@ -134,5 +135,65 @@ describe('AnnonceCard', () => {
     render(<AnnonceCard annonce={{ ...baseAnnonce, titre: 'T3 — Monplaisir / Bachut', surface: 54 }} />);
     expect(screen.getByText('T3')).toBeInTheDocument();
     expect(screen.queryByText('T2')).not.toBeInTheDocument();
+  });
+
+  describe('favoris (ORA-132)', () => {
+    it('renders an unfavorited toggle by default', () => {
+      render(<AnnonceCard annonce={baseAnnonce} />);
+      expect(screen.getByRole('button', { name: /ajouter aux favoris/i })).toBeInTheDocument();
+    });
+
+    it('toggles favorite state on click, persists to localStorage, and does not trigger the external redirect', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {});
+      const user = userEvent.setup();
+
+      render(<AnnonceCard annonce={baseAnnonce} />);
+      await user.click(screen.getByRole('button', { name: /ajouter aux favoris/i }));
+
+      expect(screen.getByRole('button', { name: /retirer des favoris/i })).toBeInTheDocument();
+      expect(JSON.parse(localStorage.getItem('oracle-loyers:favorites'))).toEqual([42]);
+      expect(openSpy).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('button', { name: /retirer des favoris/i }));
+      expect(screen.getByRole('button', { name: /ajouter aux favoris/i })).toBeInTheDocument();
+      expect(JSON.parse(localStorage.getItem('oracle-loyers:favorites'))).toEqual([]);
+
+      openSpy.mockRestore();
+    });
+
+    it('persists the favorite across a re-mount (simulated reload)', async () => {
+      const user = userEvent.setup();
+      const { unmount } = render(<AnnonceCard annonce={baseAnnonce} />);
+
+      await user.click(screen.getByRole('button', { name: /ajouter aux favoris/i }));
+      unmount();
+
+      render(<AnnonceCard annonce={baseAnnonce} />);
+      expect(screen.getByRole('button', { name: /retirer des favoris/i })).toBeInTheDocument();
+    });
+
+    it('does not render a favorite toggle when the annonce has no id', () => {
+      render(<AnnonceCard annonce={{ ...baseAnnonce, id: null }} />);
+      expect(screen.queryByRole('button', { name: /favoris/i })).not.toBeInTheDocument();
+    });
+
+    it('does not throw when localStorage is unavailable (private browsing / quota)', async () => {
+      const originalSet = Storage.prototype.setItem;
+      Storage.prototype.setItem = () => {
+        throw new Error('unavailable');
+      };
+      const user = userEvent.setup();
+
+      render(<AnnonceCard annonce={baseAnnonce} />);
+      await expect(
+        user.click(screen.getByRole('button', { name: /ajouter aux favoris/i }))
+      ).resolves.not.toThrow();
+
+      // Le bascule reste utilisable en mémoire pour la session courante,
+      // même si l'écriture disque échoue silencieusement.
+      expect(screen.getByRole('button', { name: /retirer des favoris/i })).toBeInTheDocument();
+
+      Storage.prototype.setItem = originalSet;
+    });
   });
 });

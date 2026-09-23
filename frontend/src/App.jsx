@@ -66,10 +66,18 @@ function App() {
   const [mapBounds, setMapBounds] = useState(undefined);
   const [listings, setListings] = useState([]);
   const [activeTab, setActiveTab] = useState('oracle');
+  // ORA-127 : lien direct depuis un quartier scanné vers ses annonces —
+  // `token` change à chaque clic (même quartier compris) pour que
+  // AnnoncesList redéclenche le saut à chaque fois, cf. son prop `focusedQuartier`.
+  const [focusedQuartier, setFocusedQuartier] = useState(null);
   // Chat en bulle flottante superposée à l'écran (pas de fenêtre/page à
   // part) : fermé par défaut pour laisser "Détails du quartier" toute la
   // hauteur de la colonne Oracle.
   const [isChatOpen, setIsChatOpen] = useState(false);
+  // Sélecteur de ville (ORA-71 POC) : ne change que la carte affichée et le
+  // bornage des recherches quartier/historique — les CSV/codes postaux
+  // Lyon/Lille restant jamais ambigus entre les deux villes.
+  const [ville, setVille] = useState('lyon');
   const isDesktop = useIsDesktop();
   const shouldMountMap = isDesktop || activeTab === 'carte';
   const facteurs = result?.facteurs || [];
@@ -95,6 +103,14 @@ function App() {
     setMapBounds(computeBoundsForQuartiers(listings, quartiers));
   };
 
+  // ORA-127 : "Voir les annonces de ce quartier" (ResultCard) — présélectionne
+  // le filtre quartier d'AnnoncesList et bascule sur l'onglet Annonces en
+  // mobile (sans effet en desktop, où les deux colonnes sont déjà visibles).
+  const handleViewAnnonces = (quartier) => {
+    setFocusedQuartier({ quartier, token: Date.now() });
+    setActiveTab('annonces');
+  };
+
   const handleScan = async (quartier, typeLocal, surfaceInput) => {
     setLoading(true);
     setError(null);
@@ -102,7 +118,7 @@ function App() {
     setPriceHistory(null);
 
     try {
-      const data = await api.getQuartierStats(quartier, typeLocal);
+      const data = await api.getQuartierStats(quartier, typeLocal, ville);
 
       if (!data.found) {
         setError(data.message || "Aucun résultat trouvé.");
@@ -155,7 +171,7 @@ function App() {
 
       // Non bloquant : un échec ici ne doit pas gâcher un scan par ailleurs réussi.
       try {
-        const historyData = await api.getQuartierHistorique(data.quartier_detecte, typeLocal);
+        const historyData = await api.getQuartierHistorique(data.quartier_detecte, typeLocal, ville);
         setPriceHistory(historyData);
       } catch (historyErr) {
         console.error("Historique des prix indisponible :", historyErr);
@@ -183,7 +199,7 @@ function App() {
         >
           {shouldMountMap && (
             <ErrorBoundary fallback={makePanelFallback('La carte')}>
-              <MapComponent center={mapCenter} bounds={mapBounds} chatOpen={isChatOpen} />
+              <MapComponent center={mapCenter} bounds={mapBounds} chatOpen={isChatOpen} ville={ville} />
             </ErrorBoundary>
           )}
         </div>
@@ -201,6 +217,26 @@ function App() {
             <h1 className="text-xl font-black tracking-tighter text-white mb-4">
               ORACLE <span className="text-purple-500">DES LOYERS</span>
             </h1>
+
+            {/* Sélecteur de ville (ORA-71 POC) : ne change que la carte
+                affichée, la recherche par quartier fonctionne sans distinction
+                de ville (codes postaux Lyon/Lille jamais ambigus). */}
+            <div className="flex gap-2 mb-4">
+              {['lyon', 'lille'].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setVille(v)}
+                  className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition-all ${
+                    ville === v
+                      ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/40'
+                      : 'bg-transparent border-slate-700 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
 
             <SearchForm onScan={handleScan} isLoading={loading} />
 
@@ -222,7 +258,7 @@ function App() {
           <ErrorBoundary fallback={makePanelFallback("Le panneau d'estimation")}>
             {/* Résultat */}
             <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
-              <ResultCard data={result} loading={loading} priceHistory={priceHistory} />
+              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} />
               {result && (
                 <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
                   Données réelles ({result.count} biens)
@@ -272,7 +308,7 @@ function App() {
                   <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
                     Annonces récentes
                   </p>
-                  <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} />
+                  <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} />
                 </div>
               </div>
             </details>
@@ -292,7 +328,7 @@ function App() {
           <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-3">
             Annonces récentes
           </p>
-          <AnnoncesList />
+          <AnnoncesList focusedQuartier={focusedQuartier} />
         </div>
       </div>
 

@@ -2,7 +2,10 @@ import React, { useState } from "react";
 import { api, describeApiError } from "../services/api";
 import { downloadBlob } from "../services/downloadBlob";
 
-export default function ResultCard({ data, loading, priceHistory }) {
+// `onViewAnnonces` (optionnel, ORA-127) : appelé avec le quartier scanné
+// (`data.quartier`) quand l'utilisateur clique le lien direct vers ses
+// annonces — le parent (App) s'en sert pour présélectionner AnnoncesList.
+export default function ResultCard({ data, loading, priceHistory, onViewAnnonces }) {
 
   const safeData = data || {};
   const stats = safeData.stats || {};
@@ -98,6 +101,16 @@ export default function ResultCard({ data, loading, priceHistory }) {
             <p className="mt-2 text-[9px] text-slate-500">
               Basée sur {safeData.count} bien{safeData.count > 1 ? 's' : ''} comparable{safeData.count > 1 ? 's' : ''} du même quartier et type.
             </p>
+          )}
+          {/* ORA-127 : lien direct depuis le quartier scanné vers ses annonces */}
+          {quartier && onViewAnnonces && (
+            <button
+              type="button"
+              onClick={() => onViewAnnonces(quartier)}
+              className="mt-2 text-[9px] uppercase tracking-widest font-bold text-purple-400 hover:text-purple-300 transition-colors underline decoration-purple-500/40 underline-offset-2"
+            >
+              Voir les annonces de {quartier} →
+            </button>
           )}
         </div>
 

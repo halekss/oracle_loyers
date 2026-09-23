@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { api } from '../services/api';
 import { sanitizeListingUrl } from '../services/sanitizeUrl';
 import AnnonceDetailModal from './AnnonceDetailModal';
+import { useFavorites } from '../hooks/useFavorites';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
 
@@ -70,10 +71,19 @@ function AnnonceIllustration({ titre, surface }) {
 
 export default function AnnonceCard({ annonce }) {
   const [detailOpen, setDetailOpen] = useState(false);
+  // ORA-132 : favoris "Mes favoris" — persistance localStorage uniquement
+  // (décision de cadrage, cf. useFavorites.js), pas de compte utilisateur.
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   if (!annonce) return null;
 
   const { id, titre, prix, surface, ville, quartier, url } = annonce;
+  const favorite = isFavorite(id);
+
+  const handleToggleFavorite = (e) => {
+    e.stopPropagation();
+    toggleFavorite(id);
+  };
 
   const handleOpen = () => {
     if (id != null) {
@@ -110,11 +120,26 @@ export default function AnnonceCard({ annonce }) {
       <div className="p-3">
         <div className="flex justify-between items-start gap-2">
           <p className="text-sm font-bold text-white truncate">{titre || 'Annonce sans titre'}</p>
-          {quartier && (
-            <span className="shrink-0 text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border bg-purple-900/40 text-purple-400 border-purple-700/50">
-              {quartier}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {id != null && (
+              <button
+                type="button"
+                onClick={handleToggleFavorite}
+                aria-pressed={favorite}
+                aria-label={favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                className={`leading-none text-base transition-colors ${
+                  favorite ? 'text-amber-400 hover:text-amber-300' : 'text-slate-600 hover:text-amber-300'
+                }`}
+              >
+                {favorite ? '★' : '☆'}
+              </button>
+            )}
+            {quartier && (
+              <span className="shrink-0 text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border bg-purple-900/40 text-purple-400 border-purple-700/50">
+                {quartier}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="mt-2 flex items-baseline gap-2">

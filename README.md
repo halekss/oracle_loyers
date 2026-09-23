@@ -209,18 +209,20 @@ Le backend Flask centralise sa configuration de logging dans `backend/logging_co
 
 ## ⚙️ Les Scripts de Données (ETL)
 
-Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/` — **seule source de vérité** pour ce pipeline (le root `scripts/` ne contient que les 6 scrapers, voir plus bas) — orchestrés par **deux DAG Airflow indépendants**, découplés par cadence et par fiabilité (les POI ne bougent pas d'un jour à l'autre et l'API Overpass est rate-limitée ; les annonces ont besoin d'un rafraîchissement plus fréquent et ne doivent pas rester bloquées par la lenteur d'Overpass) :
+Toute l'intelligence de l'Oracle repose sur la qualité de ses données. Les scripts se trouvent dans `backend/scripts/` — **seule source de vérité** pour ce pipeline (le root `scripts/` ne contient que les 6 scrapers, voir plus bas) — orchestrés par **deux familles de DAG Airflow**, découplées par cadence et par fiabilité (les POI ne bougent pas d'un jour à l'autre et l'API Overpass est rate-limitée ; les annonces ont besoin d'un rafraîchissement plus fréquent et ne doivent pas rester bloquées par la lenteur d'Overpass). Depuis ORA-153, le DAG cavaliers est en plus **scindé par ville** — une DAG indépendante et planifiable séparément par ville déclarée dans `scripts/scraping_config.json`, générées dynamiquement à partir de cette config (ajouter une ville n'y nécessite aucun changement de code Airflow) :
 
 ```text
-Airflow/dags/oracle_cavaliers_dag.py — cadence mensuelle
-  api_overpass.py ──→ enrich_cavaliers_cp.py
+Airflow/dags/oracle_cavaliers_dag.py — une DAG oracle_cavaliers_pipeline_<slug> par ville, cadence mensuelle
+  api_overpass.py --ville <slug> ──→ enrich_cavaliers_cp.py --ville <slug> ──→ merge_cavaliers_villes.py
 
-Airflow/dags/oracle_annonces_dag.py — cadence hebdomadaire
-  data_fusion.py ──→ clean_immo.py ──┬──→ master_immo_final.csv ──→ train_model.py ──→ generate_map.py
-                                      └──→ annonces.db (SQLite)
+Airflow/dags/oracle_annonces_dag.py — une seule DAG oracle_annonces_pipeline, cadence hebdomadaire
+  [data_fusion.py --ville <slug> pour chaque ville] ──→ clean_immo.py ──┬──→ master_immo_final.csv ──→ train_model.py ──→ [generate_map.py --ville <slug> pour chaque ville]
+                                                                         └──→ annonces.db (SQLite)
 ```
 
-`clean_immo.py` (côté annonces) lit simplement le `cavaliers_lyon.csv` le plus récent sur disque, produit indépendamment par le DAG cavaliers — aucune dépendance inter-DAG.
+`merge_cavaliers_villes.py` régénère `cavaliers_all.csv` (toutes villes confondues) à partir des `cavaliers_<slug>.csv` actuellement sur disque — c'est ce fichier combiné, et lui seul, que lit `clean_immo.py` (DAG annonces) ; aucune dépendance inter-DAG directe, juste le fichier le plus récent sur disque au moment du run.
+
+`clean_immo.py` reste un step **partagé, unique pour toutes les villes** (il calcule les features sur le fichier combiné en une passe). `train_model.py` et `generate_map.py`, en revanche, sont scindés par ville (ORA-154) : un modèle XGBoost distinct par ville (`price_predictor_<slug>.pkl`) plutôt qu'un modèle combiné avec `ville` en feature — deux tâches indépendantes après `clean_immo`, sans risque de réentraînements concurrents sur le même fichier de sortie.
 
 Deux sources de vérité distinctes sortent de `clean_immo.py`, pour deux usages différents :
 
@@ -232,18 +234,21 @@ Deux sources de vérité distinctes sortent de `clean_immo.py`, pour deux usages
 Les deux sont écrites à partir du **même dataframe final** en fin de `clean_immo.py` (étape 6 ci-dessous) : pas de divergence de comptage attendue entre les deux après un run, `url` étant déjà un champ obligatoire en amont dans les CSV scrapés (ORA-82) — la seule ligne exclue de `annonces.db` serait une annonce dont l'`url` serait vide malgré cette contrainte (garde-fou défensif, cf. `step_sync_annonces_store`).
 
 1.  **`api_overpass.py`**
-    * Récupère ~1 668 lieux répartis sur 21 catégories de POI ("cavaliers") via l'API Overpass (OpenStreetMap), pour la ville active lue dans `scripts/scraping_config.json` (`resolve_active_city_name()` — même config que les 6 scrapers, pas de nom de ville en dur dans le code, voir ORA-71 ci-dessous).
-    * *Output :* `cavaliers_lyon.csv` (brut, avec bascule sur 3 miroirs Overpass en cas d'erreur 429/504).
+    * Récupère ~1 668 lieux répartis sur 21 catégories de POI ("cavaliers") via l'API Overpass (OpenStreetMap), pour la ville ciblée par `--ville <slug>` (ORA-153 ; sans l'argument, retombe sur `ville_active` de `scripts/scraping_config.json` — même config que les 6 scrapers, pas de nom de ville en dur dans le code, voir ORA-71 ci-dessous).
+    * *Output :* `cavaliers_<slug>.csv` (brut, avec bascule sur 3 miroirs Overpass en cas d'erreur 429/504).
 
 2.  **`enrich_cavaliers_cp.py`**
-    * Attribue un code postal précis à chaque cavalier via l'API Data Gouv (Batch processing).
-    * *Input/Output :* `cavaliers_lyon.csv` (enrichi avec CP, écriture atomique).
+    * Attribue un code postal précis à chaque cavalier via l'API Data Gouv (Batch processing), pour la ville ciblée par `--ville <slug>` (défaut `lyon`, ORA-153 — avant cette correction le script ciblait `cavaliers_lyon.csv` en dur, Lille n'était donc jamais enrichi).
+    * *Input/Output :* `cavaliers_<slug>.csv` (enrichi avec CP, écriture atomique).
 
-3.  **`data_fusion.py`**
-    * Fusionne et nettoie les 6 CSV d'annonces scrapées (Century21, Orpi, SeLoger, PAP, ParuVendu, Vizzit — voir section Scraping ci-dessous).
-    * *Output :* `base_de_donnees_immo_lyon_complet.csv`.
+3.  **`merge_cavaliers_villes.py`** (ORA-153)
+    * Concatène les `cavaliers_<slug>.csv` de toutes les villes déclarées en un seul `cavaliers_all.csv` — le fichier réellement consommé par `clean_immo.py`. Point de jonction entre les DAG cavaliers (scindés par ville) et le DAG annonces (encore global).
 
-4.  **`clean_immo.py`**
+4.  **`data_fusion.py`**
+    * Fusionne et nettoie les 6 CSV d'annonces scrapées (Century21, Orpi, SeLoger, PAP, ParuVendu, Vizzit — voir section Scraping ci-dessous), pour la ville ciblée par `--ville <slug>` (ORA-153) — sans l'argument, reconstruit à partir de **toutes** les villes déclarées. Un run par ville préserve les annonces des autres villes déjà présentes dans le fichier combiné plutôt que de les écraser.
+    * *Output :* `base_de_donnees_immo_complet.csv`.
+
+5.  **`clean_immo.py`**
     * Le cœur du calcul, en 7 étapes internes séquentielles :
       0. **Purge des annonces expirées** (TTL, ORA-134) — exclut les annonces dont `date_dernier_scan` dépasse 14 jours (~2 runs hebdomadaires de marge), avant tout le reste du pipeline. Conservateur : une ligne sans `date_dernier_scan` exploitable (CSV antérieur à ORA-134) est gardée plutôt que purgée. Voir la sous-section dédiée ci-dessous.
       1. **Géocodage & jitter** — place les annonces sans coordonnées réelles sur la carte, en utilisant l'enveloppe convexe (Convex Hull) des cavaliers pour dessiner la forme réelle des quartiers (fallback sur des zones circulaires par code postal si pas assez de cavaliers).
@@ -252,14 +257,15 @@ Les deux sont écrites à partir du **même dataframe final** en fin de `clean_i
       4. **Calcul des features de distance** — pour chaque annonce, distance au cavalier le plus proche et densité à 500 m, pour chacune des 21 catégories (BallTree/haversine).
       5. **Réindexation des IDs**.
       6. **Synchronisation du store SQLite `annonces.db`** (ORA-112) — même dataframe final, upserté (dédoublonné par `url`) dans la table `annonces` consommée par `GET /api/annonces` (liste "Annonces récentes", tracking de clics). Avant cette étape, `annonces.db` n'était peuplée que par les tests unitaires : ce n'est plus le cas, les deux sources sont désormais synchronisées à chaque run de `clean_immo.py`.
-    * *Input :* `base_de_donnees_immo_lyon_complet.csv` + `cavaliers_lyon.csv` -> *Output :* le fichier "Gold Standard" `master_immo_final.csv` **et** `annonces.db` à jour.
+    * *Input :* `base_de_donnees_immo_complet.csv` + `cavaliers_all.csv` -> *Output :* le fichier "Gold Standard" `master_immo_final.csv` **et** `annonces.db` à jour.
 
-5.  **`train_model.py`**
+6.  **`train_model.py`**
     * Entraîne le modèle XGBoost sur `master_immo_final.csv`.
-    * Génère le fichier modèle : `backend/models/price_predictor.pkl`, **versionné dans git** (comme `master_immo_final.csv`) pour qu'un environnement fraîchement déployé dispose d'un modèle fonctionnel sans étape manuelle. L'entraînement est déterministe (`random_state=42`) ; relancez `train_model.py` et committez le `.pkl` après toute mise à jour de `master_immo_final.csv`.
-    * Via `data_versioning.py`, archive aussi un snapshot content-addressé des données utilisées et écrit `price_predictor.pkl.meta.json` (référence explicite au snapshot + métriques MAE/R² du run courant) — voir "Versioning des snapshots de données" ci-dessous.
-    * Chaque run ajoute en plus une ligne (`trained_at`, `mae`, `r2`, `dataset_size`, `n_features`) à `backend/models/training_metrics.jsonl`, un historique continu des métriques permettant de comparer plusieurs runs/versions du modèle dans le temps sans avoir à parcourir l'historique git.
-    * Chaque modèle entraîné est identifié par un hash (`model_version`, sha256 du binaire) inclus dans `price_predictor.pkl.meta.json` avec ses hyperparamètres ; une copie est archivée dans `backend/models/versions/`. `GET /api/health` expose la version actuellement chargée. Pour revenir à une version antérieure **sans réentraîner** : `python backend/scripts/rollback_model.py <model_version>`.
+    * Prend `--ville <slug>` (ORA-154) : filtre `master_immo_final.csv` sur cette ville avant d'entraîner — un modèle XGBoost **distinct par ville** plutôt qu'un modèle combiné avec `ville` en feature (isole les villes entre elles, et rend le garde-fou de régression comparable puisque chaque ville est comparée à sa propre histoire, pas à un mélange de gammes de prix différentes).
+    * Génère le fichier modèle : `backend/models/price_predictor_<slug>.pkl`, **versionné dans git** (comme `master_immo_final.csv`) pour qu'un environnement fraîchement déployé dispose d'un modèle fonctionnel sans étape manuelle. L'entraînement est déterministe (`random_state=42`) ; relancez `train_model.py --ville <slug>` et committez le `.pkl` après toute mise à jour de `master_immo_final.csv`.
+    * Via `data_versioning.py`, archive aussi un snapshot content-addressé des données utilisées et écrit `price_predictor_<slug>.pkl.meta.json` (référence explicite au snapshot + métriques MAE/R² du run courant) — voir "Versioning des snapshots de données" ci-dessous.
+    * Chaque run ajoute en plus une ligne (`trained_at`, `ville`, `mae`, `r2`, `dataset_size`, `n_features`) à `backend/models/training_metrics_<slug>.jsonl`, un historique continu des métriques permettant de comparer plusieurs runs/versions du modèle de cette ville dans le temps sans avoir à parcourir l'historique git.
+    * Chaque modèle entraîné est identifié par un hash (`model_version`, sha256 du binaire) inclus dans `price_predictor_<slug>.pkl.meta.json` avec ses hyperparamètres ; une copie est archivée dans `backend/models/versions/`. `GET /api/health` expose la version actuellement chargée de chaque ville. Pour revenir à une version antérieure **sans réentraîner** : `python backend/scripts/rollback_model.py <model_version> --ville <slug>`.
     * `backend/tests/test_model_regression.py` (suite pytest, exécuté en CI) vérifie que le MAE/R² restent dans une plage acceptable sur un jeu de validation fixe (même split que l'entraînement), et que `/api/predict` ne régresse pas vers le bug historique de placeholder à 0 — remplace l'ancien script manuel `test_prediction.py`.
 
 > Les scrapers (`scripts/scraper_*.py`, à la racine du dépôt) ne font **pas** partie du DAG Airflow : ils s'exécutent manuellement pour rafraîchir les CSV d'annonces avant de relancer le pipeline. Ils lisent leur ville/URL de recherche depuis `scripts/scraping_config.json` (`scraper_utils.load_site_config()`) plutôt que du code en dur, et chargent les liens déjà connus du run précédent (`load_existing_rows()`) pour ne dédupliquer les annonces contre le CSV existant, pas seulement au sein du run en cours. Une annonce déjà connue et revue au cours du run voit sa colonne `DerniereVue` mise à jour (ORA-134, voir ci-dessous) sans être re-scrapée en détail.
@@ -268,7 +274,7 @@ Les deux sont écrites à partir du **même dataframe final** en fin de `clean_i
 
 **Constat** : le pipeline n'avait jusqu'ici aucun mécanisme de suppression — une annonce retirée/louée/expirée sur le site source restait indéfiniment dans `annonces.db`, provoquant des 404 au clic.
 
-**Correctif structurel (TTL)** : chaque scraper trace désormais une colonne `DerniereVue` (date ISO), mise à jour à chaque fois qu'une annonce déjà connue est revue au cours d'un run. `data_fusion.py` la propage sous le nom `date_dernier_scan` dans `base_de_donnees_immo_lyon_complet.csv`, et `clean_immo.py` (étape 0 ci-dessus) exclut toute annonce dont cette date dépasse 14 jours — avant génération de `master_immo_final.csv` **et** synchronisation de `annonces.db`, donc les deux sources en bénéficient également.
+**Correctif structurel (TTL)** : chaque scraper trace désormais une colonne `DerniereVue` (date ISO), mise à jour à chaque fois qu'une annonce déjà connue est revue au cours d'un run. `data_fusion.py` la propage sous le nom `date_dernier_scan` dans `base_de_donnees_immo_complet.csv`, et `clean_immo.py` (étape 0 ci-dessus) exclut toute annonce dont cette date dépasse 14 jours — avant génération de `master_immo_final.csv` **et** synchronisation de `annonces.db`, donc les deux sources en bénéficient également.
 
 Complication prise en compte : chaque scraper arrêtait sa pagination dès la 1ère page entièrement déjà-connue, donc les annonces plus profondément paginées n'étaient jamais re-confirmées. `should_continue_pagination()` (`scripts/scraper_utils.py`) accorde désormais `GRACE_PAGES_SANS_NOUVEAUTE` (3) pages de marge sans nouvelle annonce avant d'arrêter réellement la pagination, pour laisser une chance de re-confirmer périodiquement les annonces déjà connues.
 
@@ -295,24 +301,26 @@ python prune_dead_map_listings.py --dry-run   # vérifie et logue sans rien modi
 python prune_dead_map_listings.py             # purge master_immo_final.csv + régénère la carte
 ```
 
-### 🌍 Généricité multi-ville (ORA-71) — état actuel
+### 🌍 Généricité multi-ville (ORA-71, ORA-153, ORA-154) — état actuel
 
-Deux points du pipeline étaient en dur sur Lyon indépendamment de `scraping_config.json` : corrigés ici.
+Lyon et Lille sont toutes deux déclarées et scrapées en conditions réelles (`scripts/scraping_config.json`).
 
-* **`api_overpass.py`** lit désormais la ville active depuis `scraping_config.json` (`resolve_active_city_name()`) au lieu d'un nom en dur — la fonction interne `get_cavaliers_data(city_name=...)` était déjà paramétrable.
-* **`train_model.py`** n'exclut plus `ville` de l'entraînement : encodée en one-hot comme `quartier`/`type_local`, elle permet au modèle d'apprendre un effet prix par ville dès qu'il y en a plusieurs dans `master_immo_final.csv`. Avec une seule ville (l'état actuel), `drop_first=True` supprime cette unique catégorie : **aucun changement de comportement du modèle actuel** (vérifié : MAE/R² inchangés après ré-entraînement).
-* Vérifié avec une ville fictive de test (`backend/tests/test_api_overpass.py::ResolveActiveCityNameTest`, `backend/tests/test_model_regression.py::MultiCityFeatureGenericizationTest`) — **pas** avec une vraie deuxième ville.
+* **`api_overpass.py`**, **`enrich_cavaliers_cp.py`**, **`data_fusion.py`** et **`train_model.py`** acceptent tous un `--ville <slug>` explicite (ORA-153, ORA-154) — plus besoin d'éditer `ville_active` à la main entre deux scrapes. `generate_map.py` l'avait déjà (ORA-71 POC).
+* Les DAG Airflow cavaliers sont générés dynamiquement, un par ville déclarée (`oracle_cavaliers_pipeline_<slug>`). Dans le DAG annonces, `train_model`/`generate_map` sont deux tâches indépendantes par ville après `clean_immo` (partagé) — voir "Les Scripts de Données (ETL)" ci-dessus.
+* **`train_model.py`** exclut désormais `ville` de l'entraînement (ORA-154) : un modèle XGBoost **distinct par ville** (`price_predictor_<slug>.pkl`) plutôt qu'un modèle combiné avec `ville` en feature (approche initiale d'ORA-71, abandonnée). Isole les villes entre elles (une dérive de features sur une ville ne peut plus casser les prédictions des autres — l'incident constaté cette semaine sur Lyon suite à l'ajout des cavaliers Lille) et rend le garde-fou de régression comparable (chaque ville comparée à sa propre histoire, pas à un mélange de gammes de prix différentes).
+* `predictor.py`/`app.py` chargent un modèle par ville et routent selon la ville déduite du quartier résolu ; `cavaliers_lyon.csv` (bug : Lille n'avait jamais de POI en prédiction) devient `cavaliers_all.csv`.
+* Vérifié avec Lyon/Lille réels (`backend/tests/test_predictor.py`, `backend/tests/test_model_regression.py`, `backend/tests/test_app_predict.py`) en plus d'une ville fictive de test pour la config (`backend/tests/test_api_overpass.py::ResolveActiveCityNameTest`).
 
-**Ce qui n'est pas fait** (portée volontairement exclue de ce ticket, à traiter séparément si une vraie 2ᵉ ville est ajoutée) :
-* Choisir une ville réelle et vérifier en direct les URLs des 6 scrapers pour elle (comme la revue robots.txt/CGU, mais par ville).
-* `data_fusion.py`, `clean_immo.py`, `enrich_cavaliers_cp.py`, `generate_map.py` référencent encore des noms de fichiers en dur (`cavaliers_lyon.csv`, `metro_lyon.json`, `annonces_lyon_*.csv`) plutôt que le slug lu depuis la config — une vraie 2ᵉ ville nécessiterait de généraliser aussi ces noms de fichiers.
+**Ce qui n'est pas fait** (à traiter séparément) :
+* `generate_map.py` : `metro_<slug>.json`/`<slug>_quartiers.geojson` (calques carte) restent alimentés manuellement par ville (pas de script d'extraction automatisé comme pour les cavaliers).
 
 ### 🗺️ Génération de la carte
 
-Un seul pipeline fait foi : **`backend/scripts/generate_map.py`**. À partir de `master_immo_final.csv`, `cavaliers_lyon.csv`, `metro_lyon.json` et `lyon_arrondissements.geojson`, il génère la carte Folium interactive `frontend/public/data/map_pings_lyon_calques.html`, réellement servie par `MapComponent.jsx` (iframe). Comme pour le reste des données du projet, le fichier généré est **versionné dans git** ; régénérez-le après toute mise à jour des données sources :
+Un seul pipeline fait foi : **`backend/scripts/generate_map.py`**. Pour la ville ciblée par `--ville <slug>` (défaut `lyon` ; `VILLE_CONFIG` dans le script déclare Lyon et Lille), à partir de `master_immo_final.csv`, `cavaliers_<slug>.csv`, `metro_<slug>.json` et son GeoJSON de quartiers, il génère la carte Folium interactive `frontend/public/data/map_pings_<slug>_calques.html`, réellement servie par `MapComponent.jsx` (iframe). Comme pour le reste des données du projet, le fichier généré est **versionné dans git** ; régénérez-le après toute mise à jour des données sources :
 
 ```bash
-python backend/scripts/generate_map.py
+python backend/scripts/generate_map.py --ville lyon
+python backend/scripts/generate_map.py --ville lille
 ```
 
 (L'ancien second pipeline concurrent — `backend/services/map_generator.py` → `backend/static/map_lyon.html`, orphelin, sans route ni DAG l'appelant — a été supprimé ; voir ORA-50.)
@@ -389,12 +397,14 @@ Chaque exécution de `train_model.py` archive un instantané de `master_immo_fin
 
 * **`backend/data/snapshots/master_immo_final_<sha256>.csv`** — une copie content-addressée du jeu de données (un re-run sur des données identiques ne duplique pas le fichier, seul le hash change si les données changent). Ces fichiers sont versionnés dans git au même titre que le reste de `backend/data/`.
 * **`backend/data/snapshots/manifest.csv`** — historique de chaque snapshot (timestamp, sha256, fichier, nombre de lignes).
-* **`backend/models/price_predictor.pkl.meta.json`** — référence explicitement, pour le modèle entraîné, le `data_snapshot_sha256`/`data_snapshot_file` utilisé ainsi que les métriques (MAE, R²). Versionné dans git comme le `.pkl` qu'il décrit (ORA-29).
+* **`backend/models/price_predictor_<slug>.pkl.meta.json`** (un par ville, ORA-154) — référence explicitement, pour le modèle entraîné de cette ville, le `data_snapshot_sha256`/`data_snapshot_file` utilisé ainsi que les métriques (MAE, R²). Versionné dans git comme le `.pkl` qu'il décrit (ORA-29).
 
 `manifest.csv` alimente aussi `/api/quartier-historique` (ORA-72, `backend/services/price_history.py`) : évolution du prix moyen/m² par quartier à travers les snapshots disponibles, affichée dans l'UI (`PriceHistory.jsx`) sous le résultat d'une recherche. Avec un seul snapshot enregistré (état actuel du projet), l'API renvoie `status: "insufficient_history"` plutôt qu'une tendance fictive à un seul point — le tableau se peuplera naturellement au fil des prochains entraînements.
 
+**Fréquence des snapshots (ORA-129) :** `train_model.py` — donc `snapshot_dataset()` — s'exécute une fois par ville, par run du DAG Airflow `oracle_annonces_pipeline` (`schedule="0 22 * * 1"`, chaque lundi 22h Europe/Paris ; voir "Pipeline ETL" ci-dessus). Chaque ville snapshote le même `master_immo_final.csv` combiné (filtré en mémoire à l'entraînement) : `snapshot_dataset()` dédoublonne par hash de contenu, donc pas de fichier dupliqué entre les deux villes du même run, mais une ligne par ville est bien ajoutée au manifeste. En régime nominal, c'est donc **deux nouvelles lignes par semaine** (Lyon + Lille) dans `manifest.csv`. Ceci n'est **pas un SLA vérifié activement** : contrairement au canari scrapers et au monitoring de dérive (tous deux ci-dessous), qui tournent en GitHub Actions indépendamment d'Airflow et alertent sur un GitHub issue en cas d'échec, rien n'alerte spécifiquement si un run hebdomadaire du DAG annonces est sauté ou échoue avant `train_model.py` — la machine hébergeant Airflow n'est pas garantie allumée à 22h (voir commentaire dans `oracle_annonces_dag.py`). `manifest.csv` (colonne `timestamp`) reste donc la seule source de vérité sur la cadence réellement observée, pas le planning déclaré du DAG.
+
 **Reproduire un ancien modèle à partir de son snapshot :**
-1. Récupérer le `data_snapshot_sha256` voulu (depuis un `price_predictor.pkl.meta.json` conservé, ou depuis `backend/data/snapshots/manifest.csv`).
+1. Récupérer le `data_snapshot_sha256` voulu (depuis un `price_predictor_<slug>.pkl.meta.json` conservé, ou depuis `backend/data/snapshots/manifest.csv`).
 2. Copier le snapshot correspondant par-dessus les données actives : `cp backend/data/snapshots/master_immo_final_<sha256>.csv backend/data/master_immo_final.csv`.
 3. Relancer `python backend/scripts/train_model.py` — le modèle est ré-entraîné sur exactement les mêmes données, et un nouveau `.meta.json` confirme le même `data_snapshot_sha256`.
 
@@ -402,9 +412,9 @@ Chaque exécution de `train_model.py` archive un instantané de `master_immo_fin
 
 Le mécanisme ci-dessus reproduit un ancien modèle en **ré-entraînant** sur son snapshot de données. Pour un retour arrière immédiat (ex : le modèle fraîchement entraîné se comporte mal en production), chaque run archive aussi une copie binaire prête à l'emploi :
 
-* **`backend/models/versions/price_predictor_<model_version>.pkl`** — copie du modèle archivée sous son hash (`model_version` = sha256 tronqué du binaire, présent dans `price_predictor.pkl.meta.json`). Versionnée dans git.
+* **`backend/models/versions/price_predictor_<slug>_<model_version>.pkl`** — copie du modèle de cette ville archivée sous son hash (`model_version` = sha256 tronqué du binaire, présent dans `price_predictor_<slug>.pkl.meta.json`). Versionnée dans git.
 * **`GET /api/health`** — expose `model_version`, `trained_at` et `metrics` (MAE/R²) du modèle actuellement chargé par le backend.
-* **`python backend/scripts/rollback_model.py <model_version>`** — restaure instantanément cette version comme modèle actif (`price_predictor.pkl`) et met à jour `.meta.json`, **sans ré-entraîner**.
+* **`python backend/scripts/rollback_model.py <model_version> --ville <slug>`** — restaure instantanément cette version comme modèle actif de cette ville (`price_predictor_<slug>.pkl`) et met à jour son `.meta.json`, **sans ré-entraîner**.
 
 ### 📈 Monitoring de dérive (drift) des prédictions (ORA-33)
 
@@ -441,7 +451,7 @@ oracle-des-loyers/
 │   ├── app.py                 # Point d'entrée serveur actif (Routes API Flask)
 │   │
 │   ├── data/                  # LE COFFRE-FORT (CSV bruts, fusionnés, master, snapshots)
-│   ├── models/                # Cerveaux entraînés (price_predictor.pkl, versionné en git)
+│   ├── models/                # Cerveaux entraînés (price_predictor_<slug>.pkl, un par ville, versionnés en git)
 │   │
 │   ├── scripts/               # L'USINE À DONNÉES — source de vérité (voir section ETL) ;
 │   │   │                      # ce sont ces copies qu'utilise le DAG Airflow, pas celles de scripts/ (ORA-7)

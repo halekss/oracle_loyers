@@ -53,6 +53,14 @@ class QuartierStatsRequestSchemaTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             QuartierStatsRequestSchema(quartier={"nested": "object"})
 
+    def test_ville_is_optional_and_defaults_to_none(self):
+        payload = QuartierStatsRequestSchema(quartier="Gerland")
+        self.assertIsNone(payload.ville)
+
+    def test_accepts_a_ville(self):
+        payload = QuartierStatsRequestSchema(quartier="Gerland", ville="lyon")
+        self.assertEqual(payload.ville, "lyon")
+
 
 class PredictRequestSchemaTest(unittest.TestCase):
     def test_accepts_a_valid_payload(self):

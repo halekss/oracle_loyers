@@ -165,4 +165,20 @@ describe('ResultCard', () => {
       expect(screen.getByText(/erreur/i)).toBeInTheDocument();
     });
   });
+
+  it('offers a direct link to the scanned quartier annonces when onViewAnnonces is provided (ORA-127)', async () => {
+    const onViewAnnonces = vi.fn();
+    const user = userEvent.setup();
+
+    render(<ResultCard data={baseData} loading={false} onViewAnnonces={onViewAnnonces} />);
+    await user.click(screen.getByRole('button', { name: /voir les annonces de gerland/i }));
+
+    expect(onViewAnnonces).toHaveBeenCalledWith('Gerland');
+  });
+
+  it('does not show the annonces link when onViewAnnonces is not provided', () => {
+    render(<ResultCard data={baseData} loading={false} />);
+
+    expect(screen.queryByRole('button', { name: /voir les annonces/i })).not.toBeInTheDocument();
+  });
 });

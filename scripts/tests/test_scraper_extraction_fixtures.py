@@ -153,22 +153,110 @@ class SeLogerExtractionTest(unittest.TestCase):
         self.assertIsNone(scraper_seloger.parse_title_attribute(""))
 
 
+class _FakeElement:
+    """Reproduit juste ce dont decode_data_o_link a besoin (element.get_attribute),
+    sans dépendre de Selenium/bs4 pour ce test précis."""
+    def __init__(self, attrs):
+        self._attrs = attrs
+
+    def get_attribute(self, name):
+        return self._attrs.get(name)
+
+
 class VizzitExtractionTest(unittest.TestCase):
-    def test_extracts_lieu_prix_details_lien(self):
+    def test_extracts_lieu_prix_details(self):
         soup = load_fixture("vizzit.html")
         cards = bs4_select_first_matching(soup, scraper_vizzit.CARD_SELECTORS)
         self.assertEqual(len(cards), 1)
         card = cards[0]
 
-        lien = bs4_first_attr(card, scraper_vizzit.LIEN_SELECTORS, "href")
         prix = bs4_first_text(card, scraper_vizzit.PRIX_SELECTORS)
         lieu = bs4_first_text(card, scraper_vizzit.LIEU_SELECTORS)
         details = card.select(scraper_vizzit.DETAIL_SELECTORS[0])
 
-        self.assertIn("vizzit.fr", lien)
-        self.assertEqual(prix, "920 €")
+        # info-price contient maintenant un <span class="price-period"> imbriqué
+        # ("610 €/mois" observé en réel) ; clean_price_integer() (data_fusion.py)
+        # ne garde que les chiffres, donc "/mois" n'est pas un problème en aval.
+        self.assertEqual(prix, "920 €/mois")
         self.assertEqual(lieu, "Lyon 6e - Brotteaux")
         self.assertEqual([d.get_text(strip=True) for d in details], ["T2", "42 m²"])
+
+    def test_card_has_no_anchor_link_anymore(self):
+        # Refonte observée le 2026-08-11 (ORA-71 POC) : Vizzit n'expose plus
+        # de <a href> sur la carte (classes "obf-link obf-blank"), seulement
+        # un attribut data-o encodé en base64 — cf. test_decode_data_o_link.
+        soup = load_fixture("vizzit.html")
+        card = bs4_select_first_matching(soup, scraper_vizzit.CARD_SELECTORS)[0]
+
+        lien = bs4_first_attr(card, scraper_vizzit.LIEN_SELECTORS, "href")
+
+        self.assertEqual(lien, "")
+
+    def test_decode_data_o_link_extracts_the_real_listing_url(self):
+        element = _FakeElement({
+            "data-o": "aHR0cHM6Ly93d3cudml6eml0LmZyL2ZyL3Byb3BlcnR5L2FwcGFydGVtZW50L2xpbGxlL0F2ZzcwN3JxaHpwcXFvMjk="
+        })
+
+        lien = scraper_vizzit.decode_data_o_link(element)
+
+        self.assertEqual(lien, "https://www.vizzit.fr/fr/property/appartement/lille/Avg707rqhzpqqo29")
+
+    def test_decode_data_o_link_returns_empty_string_when_attribute_absent(self):
+        element = _FakeElement({})
+
+        self.assertEqual(scraper_vizzit.decode_data_o_link(element), "")
+
+    def test_build_page_url_uses_base_url_as_is_for_page_one(self):
+        base_url = "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-city_id-gr_3040"
+
+        url = scraper_vizzit.build_page_url(base_url, 1)
+
+        self.assertEqual(url, "https://www.vizzit.fr/fr/properties/1?searchQuery=lg-fr-cn-fr-city_id-gr_3040")
+
+    def test_build_page_url_appends_p_n_query_param_for_later_pages(self):
+        # Régression réelle : Vizzit pagine via le paramètre de requête p_n,
+        # pas via le numéro dans le chemin de l'URL — un ancien scraper qui
+        # changeait seulement le chemin recevait systématiquement la page 1
+        # (constaté : mêmes data-advertid quel que soit le numéro dans le
+        # chemin), plafonnant la collecte à ~24 annonces quel que soit le
+        # nombre réel de résultats (803 pour Lille).
+        base_url = "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-city_id-gr_3040"
+
+        url = scraper_vizzit.build_page_url(base_url, 3)
+
+        self.assertEqual(url, "https://www.vizzit.fr/fr/properties/1?searchQuery=lg-fr-cn-fr-city_id-gr_3040&p_n=3")
+
+    def test_apply_price_band_appends_max_only(self):
+        base_url = "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-city_id-gr_3040"
+
+        url = scraper_vizzit.apply_price_band(base_url, {"max": 600})
+
+        self.assertEqual(url, base_url + "-mx_p-600")
+
+    def test_apply_price_band_appends_min_only(self):
+        base_url = "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-city_id-gr_3040"
+
+        url = scraper_vizzit.apply_price_band(base_url, {"min": 901})
+
+        self.assertEqual(url, base_url + "-mn_p-901")
+
+    def test_apply_price_band_appends_min_and_max(self):
+        # Régression réelle (ORA-71 POC) : Vizzit ne renvoie jamais plus de
+        # 20 pages (~480 annonces) sur une seule recherche, quel que soit le
+        # nombre réel de résultats — 480/803 annonces Lille manquantes tant
+        # que la recherche n'est pas subdivisée en tranches de prix.
+        base_url = "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-city_id-gr_3040"
+
+        url = scraper_vizzit.apply_price_band(base_url, {"min": 601, "max": 900})
+
+        self.assertEqual(url, base_url + "-mn_p-601-mx_p-900")
+
+    def test_apply_price_band_returns_base_url_unchanged_for_empty_band(self):
+        base_url = "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-city_id-gr_3040"
+
+        url = scraper_vizzit.apply_price_band(base_url, {})
+
+        self.assertEqual(url, base_url)
 
 
 class ParuVenduExtractionTest(unittest.TestCase):

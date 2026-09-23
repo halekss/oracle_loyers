@@ -4,7 +4,15 @@ scikit-learn
 numpy
 scipy
 joblib
-xgboost
+# Épinglé (ORA-152) : "xgboost" non-épinglé permettait un train/serve skew --
+# price_predictor.pkl a été sérialisé par un XGBoost plus récent (3.2.0, requiert
+# Python >= 3.10) que celui installable ici (Python 3.9 -> XGBoost <= 2.1.4),
+# et la désérialisation cross-version corrompait les prédictions (loyers
+# négatifs) au lieu de simplement avertir. Épingler garantit que tout
+# entraînement (Airflow) et service (ce backend) utilisent la même version
+# tant que l'environnement reste sur Python 3.9 -- voir aussi le garde-fou de
+# services/predictor.is_physically_implausible_price().
+xgboost==2.1.4
 shapely
 
 # Cœur de l'API (Flask) + validation des payloads ---

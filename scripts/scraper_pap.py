@@ -85,6 +85,16 @@ if __name__ == '__main__':
     total_cards_vues = 0
     consecutive_empty_pages = 0
 
+    def checkpoint():
+        """Persiste l'état courant de `rows_by_lien` (écriture atomique complète,
+        pas un append). Appelée après chaque page plutôt qu'une seule fois à la
+        fin du run : régression réelle constatée sur scraper_seloger.py (242
+        pages perdues suite à un hoquet Selenium transitoire tardif, alors que
+        atomic_csv_writer n'était appelé qu'une fois à la toute fin du run)."""
+        with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
+            for row in rows_by_lien.values():
+                writer.writerow(row)
+
     page_num = 1
     continuer = True
 
@@ -166,6 +176,7 @@ if __name__ == '__main__':
 
         logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur)
         total_nouveaux_run += compteur
+        checkpoint()
 
         continuer, consecutive_empty_pages = should_continue_pagination(compteur, consecutive_empty_pages)
         if not continuer:
@@ -175,10 +186,6 @@ if __name__ == '__main__':
         page_num += 1
 
     driver.quit()
-
-    with atomic_csv_writer(OUTPUT_PATH, CSV_HEADER) as writer:
-        for row in rows_by_lien.values():
-            writer.writerow(row)
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour PAP. Le site a peut-être changé de structure.")
