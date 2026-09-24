@@ -263,14 +263,16 @@ class StepQuartiersTest(unittest.TestCase):
 
         self.assertEqual(result.loc[0, "quartier"], "Lille / Non localisé")
 
-    def test_a_gps_reel_working_column_is_dropped_after_quartiers(self):
+    def test_a_gps_reel_is_kept_as_position_fiable_after_quartiers(self):
         df = pd.DataFrame([
             {"code_postal": "69006", "latitude": 45.77, "longitude": 4.86, "a_gps_reel": True},
+            {"code_postal": "69006", "latitude": 45.77, "longitude": 4.86, "a_gps_reel": False},
         ])
 
         result = clean_immo.step_quartiers(df)
 
         self.assertNotIn("a_gps_reel", result.columns)
+        self.assertEqual(result["position_fiable"].tolist(), [True, False])
 
 
 class StepTypesTest(unittest.TestCase):

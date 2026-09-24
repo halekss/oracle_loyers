@@ -684,8 +684,10 @@ def trouver_quartier(row):
 def step_quartiers(df):
     print("\n🗺️  ETAPE 2 : Détermination des quartiers...")
     df['quartier'] = df.apply(trouver_quartier, axis=1)
+    # ORA-156 : conservé (renommé) jusqu'à master_immo_final.csv pour savoir
+    # quelles annonces ont une position réelle (GPS Vizzit) vs jitterée.
     if 'a_gps_reel' in df.columns:
-        df = df.drop(columns=['a_gps_reel'])
+        df = df.rename(columns={'a_gps_reel': 'position_fiable'})
     print("   ✅ Quartiers assignés.")
     return df
 
