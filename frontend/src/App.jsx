@@ -27,14 +27,14 @@ import { loadRecentSearches } from './services/recentSearchesStorage';
 // (reset) => élément attendue par ErrorBoundary#fallback.
 function makePanelFallback(label) {
   return (reset) => (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-6 text-center bg-slate-900/50">
-      <p className="text-xs text-slate-400 max-w-xs">
+    <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-6 text-center bg-ink-900/50">
+      <p className="text-xs text-ink-muted max-w-xs">
         {label} a rencontré une erreur d'affichage.
       </p>
       <button
         type="button"
         onClick={reset}
-        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 text-[10px] uppercase tracking-widest font-bold transition-colors"
+        className="px-3 py-1.5 bg-ink-800 hover:bg-ink-700 rounded-lg text-ink text-[10px] uppercase tracking-widest font-bold transition-colors"
       >
         Réessayer
       </button>
@@ -294,7 +294,7 @@ function App() {
 
     if (!result && !loading) {
       return (
-        <p className="p-4 md:p-5 text-xs text-slate-500">
+        <p className="p-4 md:p-5 text-xs text-ink-dim">
           Lancez un scan depuis la barre de recherche pour voir l'estimation d'un quartier.
         </p>
       );
@@ -302,10 +302,10 @@ function App() {
 
     return (
       <>
-        <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
+        <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
           <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
           {result && !(result.surface && result.confiance) && (
-            <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
+            <div className="mt-2 text-center text-[10px] text-ink-dim uppercase tracking-widest">
               Données réelles ({result.count} biens)
             </div>
           )}
@@ -320,7 +320,7 @@ function App() {
               historique={priceHistory?.historique}
             />
             <div>
-              <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
+              <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">
                 Annonces récentes
               </p>
               <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} onSelectAnnonce={handleSelectAnnonce} />
@@ -336,13 +336,13 @@ function App() {
   function renderEstimationView() {
     if (!hasModelEstimate) {
       return (
-        <p className="p-4 md:p-5 text-xs text-slate-500">
+        <p className="p-4 md:p-5 text-xs text-ink-dim">
           Saisissez une surface dans la barre de recherche pour obtenir l'estimation personnalisée du modèle.
         </p>
       );
     }
     return (
-      <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
+      <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
         <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
       </div>
     );
@@ -357,19 +357,19 @@ function App() {
     return (
       <div className="p-4 md:p-5 space-y-4">
         <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 font-bold">Transports</h3>
+          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Transports</h3>
           {layersByGroup('transports').map((layer) => (
             <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} />
           ))}
         </div>
         <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 font-bold">Les 4 Cavaliers</h3>
+          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Les 4 Cavaliers</h3>
           {layersByGroup('contexte').map((layer) => (
             <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} count={layerCounts[layer.key]} />
           ))}
         </div>
         <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-slate-500 mb-2 font-bold">Offres Immobilières</h3>
+          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Offres Immobilières</h3>
           {layersByGroup('immobilier').map((layer) => (
             <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} count={layerCounts[layer.key]} />
           ))}
@@ -384,7 +384,7 @@ function App() {
   function renderFicheView() {
     if (selectedAnnonceId == null) {
       return (
-        <p className="p-4 md:p-5 text-xs text-slate-500">
+        <p className="p-4 md:p-5 text-xs text-ink-dim">
           Sélectionnez une annonce (liste ou carte) pour voir sa fiche.
         </p>
       );
@@ -408,7 +408,7 @@ function App() {
     return (
       <div className="p-4 md:p-5 space-y-4">
         <div>
-          <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">Ville</p>
+          <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">Ville</p>
           <div className="flex gap-2">
             {['lyon', 'lille'].map((v) => (
               <button
@@ -416,7 +416,7 @@ function App() {
                 type="button"
                 onClick={() => setVille(v)}
                 className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                  ville === v ? 'bg-violet-600 text-white' : 'bg-ink-900 border border-ink-700 text-slate-400 hover:text-slate-200'
+                  ville === v ? 'bg-accent text-white' : 'bg-ink-900 border border-ink-700 text-ink-muted hover:text-ink'
                 }`}
               >
                 {v}
@@ -428,15 +428,15 @@ function App() {
         <button
           type="button"
           onClick={() => document.getElementById('topbar-quartier-input')?.focus()}
-          className="w-full text-left bg-ink-900 border border-ink-700 hover:border-violet-500 rounded-xl px-3 py-2.5 text-[11px] text-slate-400 transition-colors"
+          className="w-full text-left bg-ink-900 border border-ink-700 hover:border-accent rounded-xl px-3 py-2.5 text-[11px] text-ink-muted transition-colors"
         >
-          Rechercher un quartier <span className="text-violet-400">→ utiliser la barre de recherche en haut</span>
+          Rechercher un quartier <span className="text-accent-light">→ utiliser la barre de recherche en haut</span>
         </button>
 
         <div>
-          <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">Recherches récentes</p>
+          <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">Recherches récentes</p>
           {recent.length === 0 ? (
-            <p className="text-[11px] text-slate-500">Aucune recherche récente.</p>
+            <p className="text-[11px] text-ink-dim">Aucune recherche récente.</p>
           ) : (
             <ul className="space-y-1.5">
               {recent.map((entry, i) => (
@@ -444,12 +444,12 @@ function App() {
                   <button
                     type="button"
                     onClick={() => handleScan(entry.quartier, entry.typeLocal || 'Tout', entry.surface || '')}
-                    className="w-full flex items-center justify-between gap-2 bg-ink-900 border border-ink-700 hover:border-violet-500 rounded-lg px-3 py-2 text-left transition-colors"
+                    className="w-full flex items-center justify-between gap-2 bg-ink-900 border border-ink-700 hover:border-accent rounded-lg px-3 py-2 text-left transition-colors"
                   >
-                    <span className="text-xs text-slate-200 truncate">
+                    <span className="text-xs text-ink truncate">
                       {entry.quartier}{entry.typeLocal ? ` · ${entry.typeLocal}` : ''}{entry.surface ? ` · ${entry.surface} m²` : ''}
                     </span>
-                    <span className="text-[9px] uppercase text-violet-400 font-bold shrink-0">Scanner</span>
+                    <span className="text-[9px] uppercase text-accent-light font-bold shrink-0">Scanner</span>
                   </button>
                 </li>
               ))}
@@ -493,7 +493,7 @@ function App() {
   const { overline: sheetOverline, title: sheetTitle } = panelSheetHeader();
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-ink-950 text-slate-200 overflow-hidden font-sans selection:bg-violet-500/30">
+    <div className="flex flex-col h-screen w-screen bg-ink-950 text-ink overflow-hidden font-sans selection:bg-accent/30">
 
       {/* Topbar (ORA-170) : logo, ville, recherche quartier, filtres type,
           surface et bouton SCAN — pleine largeur, persistante au-dessus de
@@ -517,7 +517,7 @@ function App() {
           id="panel-carte"
           role="tabpanel"
           aria-labelledby="tab-carte"
-          className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-slate-800`}
+          className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-ink-800`}
         >
           {shouldMountMap && (
             <ErrorBoundary fallback={makePanelFallback('La carte')}>
@@ -647,10 +647,10 @@ function App() {
             )}
 
             {(result || loading) && (
-            <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
+            <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
               <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
               {result && !(result.surface && result.confiance) && (
-                <div className="mt-2 text-center text-[10px] text-slate-500 uppercase tracking-widest">
+                <div className="mt-2 text-center text-[10px] text-ink-dim uppercase tracking-widest">
                   Données réelles ({result.count} biens)
                 </div>
               )}
@@ -658,8 +658,8 @@ function App() {
             )}
 
             {(result || loading) && (
-            <details className="hidden md:block border-b border-slate-800 group" open>
-              <summary className="px-4 md:px-5 py-2.5 bg-slate-900/20 text-[9px] uppercase text-slate-500 font-bold tracking-widest cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-slate-300 transition-colors">
+            <details className="hidden md:block border-b border-ink-800 group" open>
+              <summary className="px-4 md:px-5 py-2.5 bg-ink-900/20 text-[9px] uppercase text-ink-dim font-bold tracking-widest cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-ink transition-colors">
                 <span>Détails du quartier</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-180">
                   <polyline points="6 9 12 15 18 9"></polyline>
@@ -676,7 +676,7 @@ function App() {
                 />
 
                 <div>
-                  <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">
+                  <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">
                     Annonces récentes
                   </p>
                   <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} />
@@ -695,9 +695,9 @@ function App() {
           id="panel-annonces"
           role="tabpanel"
           aria-labelledby="tab-annonces"
-          className={`${activeTab === 'annonces' ? 'flex' : 'hidden'} md:hidden flex-col w-full h-full bg-slate-900/95 overflow-y-auto p-4`}
+          className={`${activeTab === 'annonces' ? 'flex' : 'hidden'} md:hidden flex-col w-full h-full bg-ink-900/95 overflow-y-auto p-4`}
         >
-          <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-3">
+          <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-3">
             Annonces récentes
           </p>
           <AnnoncesList focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} />
@@ -715,7 +715,7 @@ function App() {
         aria-expanded={isChatOpen}
         aria-controls="chat-panel"
         aria-label={isChatOpen ? 'Fermer le chat Immotep' : 'Ouvrir le chat Immotep'}
-        className="md:hidden fixed z-[60] bottom-20 right-4 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-lg shadow-indigo-900/40 flex items-center justify-center transition-all transform active:scale-95"
+        className="md:hidden fixed z-[60] bottom-20 right-4 w-14 h-14 rounded-full bg-accent hover:bg-accent-light active:bg-accent text-white shadow-lg shadow-accent/40 flex items-center justify-center transition-all transform active:scale-95"
       >
         {isChatOpen ? (
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -732,7 +732,7 @@ function App() {
       <nav
         role="tablist"
         aria-label="Navigation principale"
-        className="md:hidden flex-none h-14 bg-slate-950 border-t border-slate-800 flex items-stretch z-50"
+        className="md:hidden flex-none h-14 bg-ink-950 border-t border-ink-800 flex items-stretch z-50"
         onKeyDown={(e) => {
           if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
             e.preventDefault();
@@ -753,7 +753,7 @@ function App() {
           tabIndex={activeTab === 'carte' ? 0 : -1}
           onClick={() => setActiveTab('carte')}
           className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${
-            activeTab === 'carte' ? 'text-purple-400' : 'text-slate-500'
+            activeTab === 'carte' ? 'text-accent-light' : 'text-ink-dim'
           }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -772,7 +772,7 @@ function App() {
           tabIndex={activeTab === 'oracle' ? 0 : -1}
           onClick={() => setActiveTab('oracle')}
           className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${
-            activeTab === 'oracle' ? 'text-purple-400' : 'text-slate-500'
+            activeTab === 'oracle' ? 'text-accent-light' : 'text-ink-dim'
           }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -789,7 +789,7 @@ function App() {
           tabIndex={activeTab === 'annonces' ? 0 : -1}
           onClick={() => setActiveTab('annonces')}
           className={`flex-1 flex flex-col items-center justify-center gap-1 transition-colors ${
-            activeTab === 'annonces' ? 'text-purple-400' : 'text-slate-500'
+            activeTab === 'annonces' ? 'text-accent-light' : 'text-ink-dim'
           }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
