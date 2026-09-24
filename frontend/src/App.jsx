@@ -325,7 +325,7 @@ function App() {
               <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">
                 Annonces récentes
               </p>
-              <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} onSelectAnnonce={handleSelectAnnonce} />
+              <AnnoncesList ville={ville} compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} onSelectAnnonce={handleSelectAnnonce} />
             </div>
           </div>
         )}
@@ -587,7 +587,7 @@ function App() {
                 {activeView === 'calques' && renderCalquesView()}
                 {activeView === 'annonces' && (
                   <div className="p-4 md:p-5">
-                    <AnnoncesList onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} onSelectAnnonce={handleSelectAnnonce} />
+                    <AnnoncesList ville={ville} onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} onSelectAnnonce={handleSelectAnnonce} />
                   </div>
                 )}
                 {activeView === 'fiche' && renderFicheView()}
@@ -681,7 +681,7 @@ function App() {
                   <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">
                     Annonces récentes
                   </p>
-                  <AnnoncesList compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} />
+                  <AnnoncesList ville={ville} compact onItemsChange={handleAnnoncesItemsChange} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} />
                 </div>
               </div>
             </details>
@@ -702,7 +702,7 @@ function App() {
           <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-3">
             Annonces récentes
           </p>
-          <AnnoncesList focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} />
+          <AnnoncesList ville={ville} focusedQuartier={focusedQuartier} referencePrixM2={result?.quartierPrixM2} referenceType={result?.type} />
         </div>
       </div>
 

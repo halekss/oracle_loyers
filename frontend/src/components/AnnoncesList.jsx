@@ -41,7 +41,10 @@ const SORT_OPTIONS = [
 // `onSelectAnnonce` (optionnel, ORA-178) : transmis tel quel à chaque
 // AnnonceCard (`onOpenDetail`) — bascule sur la vue "Fiche" du rail au clic
 // sur "Détails" au lieu d'ouvrir la modale locale.
-export default function AnnoncesList({ compact = false, onItemsChange, focusedQuartier, referencePrixM2, referenceType, onSelectAnnonce }) {
+// `ville` (slug de la ville active, optionnel) : borne la liste, le filtre
+// quartier et donc les bornes de carte à cette ville — sans elle, Lyon et
+// Lille se mélangeaient et le recentrage carte (ORA-105) englobait les deux.
+export default function AnnoncesList({ compact = false, ville, onItemsChange, focusedQuartier, referencePrixM2, referenceType, onSelectAnnonce }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -68,7 +71,8 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
     api.getListings()
       .then((data) => {
         if (cancelled) return;
-        const uniqueSorted = [...new Set((data || []).map((item) => item.quartier).filter(Boolean))].sort();
+        const inVille = (item) => !ville || String(item.ville || '').toLowerCase() === ville.toLowerCase();
+        const uniqueSorted = [...new Set((data || []).filter(inVille).map((item) => item.quartier).filter(Boolean))].sort();
         setQuartierOptions(uniqueSorted);
       })
       .catch((err) => console.error("Quartiers indisponibles pour le filtre AnnoncesList :", err));
@@ -76,7 +80,13 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ville]);
+
+  // Changement de ville : un filtre quartier de l'ancienne ville n'a plus de sens.
+  useEffect(() => {
+    setQuartierFilter('');
+    setPage(1);
+  }, [ville]);
 
   // ORA-127 : saute directement sur les annonces du quartier scanné quand le
   // parent le demande (nouveau `token`), même si `quartier` est identique au
@@ -97,6 +107,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
 
       try {
         const data = await api.getAnnonces({
+          ville,
           page,
           perPage,
           quartier: quartierFilter || undefined,
@@ -122,7 +133,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
     return () => {
       cancelled = true;
     };
-  }, [page, perPage, quartierFilter, activeSort.sort, activeSort.order]);
+  }, [ville, page, perPage, quartierFilter, activeSort.sort, activeSort.order]);
 
   const handleQuartierChange = (e) => {
     setQuartierFilter(e.target.value);

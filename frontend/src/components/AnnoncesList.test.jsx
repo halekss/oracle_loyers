@@ -36,6 +36,20 @@ describe('AnnoncesList', () => {
     ]);
   });
 
+  it('bounds the list and the quartier filter to the active ville', async () => {
+    api.getListings.mockResolvedValue([
+      { quartier: 'Gerland', ville: 'Lyon' },
+      { quartier: 'Wazemmes', ville: 'Lille' },
+    ]);
+    api.getAnnonces.mockResolvedValue({ items: [makeAnnonce(1)], total: 1, total_pages: 1 });
+
+    render(<AnnoncesList ville="lyon" />);
+
+    await waitFor(() => expect(api.getAnnonces).toHaveBeenCalledWith(expect.objectContaining({ ville: 'lyon' })));
+    expect(await screen.findByRole('option', { name: 'Gerland' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Wazemmes' })).not.toBeInTheDocument();
+  });
+
   it('renders a loading skeleton while fetching', () => {
     api.getAnnonces.mockReturnValue(new Promise(() => {}));
     const { container } = render(<AnnoncesList />);

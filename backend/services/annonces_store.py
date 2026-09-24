@@ -211,7 +211,10 @@ def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, s
     where_clauses = []
     params = {}
     if ville:
-        where_clauses.append("ville = :ville")
+        # Insensible à la casse : le frontend transmet le slug ("lyon") alors
+        # que la colonne stocke le nom ("Lyon") — sans ça, filtrer par la ville
+        # active ne renvoie rien.
+        where_clauses.append("LOWER(ville) = LOWER(:ville)")
         params["ville"] = ville
     if quartier:
         where_clauses.append("quartier = :quartier")
