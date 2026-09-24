@@ -210,7 +210,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
       <div>
         {quartierFilterControl}
         {sortControl}
-        <div className="animate-pulse grid grid-cols-2 gap-3">
+        <div className="animate-pulse grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
           {Array.from({ length: compact ? 2 : 4 }).map((_, i) => (
             <div key={i} className="h-32 bg-slate-800 rounded-xl" />
           ))}
@@ -273,7 +273,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
           Aucun favori pour le moment sur cette page.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
           {displayedItems.map((annonce) => (
             <AnnonceCard key={annonce.id} annonce={annonce} referencePrixM2={referencePrixM2} referenceType={referenceType} onOpenDetail={onSelectAnnonce} />
           ))}

@@ -116,8 +116,8 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
       <AnnonceIllustration titre={titre} surface={surface} />
 
       <div className="p-3">
-        <div className="flex justify-between items-start gap-2">
-          <p className="text-sm font-bold text-white truncate">{titre || 'Annonce sans titre'}</p>
+        <div className="flex justify-between items-start gap-2 min-w-0">
+          <p className="min-w-0 text-sm font-bold text-white truncate">{titre || 'Annonce sans titre'}</p>
           <div className="flex items-center gap-1.5 shrink-0">
             {id != null && (
               <button
@@ -140,11 +140,11 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
           </div>
         </div>
 
-        <div className="mt-2 flex items-baseline justify-between gap-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-xl font-black text-white">{formatPrice(prix)} €</span>
+        <div className="mt-2 flex items-baseline justify-between gap-2 min-w-0">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <span className="shrink-0 text-xl font-black text-white">{formatPrice(prix)} €</span>
             {surface != null && (
-              <span className="text-xs text-slate-500">
+              <span className="min-w-0 truncate text-xs text-slate-500">
                 {surface} m²{prixM2 != null && ` · ${prixM2.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} €/m²`}
               </span>
             )}

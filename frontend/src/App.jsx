@@ -517,7 +517,7 @@ function App() {
           id="panel-carte"
           role="tabpanel"
           aria-labelledby="tab-carte"
-          className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-slate-800`}
+          className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] md:min-w-0 h-full relative border-r border-slate-800`}
         >
           {shouldMountMap && (
             <ErrorBoundary fallback={makePanelFallback('La carte')}>
@@ -538,7 +538,7 @@ function App() {
         {/* COLONNE DROITE DESKTOP — rail "classeur" + feuille de contenu
             (ORA-178, maquette nav-b3-classeur). Mobile garde sa propre
             colonne ci-dessous, inchangée. */}
-        <div className="hidden md:flex w-[40%] h-full relative z-10">
+        <div className="hidden md:flex w-[40%] min-w-0 h-full relative z-10">
           <PanelNav
             activeView={activeView}
             onChange={setActiveView}
