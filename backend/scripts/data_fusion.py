@@ -199,6 +199,11 @@ def run_fusion(ville_slug=None):
                     for col in config['text_cols'][1:]:
                         full_desc += " " + df[col].fillna('')
                 new_df['description_raw'] = full_desc
+                # ORA-161 : texte libre de la page détail (colonne `Description` des CSV
+                # scrapés, absente des CSV plus anciens ou de sites sans page détail
+                # scrapée : Orpi, Vizzit) ; distincte de `description`, qui reste le
+                # texte de carte nettoyé servant à la classification.
+                new_df['description_detail'] = df['Description'].fillna('') if 'Description' in df.columns else ''
                 new_df['type'] = full_desc.apply(extract_type)
 
                 if config['site'] == 'Orpi':
@@ -278,7 +283,8 @@ def run_fusion(ville_slug=None):
             lambda row: round(row['prix'] / row['surface'], 2) if row['surface'] and row['surface'] > 9 else None, axis=1
         )
 
-        cols = ['site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'code_postal', 'ville', 'latitude', 'longitude', 'url', 'image', 'date_dernier_scan']
+        cols = ['site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'description_detail', 'code_postal', 'ville', 'latitude', 'longitude', 'url', 'image', 'date_dernier_scan']
+        master_df['description_detail'] = master_df['description_detail'].fillna('')
         master_df = master_df[cols]
 
         output_file = os.path.join(data_dir, 'base_de_donnees_immo_complet.csv')

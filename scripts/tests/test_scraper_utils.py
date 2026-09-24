@@ -444,5 +444,104 @@ class GetChromeDriverOptionsTest(unittest.TestCase):
         fake_driver.set_page_load_timeout.assert_called_once_with(60)
 
 
+class CleanDescriptionTest(unittest.TestCase):
+    def test_collapses_whitespace_and_strips_the_section_label(self):
+        raw = "Description\n  A louer   à Lyon 3ème,\n quartier Montchat, appartement rénové."
+        self.assertEqual(scraper_utils.clean_description(raw), "A louer à Lyon 3ème, quartier Montchat, appartement rénové.")
+
+    def test_too_short_text_is_not_a_description(self):
+        self.assertEqual(scraper_utils.clean_description("Description"), "")
+        self.assertEqual(scraper_utils.clean_description(None), "")
+
+
+class _Logger:
+    def __init__(self):
+        self.messages = []
+
+    def info(self, msg, *args): self.messages.append(("info", msg % args))
+    def warning(self, msg, *args): self.messages.append(("warning", msg % args))
+    def error(self, msg, *args): self.messages.append(("error", msg % args))
+
+
+LONG_TEXT = "Une description suffisamment longue pour être retenue."
+
+
+class EnrichDescriptionsTest(unittest.TestCase):
+    """ORA-161 : visite des pages détail plafonnée, sans jamais insister en cas de blocage."""
+
+    def _rows(self, n, with_description=()):
+        # [Lien, Description] ; l'ordre d'insertion = du plus ancien au plus récent
+        return {f"u{i}": [f"u{i}", LONG_TEXT if i in with_description else ""] for i in range(n)}
+
+    def _run(self, rows, fetch, **kwargs):
+        return scraper_utils.enrich_descriptions(
+            rows, 0, 1, fetch, _Logger(), delay_range=(0, 0), sleep=lambda s: None, **kwargs
+        )
+
+    def test_fills_missing_descriptions_and_reports_stats(self):
+        rows = self._rows(3)
+        stats = self._run(rows, lambda url: LONG_TEXT if url != "u1" else "")
+
+        self.assertEqual(rows["u0"][1], LONG_TEXT)
+        self.assertEqual(rows["u1"][1], "")
+        self.assertEqual((stats["visited"], stats["found"], stats["empty"], stats["errors"]), (3, 2, 1, 0))
+
+    def test_skips_annonces_that_already_have_a_description(self):
+        visited = []
+        rows = self._rows(3, with_description={0, 2})
+
+        self._run(rows, lambda url: visited.append(url) or LONG_TEXT)
+
+        self.assertEqual(visited, ["u1"])
+
+    def test_cap_limits_visits_and_prefers_the_most_recent_annonces(self):
+        visited = []
+
+        stats = self._run(self._rows(5), lambda url: visited.append(url) or LONG_TEXT, max_per_run=2)
+
+        self.assertEqual(visited, ["u4", "u3"])
+        self.assertEqual(stats["candidates"], 5)
+
+    def test_zero_cap_disables_the_detail_visits(self):
+        visited = []
+        self._run(self._rows(3), lambda url: visited.append(url) or LONG_TEXT, max_per_run=0)
+        self.assertEqual(visited, [])
+
+    def test_aborts_after_consecutive_errors_but_a_success_resets_the_streak(self):
+        def flaky(url):
+            raise RuntimeError("403")
+
+        stats = self._run(self._rows(10), flaky)
+
+        self.assertTrue(stats["aborted"])
+        self.assertEqual(stats["visited"], scraper_utils.MAX_CONSECUTIVE_DETAIL_ERRORS)
+
+        outcomes = iter([RuntimeError("x"), RuntimeError("x"), LONG_TEXT, RuntimeError("x"), RuntimeError("x"), LONG_TEXT])
+
+        def alternating(url):
+            outcome = next(outcomes)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        stats = self._run(self._rows(6), alternating)
+
+        self.assertFalse(stats["aborted"])
+        self.assertEqual((stats["visited"], stats["found"], stats["errors"]), (6, 2, 4))
+
+
+class LoadDetailsConfigTest(unittest.TestCase):
+    def test_defaults_when_the_block_is_missing(self):
+        import json, tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+            json.dump({"villes": {}}, f)
+        self.assertEqual(scraper_utils.load_details_config(f.name), scraper_utils.DEFAULT_DETAILS_CONFIG)
+
+    def test_committed_config_declares_a_positive_cap(self):
+        config = scraper_utils.load_details_config()
+        self.assertGreater(config["max_per_run"], 0)
+        self.assertLessEqual(config["delay_min_s"], config["delay_max_s"])
+
+
 if __name__ == "__main__":
     unittest.main()

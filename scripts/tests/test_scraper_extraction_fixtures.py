@@ -24,6 +24,7 @@ from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from scraper_utils import clean_description
 import scraper_century_21
 import scraper_orpi
 import scraper_pap
@@ -306,6 +307,51 @@ class ParuVenduExtractionTest(unittest.TestCase):
         annonce = soup.select_one("article")
 
         self.assertIsNone(scraper_paruvendu.find_bs4(annonce, scraper_paruvendu.TITRE_SELECTORS))
+
+
+class DetailDescriptionExtractionTest(unittest.TestCase):
+    """ORA-161 : description libre lue sur la page détail de l'annonce."""
+
+    def _description(self, fixture, selectors):
+        soup = load_fixture(fixture)
+        for selector in selectors:
+            for element in soup.select(selector):
+                text = clean_description(element.get_text(" ", strip=True))
+                if text:
+                    return text
+        return ""
+
+    def test_century21_uses_the_real_description_not_the_ai_summary(self):
+        text = self._description("century21_detail.html", scraper_century_21.DESCRIPTION_SELECTORS)
+
+        self.assertTrue(text.startswith("A louer à Lyon 3ème, quartier Montchat"))
+        self.assertNotIn("Résumé généré", text)
+        self.assertFalse(text.lower().startswith("description"))
+
+    def test_paruvendu_description_excludes_site_navigation(self):
+        soup = load_fixture("paruvendu_detail.html")
+
+        text = scraper_paruvendu.find_description_bs4(soup)
+
+        self.assertIn("151 AVENUE BERTHELOT 69007 LYON", text)
+        self.assertNotIn("Ventes immobilières", text)
+
+    def test_paruvendu_page_without_description_gives_empty_string(self):
+        soup = BeautifulSoup("<html><body><p>Erreur 410</p></body></html>", "html.parser")
+        self.assertEqual(scraper_paruvendu.find_description_bs4(soup), "")
+
+    def test_pap_and_seloger_selectors_match_their_fixture_templates(self):
+        self.assertIn("Part-Dieu", self._description("pap_detail.html", scraper_pap.DESCRIPTION_SELECTORS))
+        seloger = self._description("seloger_detail.html", scraper_seloger.DESCRIPTION_SELECTORS)
+        self.assertIn("Bellecour", seloger)
+        self.assertFalse(seloger.lower().startswith("description"))
+
+    def test_every_scraper_appends_a_description_column_last(self):
+        for module, name in ((scraper_century_21, 'century21'), (scraper_pap, 'pap'), (scraper_seloger, 'seloger'), (scraper_paruvendu, 'paruvendu')):
+            with open(module.__file__, encoding="utf-8") as f:
+                source = f.read()
+            self.assertRegex(source, r"CSV_HEADER = \[[^\]]*'DerniereVue', 'Description'\]", name)
+
 
 
 if __name__ == "__main__":

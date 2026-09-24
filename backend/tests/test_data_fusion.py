@@ -248,6 +248,46 @@ class RunFusionDateDernierScanTest(unittest.TestCase):
         self.assertTrue(result["date_dernier_scan"].isna().all())
 
 
+class RunFusionDescriptionDetailTest(unittest.TestCase):
+    """ORA-161 : la description libre scrapée sur la page détail (colonne
+    `Description`) atteint le fichier combiné sous `description_detail`,
+    sans altérer `description` (texte de carte, base de la classification)."""
+
+    def _write_century21_csv(self, data_dir, columns, rows):
+        pd.DataFrame(rows, columns=columns).to_csv(os.path.join(data_dir, "annonces_lyon_century21.csv"), index=False)
+
+    def test_propagates_the_detail_description(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self._write_century21_csv(
+                tmp_dir,
+                ["Titre", "Prix", "Lieu_Surface", "Lien", "Image", "DerniereVue", "Description"],
+                [["T2 Lyon 69003 45 m2", "700 €", "45 m2", "https://example.test/1", "", "2026-08-06",
+                  "A louer à Lyon 3ème, quartier Montchat : rue Cyrano."]],
+            )
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
+
+        self.assertEqual(result.loc[0, "description_detail"], "A louer à Lyon 3ème, quartier Montchat : rue Cyrano.")
+        self.assertNotIn("Montchat", str(result.loc[0, "description"]))
+
+    def test_csv_without_description_column_gives_an_empty_detail(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self._write_century21_csv(
+                tmp_dir,
+                ["Titre", "Prix", "Lieu_Surface", "Lien", "Image", "DerniereVue"],
+                [["T2 Lyon 69003 45 m2", "700 €", "45 m2", "https://example.test/1", "", "2026-08-06"]],
+            )
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
+
+        self.assertIn("description_detail", result.columns)
+        self.assertTrue(result["description_detail"].isna().all())
+
+
 class RunFusionSelogerLieuTest(unittest.TestCase):
     """ORA-71 POC follow-up : run_fusion() doit résoudre le vrai lieu
     SeLoger (voire exclure l'annonce si introuvable) plutôt que de tout

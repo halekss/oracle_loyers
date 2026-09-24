@@ -9,6 +9,7 @@ import sys
 from scraper_utils import (
     atomic_csv_writer,
     find_first_image_url,
+    enrich_descriptions,
     get_chrome_driver,
     get_scraper_logger,
     load_existing_rows,
@@ -16,6 +17,7 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    selenium_description_fetcher,
     should_continue_pagination,
     today_iso,
 )
@@ -39,6 +41,16 @@ LIEU_SELECTORS = [
 PRIX_SELECTORS = [
     ".item-price", "[class*='item-price']", "[class*='price']", "[class*='prix']",
 ]
+# ORA-161 : description libre de la page détail. NON VÉRIFIÉ sur le DOM réel
+# (PAP répond par un défi Cloudflare à un navigateur non furtif) : sélecteurs
+# issus du gabarit connu de PAP + repli générique ; le taux de descriptions
+# vides loggué par enrich_descriptions signale un sélecteur à corriger.
+DESCRIPTION_SELECTORS = [
+    "div.item-description",
+    "[class*='item-description']",
+    "[class*='description']",
+]
+
 DETAILS_SELECTORS = [
     ".item-tags", "[class*='item-tags']", "[class*='tags']", "[class*='detail']",
 ]
@@ -72,8 +84,9 @@ if __name__ == '__main__':
     driver = get_chrome_driver(ignore_certificate_errors=False, user_agent=pick_user_agent(), proxy=pick_proxy())
     wait = WebDriverWait(driver, 60)
 
-    CSV_HEADER = ['Lieu', 'Prix', 'Détails', 'Lien', 'Image', 'DerniereVue']
+    CSV_HEADER = ['Lieu', 'Prix', 'Détails', 'Lien', 'Image', 'DerniereVue', 'Description']
     LIEN_INDEX = CSV_HEADER.index('Lien')
+    DESCRIPTION_INDEX = CSV_HEADER.index('Description')
     DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
 
     existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
@@ -165,7 +178,7 @@ if __name__ == '__main__':
                 image = find_first_image_url(annonce, base_url=driver.current_url)
 
                 logger.info("Annonce trouvée : %s | %s -- %s", lieu, details, prix)
-                rows_by_lien[lien] = [lieu, prix, details, lien, image, today]
+                rows_by_lien[lien] = [lieu, prix, details, lien, image, today, ""]
                 liens_vus.add(lien)
                 compteur += 1
 
@@ -184,6 +197,11 @@ if __name__ == '__main__':
         else:
             time.sleep(random.uniform(2, 4))
         page_num += 1
+
+    # ORA-161 : description libre depuis la page détail (plafonnée, cf. scraper_utils)
+    enrich_descriptions(rows_by_lien, LIEN_INDEX, DESCRIPTION_INDEX,
+                        selenium_description_fetcher(driver, DESCRIPTION_SELECTORS), logger)
+    checkpoint()
 
     driver.quit()
 

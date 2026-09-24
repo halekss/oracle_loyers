@@ -8,6 +8,8 @@ from urllib.parse import urljoin
 
 from scraper_utils import (
     atomic_csv_writer,
+    clean_description,
+    enrich_descriptions,
     get_scraper_logger,
     load_existing_rows,
     load_site_config,
@@ -98,11 +100,38 @@ def find_image_bs4(soup_elem, base_url=None):
 def fetch_page(url):
     return requests.get(url, headers=headers, timeout=15, proxies=PROXIES)
 
+
+# ORA-161 : description libre de la page détail (relevé sur le DOM réel le
+# 2026-09-24 : `#txtAnnonceTrunc`, contient l'adresse complète de l'annonce).
+DESCRIPTION_SELECTORS = ["#txtAnnonceTrunc", "div.txt_annonceauto", "[class*='txt_annonce']"]
+
+
+def find_description_bs4(soup):
+    """Équivalent BeautifulSoup de `selenium_description_fetcher` : premier
+    texte de description non vide de la page détail, "" si aucun."""
+    for selector in DESCRIPTION_SELECTORS:
+        for element in soup.select(selector):
+            text = clean_description(element.get_text(" ", strip=True))
+            if text:
+                return text
+    return ""
+
+
+def fetch_description(url):
+    """Description libre d'une annonce ParuVendu ("" si l'annonce n'existe plus
+    ou n'a pas de texte) ; lève si la page est inaccessible."""
+    response = fetch_page(url)
+    if response.status_code in (404, 410):  # annonce retirée : pas une erreur de blocage
+        return ""
+    response.raise_for_status()
+    return find_description_bs4(BeautifulSoup(response.text, "html.parser"))
+
 if __name__ == '__main__':
     logger.info("Lancement du Scraper ParuVendu (Mode Rapide) (%s)...", site_config['ville_nom'])
 
-    CSV_HEADER = ['Titre', 'Prix', 'Lien', 'Image', 'DerniereVue']
+    CSV_HEADER = ['Titre', 'Prix', 'Lien', 'Image', 'DerniereVue', 'Description']
     LIEN_INDEX = CSV_HEADER.index('Lien')
+    DESCRIPTION_INDEX = CSV_HEADER.index('Description')
     DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
 
     existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
@@ -179,7 +208,7 @@ if __name__ == '__main__':
 
                 image = find_image_bs4(annonce, base_url=url_page)
 
-                rows_by_lien[lien] = [titre, prix, lien, image, today]
+                rows_by_lien[lien] = [titre, prix, lien, image, today, ""]
                 liens_vus.add(lien)
                 compteur_page += 1
                 logger.info("Annonce trouvée : %s -- %s", titre, prix)
@@ -199,6 +228,10 @@ if __name__ == '__main__':
         else:
             time.sleep(random.uniform(1.5, 3))
         page_num += 1
+
+    # ORA-161 : description libre depuis la page détail (plafonnée, cf. scraper_utils)
+    enrich_descriptions(rows_by_lien, LIEN_INDEX, DESCRIPTION_INDEX, fetch_description, logger)
+    checkpoint()
 
     if total_cards_vues == 0:
         logger.error("0 annonce trouvée pour ParuVendu. Le site a peut-être changé de structure.")
