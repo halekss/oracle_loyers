@@ -12,6 +12,8 @@ services:
       - ./scripts:/scripts:ro
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Clé des tuiles CARTO : reste côté serveur (proxy /api/tiles), jamais envoyée au navigateur.
+      - CARTO_API_KEY=${CARTO_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
       - GEMINI_MAX_OUTPUT_TOKENS=${GEMINI_MAX_OUTPUT_TOKENS:-800}
       # Doit suivre FRONTEND_PORT : le navigateur appelle ce backend depuis
@@ -169,7 +171,6 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
-      - CARTO_API_KEY=${CARTO_API_KEY:-}
     volumes:
       - ./Airflow/dags:/opt/airflow/dags
       - airflow-logs-volume:/opt/airflow/logs

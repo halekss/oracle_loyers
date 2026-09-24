@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import pandas as pd
+import requests
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -16,7 +17,7 @@ from services.cavaliers_factors import detail_cavaliers, summarize_cavaliers
 from services.price_history import compute_price_history
 from services.quartier_search import resolve_quartier_filter
 from services.pdf_report import render_estimation_pdf
-from services import annonces_store
+from services import annonces_store, tile_proxy
 from schemas import (
     ChatRequestSchema,
     QuartierStatsRequestSchema,
@@ -145,6 +146,16 @@ def get_chat_rate_limit():
     pour tout le monde. Configurable via RATE_LIMIT_CHAT.
     """
     return os.environ.get('RATE_LIMIT_CHAT', '15 per hour')
+
+
+def get_tiles_rate_limit():
+    """
+    Limite dédiée aux tuiles du fond de carte : bien plus large que le défaut
+    global (une carte charge des dizaines de tuiles par déplacement), mais
+    bornée pour qu'un tiers ne puisse pas vider le quota CARTO via ce proxy.
+    Configurable via RATE_LIMIT_TILES.
+    """
+    return os.environ.get('RATE_LIMIT_TILES', '3000 per hour')
 
 
 @app.errorhandler(429)
@@ -817,6 +828,24 @@ def predict():
         "quartier_detecte": result["quartier"],
         "type_local_detecte": result["type_local"],
     })
+
+@app.route('/api/tiles/<int:z>/<int:x>/<int:y>.png', defaults={'retina': False})
+@app.route('/api/tiles/<int:z>/<int:x>/<int:y>@2x.png', defaults={'retina': True})
+@limiter.limit(get_tiles_rate_limit)
+def get_map_tile(z, x, y, retina):
+    """
+    Proxy des tuiles CARTO du fond de carte : la clé API reste côté serveur
+    (CARTO_API_KEY), le navigateur ne la voit jamais (cf. services/tile_proxy.py).
+    """
+    if not tile_proxy.is_valid_tile(z, x, y):
+        return jsonify({"error": "Tuile hors limites"}), 404
+    try:
+        content = tile_proxy.get_tile(z, x, y, retina)
+    except requests.RequestException as exc:
+        logger.warning("Tuile CARTO indisponible (%s/%s/%s) : %s", z, x, y, type(exc).__name__)
+        return jsonify({"error": "Fond de carte indisponible"}), 502
+    return Response(content, mimetype='image/png', headers={'Cache-Control': 'public, max-age=86400'})
+
 
 @app.route('/api/chat', methods=['POST'])
 @limiter.limit(get_chat_rate_limit)

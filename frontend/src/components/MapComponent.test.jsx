@@ -1,5 +1,5 @@
 import { createRef } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
@@ -90,6 +90,24 @@ describe('MapComponent', () => {
       expect.objectContaining({ type: 'FLY_TO' }),
       window.location.origin,
     );
+  });
+
+  describe('fond de carte via le proxy du backend (SET_TILE_URL)', () => {
+    it('sends the backend tile proxy URL to the page origin when the iframe loads, never a key', () => {
+      render(<MapComponent center={null} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
+      fireEvent.load(iframe);
+
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'SET_TILE_URL', url: 'http://localhost:5000/api/tiles/{z}/{x}/{y}{r}.png' },
+        window.location.origin,
+      );
+      const tileMessages = postMessage.mock.calls.map(([message]) => message).filter((m) => m.type === 'SET_TILE_URL');
+      expect(JSON.stringify(tileMessages)).not.toMatch(/key/i);
+    });
   });
 
   it('sends TOGGLE_LAYER to the page origin instead of any origin (ORA-125)', async () => {

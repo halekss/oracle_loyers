@@ -44,6 +44,22 @@ Recentre/zoome la carte sur une bounding-box (transition animée, `flyToBounds`)
 
 **Traité par** : `build_bridge_message_script` → `<map>.flyToBounds(bounds)`.
 
+### `SET_TILE_URL`
+
+Indique à la carte où aller chercher ses tuiles : le **proxy de tuiles du backend** (`GET /api/tiles/<z>/<x>/<y>.png`). La clé API CARTO reste côté serveur (`CARTO_API_KEY`), le navigateur ne la voit jamais — ni dans ce message, ni dans le HTML de la carte (versionné), ni dans les requêtes réseau. L'URL dépend du déploiement (`VITE_API_URL`), d'où un envoi au runtime plutôt qu'une écriture dans la carte générée ; avant ce message, la couche pointe sur un pixel transparent inline (aucune requête).
+
+**Émis par** : `MapComponent.jsx`, à chaque chargement de l'iframe (`handleIframeLoad`).
+
+```json
+{ "type": "SET_TILE_URL", "url": "http://localhost:5000/api/tiles/{z}/{x}/{y}{r}.png" }
+```
+
+* `url` : modèle d'URL Leaflet ; doit commencer par `http://` ou `https://`, finir par `/{z}/{x}/{y}{r}.png` et ne contenir ni espace, ni guillemet, ni chevron, sinon le message est ignoré.
+
+**Traité par** : `build_bridge_message_script` → `setUrl(url)` sur chaque `L.TileLayer` de la carte.
+
+**Côté backend** : `services/tile_proxy.py` appelle `basemaps.cartocdn.com` avec la clé, met les tuiles en cache mémoire, limite le débit (`RATE_LIMIT_TILES`, 3000/h par défaut) et valide `z`/`x`/`y` ; sans clé configurée, CARTO renvoie un filigrane « API KEY REQUIRED » (dégradation visible, pas une panne).
+
 ### `TOGGLE_LAYER`
 
 Active/désactive un calque Folium (`LayerControl`) depuis le panneau de contrôle React, sans dupliquer ce panneau dans la carte elle-même (masqué via CSS).
