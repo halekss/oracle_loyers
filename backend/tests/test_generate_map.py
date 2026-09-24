@@ -382,97 +382,6 @@ class FilterByVilleTest(unittest.TestCase):
         self.assertEqual(len(result), 2)
 
 
-BANDS = {
-    'thresholdPct': 5,
-    'bands': {
-        'below': {'label': 'Sous le marché', 'color': '#22c55e'},
-        'within': {'label': 'Dans le marché', 'color': '#facc15'},
-        'above': {'label': 'Au-dessus du marché', 'color': '#e9003a'},
-    },
-}
-
-
-class MarketBandTest(unittest.TestCase):
-    """ORA-165 : seuils ±5 % (mêmes bornes que services/marketBand.js)."""
-
-    def test_thresholds(self):
-        cases = [(-30, 'below'), (-5.1, 'below'), (-5, 'within'), (0, 'within'), (5, 'within'), (5.1, 'above'), (40, 'above')]
-        for ecart, expected in cases:
-            self.assertEqual(generate_map.market_band(ecart, 5), expected, ecart)
-
-    def test_shared_config_uses_a_5_percent_threshold(self):
-        self.assertEqual(generate_map.load_market_bands()['thresholdPct'], 5)
-
-    def test_ecart_vs_median(self):
-        self.assertEqual(generate_map.ecart_vs_median(900, 800), 12)
-        self.assertEqual(generate_map.ecart_vs_median(700, 800), -12)
-        self.assertIsNone(generate_map.ecart_vs_median(700, 0))
-        self.assertIsNone(generate_map.ecart_vs_median('n/a', 800))
-
-
-class ReferenceMediansTest(unittest.TestCase):
-    def test_uses_quartier_median_or_falls_back_to_type_median(self):
-        df = pd.DataFrame({
-            'quartier': ['A', 'A', 'A', 'B'],
-            'type_local': ['T2'] * 4,
-            'prix': [700, 800, 900, 1500],
-        })
-
-        medians = generate_map.compute_reference_medians(df)
-
-        self.assertEqual(medians.iloc[0], 800)   # A : 3 annonces -> médiane du quartier
-        self.assertEqual(medians.iloc[3], 850)   # B : 1 annonce -> médiane du type (700, 800, 900, 1500)
-
-
-class PricePillAndGroupingTest(unittest.TestCase):
-    def test_pill_colored_by_band_and_escaped(self):
-        html_pill = generate_map.build_price_pill_html('<b>765</b>', 'below', BANDS)
-
-        self.assertIn('#22c55e', html_pill)
-        self.assertIn('&lt;b&gt;765&lt;/b&gt;', html_pill)
-        self.assertNotIn('oracle-pill-count', html_pill)
-
-    def test_group_pill_shows_the_count(self):
-        self.assertIn('>3</span>', generate_map.build_price_pill_html('850', 'above', BANDS, count=3))
-
-    def test_groups_listings_with_identical_coordinates_only(self):
-        entries = [
-            {'lat': 45.75, 'lon': 4.85, 'id': 1},
-            {'lat': 45.750001, 'lon': 4.850001, 'id': 2},  # même point à ~0,1 m
-            {'lat': 45.76, 'lon': 4.86, 'id': 3},
-        ]
-
-        groups = generate_map.group_by_exact_position(entries)
-
-        self.assertEqual([[e['id'] for e in g] for g in groups], [[1, 2], [3]])
-
-    def test_group_popup_lists_rows_and_vizzit_mention(self):
-        group = [
-            {'type_local': 'T2', 'surface': 45, 'prix': '850', 'ecart': -10, 'site': 'Vizzit', 'url': 'https://x.test/a', 'annonce_id': 7},
-            {'type_local': 'T3', 'surface': 70, 'prix': '1200', 'ecart': 12, 'site': 'Vizzit', 'url': None, 'annonce_id': None},
-        ]
-
-        popup = generate_map.build_group_popup_html(group, BANDS)
-
-        self.assertIn('2 annonces · même adresse', popup)
-        self.assertIn('45 m²', popup)
-        self.assertIn('-10 %', popup)
-        self.assertIn('+12 %', popup)
-        self.assertIn('Géolocalisées sur la même rue (Vizzit)', popup)
-        self.assertIn("ANNONCE_CLICK", popup)
-
-    def test_group_popup_without_vizzit_uses_generic_note(self):
-        group = [
-            {'type_local': 'T2', 'surface': 45, 'prix': '850', 'ecart': 0, 'site': 'PAP'},
-            {'type_local': 'T2', 'surface': 46, 'prix': '860', 'ecart': 1, 'site': 'Vizzit'},
-        ]
-
-        popup = generate_map.build_group_popup_html(group, BANDS)
-
-        self.assertNotIn('Vizzit)', popup)
-        self.assertIn('Coordonnées identiques', popup)
-
-
 class QuartierLabelsAndLegendTest(unittest.TestCase):
     def test_labels_are_uppercase_and_skip_fallback_quartiers(self):
         df = pd.DataFrame({
@@ -486,19 +395,17 @@ class QuartierLabelsAndLegendTest(unittest.TestCase):
         self.assertEqual([l[0] for l in labels], ['AINAY'])
         self.assertAlmostEqual(labels[0][1], 45.76)
 
-    def test_legend_lists_layers_bands_and_thresholds(self):
+    def test_legend_lists_the_layers_of_the_shared_config(self):
         layers = [
             {'name': 'Immo T2', 'label': 'Apparts T2', 'group': 'immobilier', 'uiColor': '#22c55e'},
             {'name': 'Metro', 'label': 'Métro', 'group': 'transports', 'uiColor': '#818181'},
         ]
 
-        legend = generate_map.build_legend_html(layers, BANDS)
+        legend = generate_map.build_legend_html(layers)
 
         self.assertIn("data-layer='Immo T2'", legend)
-        self.assertIn('Écart au loyer médian du quartier', legend)
-        for label in ('Sous le marché', 'Dans le marché', 'Au-dessus du marché'):
-            self.assertIn(label, legend)
-        self.assertIn('−5 %', legend)
+        self.assertIn("data-layer='Metro'", legend)
+        self.assertNotIn('Écart au loyer médian', legend)
 
     def test_scale_script_waits_for_load_and_tracks_layers(self):
         script = generate_map.build_legend_and_scale_script('map_abc', '<div class="oracle-legend"></div>')
