@@ -225,6 +225,31 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("map_abc123.flyToBounds(", script)
         self.assertIn("e.data.bounds", script)
 
+    def test_handles_set_tile_key_and_validates_the_key_before_using_it(self):
+        """La clé CARTO arrive au runtime (jamais écrite dans le HTML versionné) :
+        validée par regex avant d'être concaténée à l'URL des tuiles."""
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("SET_TILE_KEY", script)
+        self.assertIn("[A-Za-z0-9_-]+", script)
+        self.assertIn("map_abc123.eachLayer(", script)
+        self.assertIn("basemaps.cartocdn.com", script)
+        self.assertIn("setUrl(", script)
+
+
+class CartoTilesNeverEmbedTheKeyTest(unittest.TestCase):
+    def test_tile_url_has_no_key_even_when_the_env_var_is_set(self):
+        import importlib
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"CARTO_API_KEY": "secret-key-123"}):
+            reloaded = importlib.reload(generate_map)
+            try:
+                self.assertNotIn("key=", reloaded.CARTO_DARK_MATTER_URL)
+                self.assertNotIn("secret-key-123", reloaded.CARTO_DARK_MATTER_URL)
+            finally:
+                importlib.reload(generate_map)
+
 
 class LoadLayersConfigTest(unittest.TestCase):
     """ORA-130 : la liste des calques (nom Folium/TOGGLE_LAYER, visibilité par

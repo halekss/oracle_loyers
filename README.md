@@ -165,6 +165,8 @@ Les variables utiles (`GEMINI_API_KEY`, `GEMINI_MODEL`, `CORS_ORIGINS`, etc.) so
 
 Le frontend lit l'URL de l'API via Vite (`VITE_API_URL`, voir [`.env.example`](./.env.example)). Sur Render, cette variable est obligatoire. En local seulement, si elle n'est pas définie, le frontend utilise `http://localhost:5000/api`.
 
+Le fond de carte CARTO demande une clé (`CARTO_API_KEY` dans `.env`, transmise par `docker-compose` au frontend sous le nom `VITE_CARTO_API_KEY`) : sans elle, un filigrane « API KEY REQUIRED » apparaît. La clé est envoyée à la carte au chargement (message `SET_TILE_KEY`, cf. [`MAP_CONTRACT.md`](./MAP_CONTRACT.md)) et n'est jamais écrite dans les cartes générées, qui sont versionnées. Sur Render, définir `VITE_CARTO_API_KEY` au build du frontend.
+
 ### 🚚 Déploiement continu (CD, ORA-64)
 
 Le job `deploy` de `.github/workflows/ci.yml` déclenche un déploiement Render (via son [Deploy Hook](https://render.com/docs/deploy-hooks)) uniquement quand **tous** les jobs de CI (`backend`, `scrapers`, `frontend`, `e2e`, `dependency-scan`) ont réussi sur un push vers `main` — `needs: [...]` + `if: success() && ...` : un échec de test (ou une vulnérabilité détectée par `dependency-scan`) bloque bien le déploiement (le job `deploy` est alors sauté, pas juste marqué en échec).

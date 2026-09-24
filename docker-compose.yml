@@ -48,6 +48,9 @@ services:
       # ce suffixe, chaque appel visait une URL inexistante (404 -> "Requête
       # invalide" côté frontend, voir services/api.js#classifyResponseError).
       - VITE_API_URL=http://localhost:5000/api
+      # Clé des tuiles CARTO (fond de carte), transmise à la carte au runtime :
+      # jamais écrite dans les cartes générées (versionnées). Voir MAP_CONTRACT.md.
+      - VITE_CARTO_API_KEY=${CARTO_API_KEY:-}
     depends_on:
       - backend
     # Vite écoute sur le port publié (et non 5173) pour que l'URL affichée
@@ -169,7 +172,6 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
-      - CARTO_API_KEY=${CARTO_API_KEY:-}
     volumes:
       - ./Airflow/dags:/opt/airflow/dags
       - airflow-logs-volume:/opt/airflow/logs

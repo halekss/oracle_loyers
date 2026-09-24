@@ -186,7 +186,18 @@ const MapComponent = forwardRef(function MapComponent(
     sendLayerCommand(layerKey, newState);
   };
 
+  // Clé CARTO des tuiles (VITE_CARTO_API_KEY, alimentée par CARTO_API_KEY du
+  // .env racine) : envoyée à la carte au chargement plutôt qu'écrite dans le
+  // HTML généré, qui est versionné (MAP_CONTRACT.md, SET_TILE_KEY).
+  const sendTileKey = () => {
+    const key = import.meta.env.VITE_CARTO_API_KEY;
+    if (key && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: 'SET_TILE_KEY', key }, window.location.origin);
+    }
+  };
+
   const handleIframeLoad = () => {
+    sendTileKey();
     Object.keys(layers).forEach(key => sendLayerCommand(key, layers[key]));
   };
 

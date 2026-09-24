@@ -1,5 +1,5 @@
 import { createRef } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
@@ -90,6 +90,41 @@ describe('MapComponent', () => {
       expect.objectContaining({ type: 'FLY_TO' }),
       window.location.origin,
     );
+  });
+
+  describe('clé CARTO des tuiles (SET_TILE_KEY)', () => {
+    const renderWithFakeWindow = () => {
+      render(<MapComponent center={null} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+      fireEvent.load(iframe);
+      return postMessage;
+    };
+
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('sends the key to the page origin when the iframe loads', () => {
+      vi.stubEnv('VITE_CARTO_API_KEY', 'cb1_test-key');
+
+      const postMessage = renderWithFakeWindow();
+
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'SET_TILE_KEY', key: 'cb1_test-key' },
+        window.location.origin,
+      );
+    });
+
+    it('sends nothing when no key is configured', () => {
+      vi.stubEnv('VITE_CARTO_API_KEY', '');
+
+      const postMessage = renderWithFakeWindow();
+
+      expect(postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'SET_TILE_KEY' }),
+        expect.anything(),
+      );
+    });
   });
 
   it('sends TOGGLE_LAYER to the page origin instead of any origin (ORA-125)', async () => {

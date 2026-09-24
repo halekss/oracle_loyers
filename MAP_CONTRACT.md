@@ -44,6 +44,22 @@ Recentre/zoome la carte sur une bounding-box (transition animée, `flyToBounds`)
 
 **Traité par** : `build_bridge_message_script` → `<map>.flyToBounds(bounds)`.
 
+### `SET_TILE_KEY`
+
+Fournit à la carte la clé API CARTO de ses tuiles, au runtime. La carte est un fichier HTML **versionné** : la clé n'y est jamais écrite (sinon elle finirait dans l'historique git) ; sans ce message, les tuiles s'affichent avec le filigrane « API KEY REQUIRED ».
+
+**Émis par** : `MapComponent.jsx`, à chaque chargement de l'iframe (`handleIframeLoad`), uniquement si `VITE_CARTO_API_KEY` est définie (alimentée par `CARTO_API_KEY` du `.env` via `docker-compose`, ou définie au build du frontend hors compose).
+
+```json
+{ "type": "SET_TILE_KEY", "key": "cb1_xxxxxxxx" }
+```
+
+* `key` : clé CARTO ; doit correspondre à `^[A-Za-z0-9_-]+$`, sinon le message est ignoré (elle est concaténée à une URL).
+
+**Traité par** : `build_bridge_message_script` → `setUrl(<url sans query> + '?key=' + key)` sur chaque `L.TileLayer` dont l'URL pointe vers `basemaps.cartocdn.com`.
+
+**Sécurité** : la clé reste visible côté navigateur (elle l'a toujours été : c'est un paramètre d'URL de tuile) — la restreindre à son domaine dans le tableau de bord CARTO. Le message est soumis à la même vérification d'origine que les autres.
+
 ### `TOGGLE_LAYER`
 
 Active/désactive un calque Folium (`LayerControl`) depuis le panneau de contrôle React, sans dupliquer ce panneau dans la carte elle-même (masqué via CSS).

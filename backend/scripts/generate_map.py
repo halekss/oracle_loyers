@@ -24,12 +24,11 @@ ANNONCES_DB_PATH = os.path.join(DATA_DIR, 'annonces.db')
 
 # CARTO exige désormais une clé API sur ses tuiles gratuites (basemaps.cartocdn.com,
 # depuis fin août 2026) : sans elle, les tuiles s'affichent quand même (HTTP 200)
-# mais avec un filigrane "API KEY REQUIRED" incrusté dans l'image. Clé gratuite
-# (5M requêtes/mois) à obtenir sur https://carto.com/basemaps/apikey/.
-CARTO_API_KEY = os.environ.get('CARTO_API_KEY', '')
+# mais avec un filigrane "API KEY REQUIRED" incrusté dans l'image. La clé n'est
+# JAMAIS écrite dans la carte générée (fichier versionné) : le frontend l'envoie
+# à l'iframe au chargement via le message SET_TILE_KEY (MAP_CONTRACT.md), depuis
+# VITE_CARTO_API_KEY. Clé gratuite (5M requêtes/mois) : https://carto.com/basemaps/apikey/.
 CARTO_DARK_MATTER_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-if CARTO_API_KEY:
-    CARTO_DARK_MATTER_URL += f"?key={CARTO_API_KEY}"
 CARTO_ATTRIBUTION = (
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
     'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -410,6 +409,17 @@ def build_bridge_message_script(map_js_var_name):
             {map_js_var_name}.flyTo([e.data.lat, e.data.lng], e.data.zoom || {map_js_var_name}.getZoom());
         }} else if (e.data.type === 'FLY_TO_BOUNDS') {{
             {map_js_var_name}.flyToBounds(e.data.bounds);
+        }} else if (e.data.type === 'SET_TILE_KEY') {{
+            // Clé CARTO fournie au runtime (jamais écrite dans ce fichier) :
+            // validée avant d'être concaténée à l'URL des tuiles.
+            var tileKey = String(e.data.key || '');
+            if (/^[A-Za-z0-9_-]+$/.test(tileKey)) {{
+                {map_js_var_name}.eachLayer(function(layer) {{
+                    if (layer instanceof L.TileLayer && layer._url.indexOf('basemaps.cartocdn.com') !== -1) {{
+                        layer.setUrl(layer._url.split('?')[0] + '?key=' + tileKey);
+                    }}
+                }});
+            }}
         }}
     }});
     """
