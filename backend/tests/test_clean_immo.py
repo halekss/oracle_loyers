@@ -210,3 +210,25 @@ class StepFlagExpiredTest(unittest.TestCase):
         self.assertEqual(matched["derniere_verification_http"],
                          "2026-08-01T10:30:45+00:00",
                          "derniere_verification_http from previous CSV must be merged for matched rows")
+
+    def test_sur_carte_only_rows_seen_in_latest_scrape_and_disparues_kept_off_map(self):
+        previous = pd.DataFrame({
+            "url": ["https://example.com/gone"],
+            "statut": ["active"],
+            "sur_carte": [True],
+        })
+        previous.to_csv(self.csv_path, index=False)
+
+        df = pd.DataFrame({
+            "url": ["https://example.com/new", "https://example.com/stale", "https://example.com/other-site"],
+            "site": ["PAP", "PAP", "Orpi"],
+            "ville": ["Lyon", "Lyon", "Lyon"],
+            "date_dernier_scan": ["2026-09-24", "2026-09-10", "2026-09-01"],
+        })
+
+        result = step_flag_expired(df, previous_csv_path=self.csv_path).set_index("url")
+
+        self.assertTrue(result.loc["https://example.com/new", "sur_carte"])
+        self.assertFalse(result.loc["https://example.com/stale", "sur_carte"])
+        self.assertTrue(result.loc["https://example.com/other-site", "sur_carte"])  # dernier scrape de SON site
+        self.assertFalse(result.loc["https://example.com/gone", "sur_carte"])  # conservée, mais hors carte

@@ -26,6 +26,7 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 from services import annonces_store  # noqa: E402 (après le sys.path.insert nécessaire)
+from services.localisation_texte import localiser_par_texte  # noqa: E402
 
 # Fichiers d'entrée/sortie
 INPUT_RAW_CSV = os.path.join(data_dir, "base_de_donnees_immo_complet.csv")
@@ -281,6 +282,21 @@ STATUTS_VALIDES = {"active", "a_verifier", "inactive"}
 # =============================================================================
 # ETAPE 0 : FUSION PRESERVANTE DU STATUT (ORA-134 bis)
 # =============================================================================
+def _vu_au_dernier_scrape(df):
+    """`sur_carte` : True si l'annonce a été revue lors du dernier scrape de son
+    (ville, site), i.e. `date_dernier_scan` == max du groupe. Ne supprime rien :
+    seule la carte filtre dessus, l'entraînement et l'historique de prix gardent
+    toutes les lignes. Sans colonne `date_dernier_scan`, aucune info : True.
+    # ponytail: granularité jour — un scrape à cheval sur minuit masquerait les
+    # annonces du 1er jour ; passer à un identifiant de run si ça arrive."""
+    if 'date_dernier_scan' not in df.columns:
+        return pd.Series(True, index=df.index)
+    scan = pd.to_datetime(df['date_dernier_scan'], errors='coerce', utc=True).dt.normalize()
+    cles = [df[c] for c in ('ville', 'site') if c in df.columns]
+    dernier = scan.groupby(cles).transform('max') if cles else scan.max()
+    return scan == dernier
+
+
 def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=None):
     """Fusionne `df` (résultat frais de data_fusion.py) avec le `master_immo_final.csv`
     du run précédent pour calculer/préserver la colonne `statut` (ORA-134 bis).
@@ -385,6 +401,7 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
     df = df.copy()
     df['statut'] = nouveau_statut
     df['derniere_verification_http'] = nouveau_derniere_verif
+    df['sur_carte'] = _vu_au_dernier_scrape(df)
 
     # Lignes disparues du scrape courant (url absente de `df`), quel que soit
     # leur statut précédent (y compris `inactive` — Finding 1 : une ligne déjà
@@ -411,7 +428,8 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
                 disparues['statut'] = 'a_verifier'
             else:
                 disparues['statut'] = disparues['statut'].apply(lambda s: s if s == 'inactive' else 'a_verifier')
-            print(f"   ↩️  {len(disparues)} annonce(s) absente(s) du scrape courant, conservée(s) (a_verifier ou inactive).")
+            disparues['sur_carte'] = False
+            print(f"   ↩️  {len(disparues)} annonce(s) absente(s) du scrape courant, conservée(s) (a_verifier ou inactive), retirée(s) de la carte.")
             df = pd.concat([df, disparues], ignore_index=True, sort=False)
 
     counts = df['statut'].value_counts().to_dict()
@@ -484,7 +502,7 @@ def get_point_in_circle(center_lat, center_lon, radius):
     r = radius * np.sqrt(random.uniform(0, 1))
     return center_lat + r * np.cos(angle), center_lon + r * np.sin(angle)
 
-def get_point_for_zipcode(cp, polygons_map, url=None):
+def get_point_for_zipcode(cp, polygons_map, url=None, hint=None):
     # Communes limitrophes réelles (Lambersart, La Madeleine...) : jamais
     # clippées à LILLE_COMMUNE_POLYGON, ce ne sont pas des annonces Lille
     # (cf. ZONES_LIMITROPHES_LILLE). Vérifié avant la branche Lille
@@ -499,7 +517,8 @@ def get_point_for_zipcode(cp, polygons_map, url=None):
     # centrale (59000/59800, ambiguë) sur la grande zone "Lille Centre" —
     # pas de fausse précision par CP quand aucun indice ne permet mieux.
     if cp.startswith('59'):
-        hint = resolve_lille_quartier_hint(url)
+        # `hint` explicite (quartier trouvé par le texte) prime sur l'URL.
+        hint = hint or resolve_lille_quartier_hint(url)
         if hint is None:
             if cp == '59160': hint = "Lomme"
             elif cp == '59260': hint = "Hellemmes"
@@ -585,6 +604,29 @@ def step_prune_expired(df, ttl_days=TTL_JOURS_DERNIER_SCAN, reference_date=None)
     return df[~expiree].reset_index(drop=True)
 
 
+# CP qui désignent une zone unique et fiable (étape 2 de step_geocoding) : les
+# arrondissements lyonnais, Lomme/Hellemmes/Euralille et les communes limitrophes.
+# 59000/59800/69000/69100 sont ambigus (ou à zone trop large) : pas de décision.
+CP_FIABLES = {f"6900{i}" for i in range(1, 10)} | {"59160", "59260", "59777"} | set(CP_A_ZONE_LIMITROPHE)
+
+
+def _source_cp_ou_url(cp, url):
+    """'url' (slug de quartier SeLoger), 'cp' (CP fiable) ou None (ambigu)."""
+    if cp in CP_A_ZONE_LIMITROPHE:
+        return 'cp'
+    if cp.startswith('59') and resolve_lille_quartier_hint(url):
+        return 'url'
+    return 'cp' if cp in CP_FIABLES else None
+
+
+def _ville_de_la_ligne(row, cp):
+    """'lille'/'lyon' d'après la colonne `ville`, sinon le préfixe du CP ; sinon None."""
+    ville = str(row.get('ville') or '').strip().lower()
+    if ville in ('lille', 'lyon'):
+        return ville
+    return {'59': 'lille', '69': 'lyon'}.get(cp[:2])
+
+
 def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_SEED):
     print("\n📍 ETAPE 1 : Géocodage & Jitter...")
     random.seed(seed)
@@ -592,33 +634,67 @@ def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_S
 
     df['code_postal'] = df['code_postal'].fillna(69000).apply(clean_zipcode)
 
-    lats, lons, gps_reel = [], [], []
+    lats, lons, gps_reel, sources, zones_texte = [], [], [], [], []
     for _, row in df.iterrows():
-        # --- MODIFICATION START : Si coordonnées présentes (Vizzit), on garde ---
+        # Priorité stricte, la première règle qui s'applique gagne :
+        # 1. GPS scrapé (Vizzit) — jamais écrasé
         if pd.notna(row.get('latitude')) and pd.notna(row.get('longitude')) and row.get('latitude') != "" and row.get('longitude') != "":
-             try:
+            try:
                 lats.append(float(row['latitude']))
                 lons.append(float(row['longitude']))
                 gps_reel.append(True)
-                continue # On passe à la ligne suivante
-             except:
-                pass # Si erreur conversion, on génère
-        # --- MODIFICATION END ---
+                sources.append('gps')
+                zones_texte.append('')
+                continue
+            except (TypeError, ValueError):
+                pass  # conversion impossible : on génère
 
-        # Sinon (pas de coords), on génère comme avant
-        lat, lon = get_point_for_zipcode(row['code_postal'], polygons_map, url=row.get('url'))
+        cp, url = row['code_postal'], row.get('url')
+        # 2. CP fiable, ou slug de quartier d'URL SeLoger (même niveau)
+        source = _source_cp_ou_url(cp, url)
+        zone_texte = ''
+        if source:
+            lat, lon = get_point_for_zipcode(cp, polygons_map, url=url)
+        else:
+            # 3. Texte : lieu du bien explicite, uniquement si 1 et 2 n'ont rien donné
+            zone, _raison = localiser_par_texte(
+                [row.get(c) for c in ('description_detail', 'description_raw', 'description')],
+                _ville_de_la_ligne(row, cp),
+            )
+            if zone:
+                source, zone_texte = 'texte', zone
+                lat, lon = get_point_for_zipcode(
+                    zone if zone.startswith('69') else '59000', polygons_map,
+                    hint=None if zone.startswith('69') else zone,
+                )
+            else:
+                # 4. Jitter de repli (ville entière) : position fictive
+                source = 'jitter'
+                lat, lon = get_point_for_zipcode(cp, polygons_map)
         lats.append(lat)
         lons.append(lon)
         gps_reel.append(False)
+        sources.append(source)
+        zones_texte.append(zone_texte)
 
     df['latitude'] = lats
     df['longitude'] = lons
+    df['source_localisation'] = sources
+    # Colonne de travail (comme a_gps_reel) : quartier/arrondissement décidé par
+    # le texte, consommé par trouver_quartier() puis retirée par step_quartiers().
+    df['zone_texte'] = zones_texte
+    # Position fictive = pas sur la carte (la ligne reste dans le CSV/la base).
+    sur_carte = df['sur_carte'].fillna(True).astype(bool) if 'sur_carte' in df.columns else True
+    df['sur_carte'] = sur_carte & (df['source_localisation'] != 'jitter')
     # Colonne de travail (ORA-71 POC) : distingue une vraie coordonnée
     # (Vizzit) d'un point tiré au sort, consommée par trouver_quartier() pour
     # la zone centrale Lille ambiguë, puis retirée par step_quartiers() —
     # le schéma de master_immo_final.csv ne change pas.
     df['a_gps_reel'] = gps_reel
-    print(f"   ✅ {len(df)} annonces placées sur la carte.")
+    # Texte brut consommé ci-dessus : retiré pour ne pas grossir le master ni
+    # devenir une feature d'entraînement (train_model encode toute colonne texte).
+    df = df.drop(columns=['description_raw'], errors='ignore')
+    print(f"   ✅ {len(df)} annonces géolocalisées : {df['source_localisation'].value_counts().to_dict()}")
     return df
 
 # =============================================================================
@@ -631,6 +707,13 @@ def trouver_quartier(row):
     except: cp = str(row['code_postal'])
 
     if pd.isna(lat) or pd.isna(lon): return f"Secteur {cp}"
+
+    # Quartier décidé par le texte (step_geocoding, étape 3) : nom Lille direct,
+    # ou arrondissement Lyon (CP ambigu remplacé par celui du texte).
+    zone_texte = row.get('zone_texte')
+    if isinstance(zone_texte, str) and zone_texte:
+        if zone_texte.startswith('69'): cp = zone_texte
+        else: return zone_texte
 
     # Communes limitrophes réelles (pas des communes associées) : leur CP
     # distinctif suffit à les identifier directement, avant la branche Lille
@@ -686,6 +769,7 @@ def step_quartiers(df):
     df['quartier'] = df.apply(trouver_quartier, axis=1)
     # ORA-156 : conservé (renommé) jusqu'à master_immo_final.csv pour savoir
     # quelles annonces ont une position réelle (GPS Vizzit) vs jitterée.
+    df = df.drop(columns=['zone_texte'], errors='ignore')
     if 'a_gps_reel' in df.columns:
         df = df.rename(columns={'a_gps_reel': 'position_fiable'})
     print("   ✅ Quartiers assignés.")

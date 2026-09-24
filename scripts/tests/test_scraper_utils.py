@@ -17,6 +17,7 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    archive_stale_rows,
     should_continue_pagination,
     today_iso,
 )
@@ -289,6 +290,49 @@ class TodayIsoTest(unittest.TestCase):
         import re as re_module
 
         self.assertRegex(today_iso(), r"^\d{4}-\d{2}-\d{2}$")
+
+
+class ArchiveStaleRowsTest(unittest.TestCase):
+    HEADER = ["Titre", "Prix", "Lien", "DerniereVue"]
+
+    def setUp(self):
+        import tempfile, logging
+        self.dir = tempfile.mkdtemp()
+        self.out = os.path.join(self.dir, "annonces_lyon_x.csv")
+        self.archive = os.path.join(self.dir, "annonces_lyon_x_archive.csv")
+        self.logger = logging.getLogger("test_archive")
+
+    def _rows(self):
+        return {
+            "a": ["A", "100", "a", "2026-09-24"],  # revue ce run (doublon)
+            "b": ["B", "200", "b", ""],            # non revue -> archive
+            "c": ["C", "300", "c", "2026-09-24"],  # nouvelle
+        }
+
+    def test_moves_only_rows_not_seen_this_run(self):
+        rows = self._rows()
+        n = archive_stale_rows(rows, {"a", "c"}, self.out, self.HEADER, self.logger, True)
+
+        self.assertEqual(n, 1)
+        self.assertEqual(sorted(rows), ["a", "c"])
+        with open(self.archive, encoding="utf-8-sig") as f:
+            self.assertIn("B,200,b", f.read())
+
+    def test_archive_is_cumulative(self):
+        archive_stale_rows(self._rows(), {"a", "c"}, self.out, self.HEADER, self.logger, True)
+        archive_stale_rows({"d": ["D", "1", "d", ""], "a": ["A", "1", "a", "x"]}, {"a"}, self.out, self.HEADER, self.logger, True)
+
+        with open(self.archive, encoding="utf-8-sig") as f:
+            content = f.read()
+        self.assertIn("B,200,b", content)
+        self.assertIn("D,1,d", content)
+
+    def test_incomplete_or_empty_run_archives_nothing(self):
+        for run_complet, vus in ((False, {"a"}), (True, set())):
+            rows = self._rows()
+            self.assertEqual(archive_stale_rows(rows, vus, self.out, self.HEADER, self.logger, run_complet), 0)
+            self.assertEqual(len(rows), 3)
+            self.assertFalse(os.path.exists(self.archive))
 
 
 class ShouldContinuePaginationTest(unittest.TestCase):

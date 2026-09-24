@@ -19,6 +19,7 @@ from scraper_utils import (
     pick_user_agent,
     retry_with_backoff,
     selenium_description_fetcher,
+    archive_stale_rows,
     should_continue_pagination,
     today_iso,
 )
@@ -79,6 +80,8 @@ if __name__ == '__main__':
     total_nouveaux_run = 0
     total_cards_vues = 0
     consecutive_empty_pages = 0
+    vus_ce_run = set()
+    run_complet = False
 
     def checkpoint():
         """Persiste l'état courant de `rows_by_lien` (écriture atomique complète,
@@ -121,8 +124,10 @@ if __name__ == '__main__':
         annonces = driver.find_elements(By.CSS_SELECTOR, CARD_SELECTOR)
         if not annonces:
             logger.warning("Aucun bloc d'annonce trouvé sur la page %s. Fin de la recherche.", page_num)
+            run_complet = page_num > 1
             break
 
+        vus_avant_page = len(vus_ce_run)
         total_cards_vues += len(annonces)
         compteur_nouveaux = 0
         for annonce in annonces:
@@ -136,6 +141,7 @@ if __name__ == '__main__':
                     # Déjà connue : pas de re-scraping de ses détails, on note juste
                     # qu'elle est toujours présente sur le site (ORA-134, TTL).
                     rows_by_lien[lien][DERNIERE_VUE_INDEX] = today
+                    vus_ce_run.add(lien)
                     continue
 
                 titre = find_first(annonce, TITRE_SELECTORS)
@@ -148,6 +154,7 @@ if __name__ == '__main__':
 
                 rows_by_lien[lien] = [titre, prix, infos, lien, image, today, ""]
                 liens_vus.add(lien)
+                vus_ce_run.add(lien)
                 compteur_nouveaux += 1
                 logger.info("Annonce trouvée : %s - %s", titre, prix)
             except Exception as exc:
@@ -159,10 +166,15 @@ if __name__ == '__main__':
         total_nouveaux_run += compteur_nouveaux
         checkpoint()
 
-        continuer, consecutive_empty_pages = should_continue_pagination(compteur_nouveaux, consecutive_empty_pages)
+        continuer, consecutive_empty_pages = should_continue_pagination(len(vus_ce_run) - vus_avant_page, consecutive_empty_pages)
         if not continuer:
+            run_complet = True
             logger.info("Fin des nouvelles annonces (%s page(s) consécutive(s) sans nouveauté).", consecutive_empty_pages)
         page_num += 1
+
+    # Non revues pendant ce run -> fichier d'archive (historique des prix), avant enrichissement.
+    archive_stale_rows(rows_by_lien, vus_ce_run, OUTPUT_PATH, CSV_HEADER, logger, run_complet)
+    checkpoint()
 
     # ORA-161 : description libre depuis la page détail (plafonnée, cf. scraper_utils)
     enrich_descriptions(rows_by_lien, LIEN_INDEX, DESCRIPTION_INDEX,

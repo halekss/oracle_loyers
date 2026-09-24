@@ -193,6 +193,16 @@ class ResolveDefaultCpTest(unittest.TestCase):
             resolve_default_cp({"nom": "Marseille"}, "Marseille")
 
 
+class PostalCodeFromUrlTest(unittest.TestCase):
+    def test_reads_the_postal_code_from_an_orpi_url(self):
+        url = "https://www.orpi.com/annonce-location-appartement-t3-lyon-8-69008-43caac36-dc50-4ab2/"
+        self.assertEqual(data_fusion.postal_code_from_url(url), "69008")
+
+    def test_returns_none_without_postal_code(self):
+        self.assertIsNone(data_fusion.postal_code_from_url("https://example.test/1"))
+        self.assertIsNone(data_fusion.postal_code_from_url(None))
+
+
 class SiteFilesConfigTest(unittest.TestCase):
     def test_builds_filenames_from_slug(self):
         configs = site_files_config("lille")
@@ -230,6 +240,22 @@ class RunFusionDateDernierScanTest(unittest.TestCase):
 
         self.assertIn("date_dernier_scan", result.columns)
         self.assertEqual(result.loc[0, "date_dernier_scan"], "2026-08-06")
+
+    def test_sites_option_restricts_the_fusion_to_the_chosen_sites(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self._write_century21_csv(tmp_dir, [
+                ["T2 Lyon 69003 45 m2", "700 €", "45 m2", "https://example.test/1", "", "2026-08-06"],
+            ])
+            pd.DataFrame(
+                [["T3 Lyon 69007 60 m2", "900 €", "60 m2", "https://example.test/2", "", "2026-08-06", ""]],
+                columns=["Titre_Lieu", "Prix", "Infos", "Lien", "Image", "DerniereVue", "Quartier"],
+            ).to_csv(os.path.join(tmp_dir, "annonces_lyon_orpi.csv"), index=False)
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion(sites={"century21"})
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
+
+        self.assertEqual(set(result["site"]), {"Century 21"})
 
     def test_missing_derniere_vue_column_does_not_crash(self):
         # Compat rétroactive : CSV écrit avant l'ajout de la colonne DerniereVue.

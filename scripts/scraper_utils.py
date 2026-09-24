@@ -32,6 +32,7 @@ __all__ = [
     "get_chrome_driver",
     "find_first",
     "find_first_image_url",
+    "archive_stale_rows",
     "atomic_csv_writer",
     "retry_with_backoff",
     "get_scraper_logger",
@@ -51,7 +52,7 @@ __all__ = [
 # 1ère page entièrement déjà-connue et les annonces plus profondément paginées
 # ne seraient jamais revues — un TTL basé sur "dernière fois vue" les
 # expirerait alors à tort, qu'elles soient encore actives ou non sur le site.
-GRACE_PAGES_SANS_NOUVEAUTE = 3
+GRACE_PAGES_SANS_NOUVEAUTE = 2
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -167,13 +168,13 @@ def canonical_url(url):
 
 def should_continue_pagination(compteur_nouveaux, consecutive_empty_pages):
     """Décide si la pagination d'un scraper doit continuer après une page où
-    `compteur_nouveaux` nouvelles annonces ont été trouvées (ORA-134).
+    `compteur_nouveaux` annonces jamais vues *pendant ce run* ont été trouvées
+    (nouvelles ou déjà connues : ce qui compte est qu'elles n'aient pas déjà
+    été rencontrées plus haut dans la liste).
 
-    Une page sans nouvelle annonce ne stoppe plus immédiatement la pagination :
-    elle bénéficie de `GRACE_PAGES_SANS_NOUVEAUTE` pages de marge, pour laisser
-    une chance de re-confirmer périodiquement la présence des annonces déjà
-    connues plus profondément paginées (sans quoi elles ne seraient jamais
-    revues, et un TTL basé sur 'dernière fois vue' les expirerait à tort).
+    Le run parcourt donc toute la liste. Seule une page sans aucune annonce
+    inédite (fin des résultats, ou dernière page répétée par le site) compte
+    comme vide ; `GRACE_PAGES_SANS_NOUVEAUTE` pages vides de suite l'arrêtent.
 
     Renvoie `(continuer, nouveau_consecutive_empty_pages)`.
     """
@@ -182,6 +183,36 @@ def should_continue_pagination(compteur_nouveaux, consecutive_empty_pages):
 
     consecutive_empty_pages += 1
     return consecutive_empty_pages < GRACE_PAGES_SANS_NOUVEAUTE, consecutive_empty_pages
+
+
+def archive_stale_rows(rows_by_lien, vus_ce_run, output_path, header, logger, run_complet):
+    """Déplace de `rows_by_lien` vers `<output>_archive.csv` les annonces non
+    revues pendant ce run (nouvelles + doublons revus restent dans le CSV
+    principal). L'archive est cumulative : elle garde le dernier état (prix,
+    `DerniereVue`) de chaque annonce disparue, pour suivre l'évolution des prix.
+
+    Ne fait rien si le run n'est pas allé au bout de la liste (`run_complet`
+    faux : page bloquée, erreur réseau...) ou n'a rien vu : sinon un run bloqué
+    archiverait tout le stock encore en ligne. Renvoie le nombre archivé."""
+    if not run_complet or not vus_ce_run:
+        logger.warning("Run incomplet ou sans annonce vue : aucune annonce archivée.")
+        return 0
+    stale = [lien for lien in rows_by_lien if lien not in vus_ce_run]
+    if not stale:
+        return 0
+
+    root, ext = os.path.splitext(output_path)
+    archive_path = f"{root}_archive{ext}"
+    archived_rows, _ = load_existing_rows(archive_path, header)
+    with atomic_csv_writer(archive_path, header) as writer:
+        for row in archived_rows:
+            writer.writerow(row)
+        for lien in stale:
+            writer.writerow(rows_by_lien[lien])
+    for lien in stale:
+        del rows_by_lien[lien]
+    logger.info("%s annonce(s) non revue(s) déplacée(s) vers %s", len(stale), archive_path)
+    return len(stale)
 
 
 def _detect_local_chrome_major_version():

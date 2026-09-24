@@ -302,6 +302,16 @@ class ParuVenduExtractionTest(unittest.TestCase):
         self.assertEqual(prix, "1 050 €")
         self.assertEqual(lien, "https://www.paruvendu.fr/annonces/location-appartement-lyon-3eme-69003/12345.html")
 
+    def test_paruvendu_link_falls_back_to_card_link_when_title_is_a_heading(self):
+        card = load_fixture("paruvendu_h3.html").select_one("div.blocAnnonce")
+        titre_elem = scraper_paruvendu.find_bs4(card, scraper_paruvendu.TITRE_SELECTORS)
+
+        self.assertEqual(titre_elem.name, "h3")
+        self.assertEqual(
+            scraper_paruvendu.find_lien_partiel(card, titre_elem),
+            "/immobilier/location/appartement/1295641036A1KILHAP000",
+        )
+
     def test_find_bs4_returns_none_when_no_selector_matches(self):
         soup = BeautifulSoup("<article class='blocAnnonce'></article>", "html.parser")
         annonce = soup.select_one("article")
@@ -336,6 +346,13 @@ class DetailDescriptionExtractionTest(unittest.TestCase):
         self.assertIn("151 AVENUE BERTHELOT 69007 LYON", text)
         self.assertNotIn("Ventes immobilières", text)
 
+    def test_paruvendu_captcha_redirect_is_an_error_not_an_empty_description(self):
+        from unittest import mock
+        blocked = mock.Mock(status_code=200, url="https://www.paruvendu.fr/communfo/antiaspiration/default/getCaptcha?x=1", text="<html></html>")
+        with mock.patch.object(scraper_paruvendu, "fetch_page", return_value=blocked):
+            with self.assertRaises(RuntimeError):
+                scraper_paruvendu.fetch_description("https://www.paruvendu.fr/immobilier/location/appartement/1")
+
     def test_paruvendu_page_without_description_gives_empty_string(self):
         soup = BeautifulSoup("<html><body><p>Erreur 410</p></body></html>", "html.parser")
         self.assertEqual(scraper_paruvendu.find_description_bs4(soup), "")
@@ -345,6 +362,12 @@ class DetailDescriptionExtractionTest(unittest.TestCase):
         seloger = self._description("seloger_detail.html", scraper_seloger.DESCRIPTION_SELECTORS)
         self.assertIn("Bellecour", seloger)
         self.assertFalse(seloger.lower().startswith("description"))
+
+    def test_orpi_description_selector_and_column(self):
+        text = self._description("orpi_detail.html", scraper_orpi.DESCRIPTION_SELECTORS)
+        self.assertTrue(text.startswith("T2 meublé - Part-Dieu"))
+        with open(scraper_orpi.__file__, encoding="utf-8") as f:
+            self.assertRegex(f.read(), r"CSV_HEADER = \[[^\]]*'Quartier', 'Description'\]")
 
     def test_every_scraper_appends_a_description_column_last(self):
         for module, name in ((scraper_century_21, 'century21'), (scraper_pap, 'pap'), (scraper_seloger, 'seloger'), (scraper_paruvendu, 'paruvendu')):

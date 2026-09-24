@@ -41,6 +41,12 @@ def extract_postal_code(text, default_cp="69000"):
     if match_arr: return f"690{int(match_arr.group(1)):02d}"
     return default_cp
 
+def postal_code_from_url(url):
+    """CP encodé dans l'URL d'une annonce Orpi (`.../annonce-location-appartement-t3-lyon-8-69008-<uuid>/`),
+    None si absent. Repli fiable quand le texte de la carte n'en donne pas."""
+    match = re.search(r'-(69\d{3}|59\d{3})-', str(url))
+    return match.group(1) if match else None
+
 # Lieux réels observés dans le champ Lieu de SeLoger pour une recherche
 # centrée sur Lille (le rayon de recherche du site déborde sur des communes
 # limitrophes réelles, pas des communes associées comme Lomme/Hellemmes) :
@@ -157,7 +163,12 @@ def site_files_config(slug):
         { 'file': f'annonces_{slug}_seloger.csv', 'site': 'SeLoger', 'col_prix': 'Prix', 'col_surf': 'Infos', 'text_cols': ['Titre', 'Infos'], 'col_cp': 'Lieu', 'col_url': 'Lien' },
     ]
 
-def run_fusion(ville_slug=None):
+def site_key(nom):
+    """'Century 21' -> 'century21' : clé de l'option --sites."""
+    return nom.lower().replace(' ', '')
+
+
+def run_fusion(ville_slug=None, sites=None):
     """Fusionne les CSV scrapés en base_de_donnees_immo_complet.csv.
 
     Par défaut (`ville_slug=None`), reconstruit le fichier combiné à partir
@@ -167,7 +178,10 @@ def run_fusion(ville_slug=None):
     Avec `ville_slug`, ne retraite QUE cette ville (ORA-153 : chaque DAG
     annonces tourne désormais indépendamment par ville) — les annonces des
     autres villes déjà présentes dans le fichier combiné sont préservées
-    plutôt qu'écrasées."""
+    plutôt qu'écrasées.
+
+    `sites` (ensemble de clés `site_key`, ex. {'century21', 'orpi', 'vizzit'}) restreint
+    la fusion à ces sites ; None = tous."""
     dfs = []
     print("\n🏗️  DÉMARRAGE DE LA FUSION...\n")
     villes = load_declared_villes()
@@ -180,6 +194,8 @@ def run_fusion(ville_slug=None):
 
         # 1. FICHIERS CLASSIQUES
         for config in site_files_config(slug):
+            if sites is not None and site_key(config['site']) not in sites:
+                continue
             fichier = os.path.join(data_dir, config['file'])
             if os.path.exists(fichier):
                 df = pd.read_csv(fichier)
@@ -208,7 +224,10 @@ def run_fusion(ville_slug=None):
 
                 if config['site'] == 'Orpi':
                     new_df['surface'] = full_desc.apply(clean_surface)
-                    new_df['code_postal'] = full_desc.apply(lambda t: extract_postal_code(t, default_cp))
+                    new_df['code_postal'] = [
+                        extract_postal_code(t, postal_code_from_url(u) or default_cp)
+                        for t, u in zip(full_desc, new_df['url'])
+                    ]
                 elif config['site'] == 'SeLoger':
                     new_df['surface'] = df[config['col_surf']].apply(clean_surface)
                     # Le champ Lieu de SeLoger est parfois un vrai nom de
@@ -243,7 +262,7 @@ def run_fusion(ville_slug=None):
 
         # 2. VIZZIT (fichier GPS séparé)
         vizzit_file = os.path.join(data_dir, f'annonces_{slug}_vizzit_geoloc_complete.csv')
-        if os.path.exists(vizzit_file):
+        if os.path.exists(vizzit_file) and (sites is None or 'vizzit' in sites):
             print(f"--- {ville_nom} / Vizzit (GPS) ---")
             df_v = pd.read_csv(vizzit_file)
 
@@ -283,8 +302,11 @@ def run_fusion(ville_slug=None):
             lambda row: round(row['prix'] / row['surface'], 2) if row['surface'] and row['surface'] > 9 else None, axis=1
         )
 
-        cols = ['site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'description_detail', 'code_postal', 'ville', 'latitude', 'longitude', 'url', 'image', 'date_dernier_scan']
+        cols = ['site', 'prix', 'surface', 'prix_m2', 'type', 'description', 'description_raw', 'description_detail', 'code_postal', 'ville', 'latitude', 'longitude', 'url', 'image', 'date_dernier_scan']
         master_df['description_detail'] = master_df['description_detail'].fillna('')
+        # Texte non nettoyé : `description` a perdu « Lyon 3e »/« Lille »/CP
+        # (format_description), or clean_immo.step_geocoding en a besoin.
+        master_df['description_raw'] = master_df['description_raw'].fillna('')
         master_df = master_df[cols]
 
         output_file = os.path.join(data_dir, 'base_de_donnees_immo_complet.csv')
@@ -321,6 +343,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Fusionne les CSV d'annonces scrapées en un fichier combiné.")
     parser.add_argument('--ville', default=None, help="Slug de la ville (cf. scraping_config.json). Par défaut : toutes les villes déclarées.")
+    parser.add_argument('--sites', default=None, help="Sites à fusionner, séparés par des virgules (ex: century21,orpi,vizzit). Par défaut : tous.")
     args = parser.parse_args()
 
-    run_fusion(args.ville)
+    run_fusion(args.ville, set(args.sites.split(',')) if args.sites else None)

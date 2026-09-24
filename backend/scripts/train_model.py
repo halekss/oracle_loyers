@@ -83,7 +83,7 @@ def train(ville_slug):
     # structurellement pas généraliser.
     features_to_drop = [
         'id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'titre',
-        'date', 'image', 'ville',
+        'date', 'image', 'ville', 'source_localisation', 'description_detail',
     ]
     X = df.drop(columns=features_to_drop, errors='ignore')
 

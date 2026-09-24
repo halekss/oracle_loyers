@@ -420,6 +420,8 @@ def main(ville='lyon'):
                 avant = len(df_immo)
                 df_immo = df_immo[df_immo['statut'] != 'inactive']
                 print(f"   🧹 {avant - len(df_immo)} annonce(s) inactive(s) exclue(s) de la carte statique.")
+            if 'sur_carte' in df_immo.columns:
+                df_immo = df_immo[df_immo['sur_carte'].fillna(True).astype(bool)]
         else: df_immo = pd.DataFrame()
     except: df_immo = pd.DataFrame()
 

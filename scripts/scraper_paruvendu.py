@@ -16,6 +16,7 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    archive_stale_rows,
     should_continue_pagination,
     today_iso,
 )
@@ -106,6 +107,16 @@ def fetch_page(url):
 DESCRIPTION_SELECTORS = ["#txtAnnonceTrunc", "div.txt_annonceauto", "[class*='txt_annonce']"]
 
 
+def find_lien_partiel(annonce, titre_elem):
+    """Lien de l'annonce : le titre s'il est un <a>, sinon le premier lien
+    /immobilier/ de la carte (le titre est un <h3> depuis la refonte du site,
+    2026-09-24 : sans ce repli, les 30 cartes de chaque page étaient ignorées)."""
+    if titre_elem.name == 'a':
+        return titre_elem.get('href')
+    lien = annonce.find('a', href=lambda h: h and h.startswith('/immobilier/'))
+    return lien.get('href') if lien else None
+
+
 def find_description_bs4(soup):
     """Équivalent BeautifulSoup de `selenium_description_fetcher` : premier
     texte de description non vide de la page détail, "" si aucun."""
@@ -124,6 +135,8 @@ def fetch_description(url):
     if response.status_code in (404, 410):  # annonce retirée : pas une erreur de blocage
         return ""
     response.raise_for_status()
+    if "antiaspiration" in response.url:  # captcha anti-bot : blocage, pas une annonce sans texte
+        raise RuntimeError("Captcha anti-aspiration ParuVendu (requêtes bloquées)")
     return find_description_bs4(BeautifulSoup(response.text, "html.parser"))
 
 if __name__ == '__main__':
@@ -142,6 +155,8 @@ if __name__ == '__main__':
     total_nouveaux_run = 0
     total_cards_vues = 0
     consecutive_empty_pages = 0
+    vus_ce_run = set()
+    run_complet = False
     page_num = 1
     continuer = True
 
@@ -180,8 +195,10 @@ if __name__ == '__main__':
 
         if not annonces:
             logger.warning("Aucune annonce trouvée sur la page %s (fin des résultats).", page_num)
+            run_complet = page_num > 1
             break
 
+        vus_avant_page = len(vus_ce_run)
         total_cards_vues += len(annonces)
         compteur_page = 0
         for annonce in annonces:
@@ -194,7 +211,7 @@ if __name__ == '__main__':
 
                 titre = " ".join(titre_elem.text.split())
                 prix = prix_elem.text.strip() if prix_elem else "N/C"
-                lien_partiel = titre_elem.get('href') if titre_elem.name == 'a' else None
+                lien_partiel = find_lien_partiel(annonce, titre_elem)
                 lien = f"https://www.paruvendu.fr{lien_partiel}" if lien_partiel else "Pas de lien"
 
                 if lien == "Pas de lien":
@@ -204,12 +221,14 @@ if __name__ == '__main__':
                     # Déjà connue : pas de re-scraping de ses détails, on note juste
                     # qu'elle est toujours présente sur le site (ORA-134, TTL).
                     rows_by_lien[lien][DERNIERE_VUE_INDEX] = today
+                    vus_ce_run.add(lien)
                     continue
 
                 image = find_image_bs4(annonce, base_url=url_page)
 
                 rows_by_lien[lien] = [titre, prix, lien, image, today, ""]
                 liens_vus.add(lien)
+                vus_ce_run.add(lien)
                 compteur_page += 1
                 logger.info("Annonce trouvée : %s -- %s", titre, prix)
 
@@ -222,12 +241,17 @@ if __name__ == '__main__':
         total_nouveaux_run += compteur_page
         checkpoint()
 
-        continuer, consecutive_empty_pages = should_continue_pagination(compteur_page, consecutive_empty_pages)
+        continuer, consecutive_empty_pages = should_continue_pagination(len(vus_ce_run) - vus_avant_page, consecutive_empty_pages)
         if not continuer:
+            run_complet = True
             logger.info("Fin des nouvelles annonces (%s page(s) consécutive(s) sans nouveauté).", consecutive_empty_pages)
         else:
             time.sleep(random.uniform(1.5, 3))
         page_num += 1
+
+    # Non revues pendant ce run -> fichier d'archive (historique des prix), avant enrichissement.
+    archive_stale_rows(rows_by_lien, vus_ce_run, OUTPUT_PATH, CSV_HEADER, logger, run_complet)
+    checkpoint()
 
     # ORA-161 : description libre depuis la page détail (plafonnée, cf. scraper_utils)
     enrich_descriptions(rows_by_lien, LIEN_INDEX, DESCRIPTION_INDEX, fetch_description, logger)

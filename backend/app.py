@@ -323,6 +323,10 @@ def get_listings():
     # l'historique de prix côté entraînement — cf. train_model.py).
     if 'statut' in df.columns:
         df = df[df['statut'] != 'inactive']
+    # Annonce non revue au dernier scrape : retirée de la carte mais gardée dans
+    # le dataset (historique de prix + entraînement).
+    if 'sur_carte' in df.columns:
+        df = df[df['sur_carte'].fillna(True).astype(bool)]
 
     # On renvoie les colonnes nécessaires uniquement et on gère les NaN.
     # ville/code_postal/prix_m2 (ORA-170) alimentent l'agrégation "Le marché

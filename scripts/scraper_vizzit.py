@@ -9,6 +9,7 @@ import sys
 
 from scraper_utils import (
     atomic_csv_writer,
+    archive_stale_rows,
     blank_short_descriptions,
     enrich_descriptions,
     find_first_image_url,
@@ -135,7 +136,7 @@ def apply_price_band(base_url, band):
 def load_page(driver, url):
     driver.get(url)
 
-def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, derniere_vue_index, logger, checkpoint=lambda: None):
+def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, derniere_vue_index, logger, checkpoint=lambda: None, vus_ce_run=None, etat=None):
     """Parcourt toutes les pages d'une recherche Vizzit donnée (déjà filtrée
     par tranche de prix le cas échéant). Renvoie (nouveaux, cards_vues, erreurs).
 
@@ -145,6 +146,10 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
     hoquet Selenium transitoire tardif, alors que atomic_csv_writer n'était
     appelé qu'une fois à la toute fin). Pas d'effet par défaut (no-op), pour
     rester testable sans dépendre du système de fichiers."""
+    if vus_ce_run is None:
+        vus_ce_run = set()
+    if etat is None:
+        etat = {}
     erreurs = 0
     nouveaux = 0
     cards_vues = 0
@@ -186,8 +191,10 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
 
         if not blocs:
             logger.warning("Fin des résultats à la page %s.", page_num)
+            etat["complet"] = page_num > 1
             break
 
+        vus_avant_page = len(vus_ce_run)
         cards_vues += len(blocs)
         annonces_a_visiter = []
         for b in blocs:
@@ -200,8 +207,10 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
                     # Déjà connue : pas de re-visite de sa page détail, on note juste
                     # qu'elle est toujours présente sur le site (ORA-134, TTL).
                     rows_by_lien[lien][derniere_vue_index] = today
+                    vus_ce_run.add(lien)
                     continue
 
+                vus_ce_run.add(lien)
                 prix = find_text(b, PRIX_SELECTORS)
                 lieu = find_text(b, LIEU_SELECTORS)
                 details_elems = []
@@ -252,7 +261,9 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
         nouveaux += compteur_page
         checkpoint()
 
-        continuer, consecutive_empty_pages = should_continue_pagination(compteur_page, consecutive_empty_pages)
+        continuer, consecutive_empty_pages = should_continue_pagination(len(vus_ce_run) - vus_avant_page, consecutive_empty_pages)
+        if not continuer:
+            etat["complet"] = True
         page_num += 1
 
     return nouveaux, cards_vues, erreurs
@@ -287,16 +298,25 @@ if __name__ == '__main__':
     # chacune sous ce plafond. Les villes sans price_bands gardent le
     # comportement d'origine (une seule recherche, band vide).
     price_bands = site_config.get('price_bands') or [{}]
+    vus_ce_run = set()
+    runs_complets = []
 
     for band in price_bands:
         band_url = apply_price_band(SEARCH_URL, band)
         logger.info("Tranche de prix %s : %s", band or "aucune", band_url)
+        etat = {}
         nouveaux, cards_vues, band_erreurs = scrape_search(
-            driver, wait, band_url, rows_by_lien, liens_vus, today, DERNIERE_VUE_INDEX, logger, checkpoint
+            driver, wait, band_url, rows_by_lien, liens_vus, today, DERNIERE_VUE_INDEX, logger, checkpoint,
+            vus_ce_run=vus_ce_run, etat=etat
         )
+        runs_complets.append(etat.get("complet", False))
         total_nouveaux_run += nouveaux
         total_cards_vues += cards_vues
         erreurs += band_erreurs
+
+    # Non revues pendant ce run -> fichier d'archive (historique des prix), avant enrichissement.
+    archive_stale_rows(rows_by_lien, vus_ce_run, OUTPUT_PATH, CSV_HEADER, logger, all(runs_complets))
+    checkpoint()
 
     # Stock existant : le scrape ne revisite pas les annonces connues, donc les descriptions
     # vides ou parasites (« France Lille ») sont complétées ici, plafonné par run (cf. scraper_utils).
