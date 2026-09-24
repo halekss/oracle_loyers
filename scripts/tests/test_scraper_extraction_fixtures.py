@@ -103,6 +103,22 @@ class OrpiExtractionTest(unittest.TestCase):
         self.assertIn("45 m²", infos)
         self.assertEqual(lien, "https://www.orpi.com/annonce/location-appartement-lyon/12345")
 
+    def test_extracts_quartier_without_ui_labels(self):
+        # ORA-159 : le quartier vient de son propre élément, pas du blob Infos
+        card = bs4_select_first_matching(load_fixture("orpi.html"), scraper_orpi.CARD_SELECTORS)[0]
+
+        quartier = scraper_orpi.parse_quartier(bs4_first_text(card, scraper_orpi.QUARTIER_SELECTORS))
+
+        self.assertEqual(quartier, "Monplaisir - Frères Lumière")
+        for libelle in ("Message", "Favoris", "Ascenseur", "Balcon", "Bon état"):
+            self.assertNotIn(libelle, quartier)
+
+    def test_parse_quartier_edge_cases(self):
+        self.assertEqual(scraper_orpi.parse_quartier("Lyon 5- Champvert"), "Champvert")
+        self.assertEqual(scraper_orpi.parse_quartier("Lyon 4- Parc Popy"), "Parc Popy")
+        self.assertEqual(scraper_orpi.parse_quartier("Lyon 5"), "")
+        self.assertEqual(scraper_orpi.parse_quartier(""), "")
+
     def test_extract_price_from_text_fallback(self):
         # Cas limite : pas de sélecteur prix dédié, prix noyé dans le texte brut
         self.assertEqual(scraper_orpi.extract_price_from_text("Loyer : 1 234 € CC"), "1 234 €")

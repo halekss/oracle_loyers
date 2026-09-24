@@ -44,6 +44,13 @@ PRIX_SELECTORS = [
     "[class*='prix']",
     "[class*='amount']",
 ]
+# ORA-159 : le nom de quartier est déjà dans la carte, dans son propre élément
+# ("Lyon 8- Monplaisir - Frères Lumière", relevé sur le DOM réel le
+# 2026-09-24) — inutile de le rechercher par regex dans le blob `Infos`
+# (`[class*='detail']`), qui mélange prix, boutons ("Message", "Favoris") et tags.
+QUARTIER_SELECTORS = [
+    "[class*='estate-thumb__infos__location']",
+]
 INFOS_SELECTORS = [
     "[class*='detail']",
     "[class*='surface']",
@@ -59,6 +66,13 @@ def find_text(element, selectors):
             continue
     return ""
 
+def parse_quartier(location):
+    """Nom de quartier seul depuis le libellé de localisation Orpi
+    ("Lyon 8- Monplaisir - Frères Lumière" -> "Monplaisir - Frères Lumière").
+    Chaîne vide si le libellé n'a pas de partie quartier (ex. "Lyon 5")."""
+    parts = re.split(r'-\s+', location.strip(), maxsplit=1)
+    return parts[1].strip() if len(parts) == 2 else ""
+
 def extract_price_from_text(text):
     match = re.search(r'(\d[\d\s]*€|\d[\d\s]*eur)', text, re.IGNORECASE)
     return match.group(1).strip() if match else ""
@@ -72,7 +86,7 @@ if __name__ == '__main__':
 
     driver = get_chrome_driver(user_agent=pick_user_agent(), proxy=pick_proxy())
 
-    CSV_HEADER = ['Titre_Lieu', 'Prix', 'Infos', 'Lien', 'Image', 'DerniereVue']
+    CSV_HEADER = ['Titre_Lieu', 'Prix', 'Infos', 'Lien', 'Image', 'DerniereVue', 'Quartier']
     LIEN_INDEX = CSV_HEADER.index('Lien')
     DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
 
@@ -163,6 +177,7 @@ if __name__ == '__main__':
                 titre = find_text(annonce, TITRE_SELECTORS)
                 prix = find_text(annonce, PRIX_SELECTORS)
                 infos = find_text(annonce, INFOS_SELECTORS)
+                quartier = parse_quartier(find_text(annonce, QUARTIER_SELECTORS))
 
                 # Si pas de prix via sélecteur, chercher dans le texte complet
                 if not prix:
@@ -173,7 +188,7 @@ if __name__ == '__main__':
 
                 image = find_first_image_url(annonce, base_url=driver.current_url)
 
-                rows_by_lien[href] = [titre, prix, infos, href, image, today]
+                rows_by_lien[href] = [titre, prix, infos, href, image, today, quartier]
                 liens_vus.add(href)
                 compteur_nouveaux += 1
                 logger.info("Annonce trouvée : %s -- %s", titre[:60], prix)
