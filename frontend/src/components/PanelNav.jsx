@@ -114,16 +114,15 @@ export default function PanelNav({ activeView, onChange, annonceCount, ficheDisa
             tabIndex={isActive ? 0 : -1}
             onKeyDown={(e) => handleKeyDown(e, index)}
             onClick={() => { if (!isDisabled) onChange(view.id); }}
-            className={`relative min-h-[58px] flex flex-col items-center justify-center gap-1 rounded-l-[14px] transition-colors focus-visible:outline-none focus-visible:ring-2 ${
+            className={`relative min-h-[58px] flex flex-col items-center justify-center gap-1 rounded-l-[14px] transition-colors focus-visible:outline-none focus-visible:ring-2 ring-accent-light border-l-[3px] ${
               isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
+            } ${isActive ? 'bg-ink-900 border-accent' : 'bg-transparent border-transparent'} ${
+              isActive || isDisabled ? '' : 'text-ink-muted'
             }`}
             style={{
-              color: isActive ? '#C4B5FD' : isDisabled ? '#4B5266' : '#94A3B8',
-              background: isActive ? '#151C33' : 'transparent',
+              color: isActive ? '#C4B5FD' : isDisabled ? '#4B5266' : undefined,
               marginRight: isActive ? '-1px' : undefined,
-              borderLeft: isActive ? '3px solid #7C3AED' : '3px solid transparent',
               boxShadow: isActive ? '0 0 18px rgba(124,58,237,.5)' : undefined,
-              outlineColor: '#A78BFA',
             }}
           >
             <Icon />
@@ -131,8 +130,8 @@ export default function PanelNav({ activeView, onChange, annonceCount, ficheDisa
             {showAnnoncesBadge && (
               <span
                 aria-hidden="true"
-                className="absolute top-1.5 right-2 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center"
-                style={{ background: '#FACC15', color: '#1C1400' }}
+                className="absolute top-1.5 right-2 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center bg-market-within"
+                style={{ color: '#1C1400' }}
               >
                 {annonceCount}
               </span>
@@ -140,8 +139,7 @@ export default function PanelNav({ activeView, onChange, annonceCount, ficheDisa
             {showChatDot && (
               <span
                 aria-hidden="true"
-                className="absolute top-2 right-3 w-2 h-2 rounded-full"
-                style={{ background: '#22C55E', boxShadow: '0 0 6px #22C55E' }}
+                className="absolute top-2 right-3 w-2 h-2 rounded-full bg-market-below shadow-[0_0_6px_#22c55e]"
               />
             )}
           </button>
