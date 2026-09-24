@@ -1,0 +1,8 @@
+{
+  "thresholdPct": 5,
+  "bands": {
+    "below": { "label": "Sous le marché", "color": "#22c55e" },
+    "within": { "label": "Dans le marché", "color": "#facc15" },
+    "above": { "label": "Au-dessus du marché", "color": "#e9003a" }
+  }
+}

@@ -92,7 +92,7 @@ describe('ResultCard', () => {
     expect(screen.queryByText(/bien\(s\) comparable/i)).not.toBeInTheDocument();
   });
 
-  it('displays the comparables list when present (ORA-128)', () => {
+  it('displays the representative annonces as compact cards when present (ORA-128/168)', () => {
     const dataWithComparables = {
       ...baseData,
       comparables: [
@@ -103,10 +103,36 @@ describe('ResultCard', () => {
 
     render(<ResultCard data={dataWithComparables} loading={false} />);
 
-    expect(screen.getByText('Biens comparables')).toBeInTheDocument();
+    expect(screen.getByText('Annonces représentatives')).toBeInTheDocument();
     expect(screen.getByText(/780/)).toBeInTheDocument();
-    expect(screen.getByText(/45/)).toBeInTheDocument();
+    expect(screen.getByText(/45 m²/)).toBeInTheDocument();
     expect(screen.getByText(/810/)).toBeInTheDocument();
+  });
+
+  describe('badge écart et lien « Voir les N » (ORA-168)', () => {
+    // référence : baseData.stats.prix_m2 (21 €/m²)
+    const comparables = [
+      { type_local: 'T2', prix: 600, surface: 40 }, // 15 €/m² -> -29 % : sous le marché
+      { type_local: 'T2', prix: 840, surface: 40 }, // 21 €/m² -> 0 % : dans le marché
+      { type_local: 'T2', prix: 1200, surface: 40 }, // 30 €/m² -> +43 % : au-dessus
+    ];
+
+    it('colors each écart badge by market band (±5 %)', () => {
+      render(<ResultCard data={{ ...baseData, comparables }} loading={false} />);
+
+      expect(screen.getByText('-29 %').className).toMatch(/text-market-below/);
+      expect(screen.getByText('0 %').className).toMatch(/text-market-within/);
+      expect(screen.getByText('+43 %').className).toMatch(/text-market-above/);
+    });
+
+    it('links "Voir les N →" to the quartier annonces', async () => {
+      const onViewAnnonces = vi.fn();
+      render(<ResultCard data={{ ...baseData, comparables, count: 12 }} loading={false} onViewAnnonces={onViewAnnonces} />);
+
+      await userEvent.click(screen.getByRole('button', { name: /voir les 12/i }));
+
+      expect(onViewAnnonces).toHaveBeenCalledWith('Gerland');
+    });
   });
 
   it('does not show a comparables section when there are none', () => {

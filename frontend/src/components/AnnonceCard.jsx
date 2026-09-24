@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { sanitizeListingUrl } from '../services/sanitizeUrl';
 import AnnonceDetailModal from './AnnonceDetailModal';
 import { useFavorites } from '../hooks/useFavorites';
+import { BAND_BADGE_CLASSES, MARKET_BANDS, ecartPct, marketBand } from '../services/marketBand';
 import { getTypeCategory, deriveSource } from '../services/annonceType';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
@@ -73,10 +74,8 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
   const prixM2 = Number.isFinite(prix) && Number.isFinite(surface) && surface > 0 ? prix / surface : null;
   const sameTypeAsReference =
     !referenceType || referenceType === 'Tout' || getTypeCategory(titre, surface) === referenceType;
-  const ecart =
-    prixM2 != null && Number.isFinite(referencePrixM2) && referencePrixM2 > 0 && sameTypeAsReference
-      ? Math.round(((prixM2 - referencePrixM2) / referencePrixM2) * 100)
-      : null;
+  const ecart = sameTypeAsReference ? ecartPct(prixM2, referencePrixM2) : null;
+  const band = ecart != null ? marketBand(ecart) : null;
   // ORA-113 : sans URL exploitable (absente, vide ou rejetée par la
   // sanitisation), la carte est explicitement désactivée au lieu d'un clic muet.
   const safeUrl = sanitizeListingUrl(url);
@@ -159,10 +158,8 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
           </div>
           {ecart != null && (
             <span
-              className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                ecart > 0 ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'
-              }`}
-              title="Écart vs €/m² moyen du quartier scanné"
+              className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${BAND_BADGE_CLASSES[band]}`}
+              title={`${MARKET_BANDS[band].label} — écart vs €/m² moyen du quartier scanné`}
             >
               {ecart > 0 ? '+' : ''}{ecart} %
             </span>
