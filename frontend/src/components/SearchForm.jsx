@@ -90,11 +90,23 @@ export default function SearchForm({
     setActiveIndex(-1);
   };
 
+  // ORA-179 (correction) : une suggestion de quartier "normale" ne fait plus
+  // que remplir le champ, sans lancer le scan immédiatement — l'ancien
+  // comportement (hérité de la Topbar) soumettait avec le Type/Surface
+  // encore à leur valeur par défaut, avant même que l'utilisateur ait pu les
+  // renseigner, et le menu ouvert recouvrait de toute façon les boutons
+  // "Type de bien" en dessous (clic intercepté). Une "recherche récente" de
+  // la palette reste un raccourci "rejouer telle quelle" : elle scanne
+  // toujours immédiatement avec SES PROPRES type/surface enregistrés.
   const selectItem = (item) => {
     setQuartier(item.quartier);
     closePalette();
-    if (item.quartier.trim().length >= MIN_QUARTIER_LENGTH) {
-      runScan(item.quartier, typeFilter, surface);
+    if (showingRecent && item.recent) {
+      const targetType = item.recent.typeLocal || 'Tout';
+      const targetSurface = item.recent.surface ? String(item.recent.surface) : '';
+      setTypeFilter(targetType);
+      setSurface(targetSurface);
+      runScan(item.quartier, targetType, targetSurface);
     }
   };
 

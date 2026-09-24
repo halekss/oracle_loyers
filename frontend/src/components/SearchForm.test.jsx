@@ -108,7 +108,11 @@ describe('SearchForm', () => {
       expect(screen.getByText(/19,6 €\/m²/)).toBeInTheDocument();
     });
 
-    it('scans immediately when an option is clicked', async () => {
+    it('fills the quartier field when a suggestion is clicked, without scanning immediately (ORA-179 fix)', async () => {
+      // Avant cette correction, cliquer une suggestion lançait le scan tout
+      // de suite avec Type/Surface encore à leur valeur par défaut — sans
+      // laisser le temps de les renseigner, et le menu ouvert recouvrait de
+      // toute façon les boutons "Type de bien" en dessous (clic intercepté).
       const onScan = vi.fn();
       const user = userEvent.setup();
       render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={onScan} isLoading={false} quartierOptions={quartierOptions} autoFocus={false} />);
@@ -116,10 +120,26 @@ describe('SearchForm', () => {
       await user.type(screen.getByLabelText('Quartier à scanner'), 'Ainay');
       await user.click(await screen.findByRole('option', { name: /Ainay/ }));
 
-      expect(onScan).toHaveBeenCalledWith('Ainay', 'Tout', '');
+      expect(screen.getByLabelText('Quartier à scanner')).toHaveValue('Ainay');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(onScan).not.toHaveBeenCalled();
     });
 
-    it('navigates with ArrowDown/ArrowUp and selects the highlighted option on Enter', async () => {
+    it('lets the user pick a type and surface after selecting a suggestion, then scans on Scan click', async () => {
+      const onScan = vi.fn();
+      const user = userEvent.setup();
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={onScan} isLoading={false} quartierOptions={quartierOptions} autoFocus={false} />);
+
+      await user.type(screen.getByLabelText('Quartier à scanner'), 'Ainay');
+      await user.click(await screen.findByRole('option', { name: /Ainay/ }));
+      await user.click(screen.getByRole('button', { name: 'T2' }));
+      await user.type(screen.getByLabelText(/Surface en m²/), '45');
+      await user.click(screen.getByRole('button', { name: 'Scan' }));
+
+      expect(onScan).toHaveBeenCalledWith('Ainay', 'T2', '45');
+    });
+
+    it('navigates with ArrowDown/ArrowUp and fills the highlighted option on Enter, without scanning immediately', async () => {
       const onScan = vi.fn();
       const user = userEvent.setup();
       render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={onScan} isLoading={false} quartierOptions={quartierOptions} autoFocus={false} />);
@@ -129,7 +149,23 @@ describe('SearchForm', () => {
       await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
 
       // 2e option de la liste filtrée ("croix") = Pentes Croix-Rousse
-      expect(onScan).toHaveBeenCalledWith('Pentes Croix-Rousse', 'Tout', '');
+      expect(input).toHaveValue('Pentes Croix-Rousse');
+      expect(onScan).not.toHaveBeenCalled();
+    });
+
+    it('scans immediately when a recent search is clicked from the palette (distinct from a plain suggestion)', async () => {
+      localStorage.setItem(
+        'oracle-loyers:recent-searches',
+        JSON.stringify([{ quartier: 'Ainay', typeLocal: 'T2', surface: '45', ville: 'lyon' }]),
+      );
+      const onScan = vi.fn();
+      const user = userEvent.setup();
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={onScan} isLoading={false} quartierOptions={quartierOptions} autoFocus={false} />);
+
+      await user.click(screen.getByLabelText('Quartier à scanner'));
+      await user.click(await screen.findByRole('option', { name: /Ainay.*T2.*45 m²/ }));
+
+      expect(onScan).toHaveBeenCalledWith('Ainay', 'T2', '45');
     });
 
     it('closes the palette on Escape without submitting', async () => {
