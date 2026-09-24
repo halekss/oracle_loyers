@@ -68,6 +68,28 @@ class ReportPdfRouteTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_route_accepts_surface_data_as_of_and_comparable_source(self):
+        """ORA-177 : champs ajoutés pour aligner le rapport sur la maquette 09
+        (case "ESTIMATION XX M²", "Données au", colonne SOURCE du tableau)."""
+        client = app.app.test_client()
+
+        response = client.post(
+            "/api/report/pdf",
+            json={
+                "quartier": "Ainay",
+                "type_local": "T2",
+                "estimated_price": 1001,
+                "surface": 45,
+                "data_as_of": "12/08/2026",
+                "comparables": [
+                    {"type_local": "T2", "prix": 895, "surface": 51, "site": "Vizzit"},
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data.startswith(b"%PDF"))
+
 
 if __name__ == "__main__":
     unittest.main()

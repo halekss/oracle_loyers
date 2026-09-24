@@ -8,39 +8,18 @@ from services.pdf_report import build_report_html, render_estimation_pdf
 
 
 class BuildReportHtmlTest(unittest.TestCase):
-    """ORA-121 : mise en page HTML source du PDF (WeasyPrint), testable
-    indépendamment du rendu PDF lui-même."""
+    """ORA-121/ORA-177 : mise en page HTML source du PDF (WeasyPrint),
+    alignée sur la maquette Claude Design 09 (`project/09-pdf.dc.html`),
+    testable indépendamment du rendu PDF lui-même."""
 
     def test_includes_the_quartier_and_estimated_price(self):
         html = build_report_html({
             "quartier": "Gerland",
             "estimated_price": 950,
-            "prix_m2": 21,
         })
 
         self.assertIn("Gerland", html)
         self.assertIn("950", html)
-        self.assertIn("21", html)
-
-    def test_includes_the_facteurs_when_present(self):
-        html = build_report_html({
-            "quartier": "Gerland",
-            "estimated_price": 950,
-            "facteurs": [
-                {"categorie": "Vice", "phrase": "2 bar(s) à moins de 500m."},
-                {"categorie": "Nuisance", "phrase": "Une aire de jeux à 208m."},
-            ],
-        })
-
-        self.assertIn("Vice", html)
-        self.assertIn("2 bar(s) à moins de 500m.", html)
-        self.assertIn("Nuisance", html)
-        self.assertIn("Une aire de jeux à 208m.", html)
-
-    def test_omits_the_facteurs_section_when_absent(self):
-        html = build_report_html({"quartier": "Gerland", "estimated_price": 950})
-
-        self.assertNotIn("Les 4 Cavaliers", html)
 
     def test_escapes_hostile_quartier_value(self):
         html = build_report_html({
@@ -55,43 +34,112 @@ class BuildReportHtmlTest(unittest.TestCase):
 
         self.assertIn("size: A4", html)
 
-    def test_includes_the_price_history_when_present(self):
+    def test_includes_the_facteurs_when_present(self):
         html = build_report_html({
             "quartier": "Gerland",
             "estimated_price": 950,
-            "historique": [
-                {"date": "2026-01-01T00:00:00+00:00", "prix_m2_moyen": 20, "count": 12},
-                {"date": "2026-02-01T00:00:00+00:00", "prix_m2_moyen": 21, "count": 14},
+            "facteurs": [
+                {"categorie": "Vice", "phrase": "2 bar(s) à moins de 500m."},
+                {"categorie": "Nuisance", "phrase": "Une aire de jeux à 208m."},
             ],
         })
 
-        self.assertIn("Historique du prix", html)
-        self.assertIn("20", html)
-        self.assertIn("21", html)
+        self.assertIn("Les 4 cavaliers", html)
+        self.assertIn("Vice", html)
+        self.assertIn("2 bar(s) à moins de 500m.", html)
+        self.assertIn("Nuisance", html)
+        self.assertIn("Une aire de jeux à 208m.", html)
 
-    def test_omits_the_price_history_section_when_absent(self):
+    def test_omits_the_facteurs_section_when_absent(self):
         html = build_report_html({"quartier": "Gerland", "estimated_price": 950})
 
-        self.assertNotIn("Historique du prix", html)
+        self.assertNotIn("Les 4 cavaliers", html)
 
-    def test_includes_the_comparables_when_present(self):
+    def test_includes_the_comparables_table_with_source_and_ecart(self):
         html = build_report_html({
             "quartier": "Gerland",
             "estimated_price": 950,
             "comparables": [
-                {"type_local": "T2", "prix": 780, "surface": 45},
-                {"type_local": "T2", "prix": 810, "surface": 48},
+                {"type_local": "T2", "prix": 780, "surface": 40, "site": "Vizzit"},
+                {"type_local": "T2", "prix": 900, "surface": 40, "site": "PAP"},
             ],
         })
 
-        self.assertIn("Biens comparables", html)
+        self.assertIn("Les 2 annonces comparables", html)
         self.assertIn("780", html)
-        self.assertIn("45", html)
+        self.assertIn("Vizzit", html)
+        self.assertIn("PAP", html)
+        # écart €/m² : 780/40=19,5 et 900/40=22,5, médiane=21 -> -7% / +7%
+        self.assertIn("-7 %", html)
+        self.assertIn("+7 %", html)
+
+    def test_comparable_without_site_shows_a_placeholder(self):
+        html = build_report_html({
+            "quartier": "Gerland",
+            "estimated_price": 950,
+            "comparables": [{"type_local": "T2", "prix": 780, "surface": 40}],
+        })
+
+        self.assertIn(">—<", html)
 
     def test_omits_the_comparables_section_when_absent(self):
         html = build_report_html({"quartier": "Gerland", "estimated_price": 950})
 
-        self.assertNotIn("Biens comparables", html)
+        self.assertNotIn("annonces comparables", html)
+
+    def test_loyer_median_box_uses_estimated_price_without_comparables(self):
+        html = build_report_html({"quartier": "Gerland", "estimated_price": 950})
+
+        self.assertIn("Loyer médian", html)
+        self.assertIn("950", html)
+
+    def test_loyer_median_box_derives_median_and_quartiles_from_comparables(self):
+        html = build_report_html({
+            "quartier": "Gerland",
+            "estimated_price": 950,
+            "comparables": [
+                {"prix": 700, "surface": 40}, {"prix": 750, "surface": 40},
+                {"prix": 800, "surface": 40}, {"prix": 850, "surface": 40},
+            ],
+            "count": 4,
+        })
+
+        self.assertIn("P25", html)
+        self.assertIn("4 annonces", html)
+
+    def test_omits_quartile_range_with_fewer_than_4_comparables(self):
+        html = build_report_html({
+            "quartier": "Gerland",
+            "estimated_price": 950,
+            "comparables": [{"prix": 700, "surface": 40}, {"prix": 800, "surface": 40}],
+        })
+
+        self.assertNotIn("P25", html)
+
+    def test_estimation_box_only_shown_with_a_surface(self):
+        with_surface = build_report_html({
+            "quartier": "Gerland", "estimated_price": 950, "surface": 45,
+        })
+        without_surface = build_report_html({
+            "quartier": "Gerland", "estimated_price": 950,
+        })
+
+        self.assertIn("Estimation 45 m²", with_surface)
+        self.assertNotIn("metric-label\">Estimation", without_surface)
+
+    def test_includes_the_data_as_of_date_when_present(self):
+        html = build_report_html({
+            "quartier": "Gerland",
+            "estimated_price": 950,
+            "data_as_of": "12/08/2026",
+        })
+
+        self.assertIn("Données au 12/08/2026", html)
+
+    def test_omits_the_data_as_of_line_when_absent(self):
+        html = build_report_html({"quartier": "Gerland", "estimated_price": 950})
+
+        self.assertNotIn("Données au", html)
 
 
 class RenderEstimationPdfTest(unittest.TestCase):
@@ -101,7 +149,9 @@ class RenderEstimationPdfTest(unittest.TestCase):
             "estimated_price": 950,
             "prix_m2": 21,
             "confiance": "Élevée",
+            "surface": 45,
             "facteurs": [{"categorie": "Vice", "phrase": "2 bar(s) à moins de 500m."}],
+            "comparables": [{"type_local": "T2", "prix": 950, "surface": 45, "site": "Vizzit"}],
         })
 
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
