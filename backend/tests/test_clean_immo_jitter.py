@@ -32,6 +32,17 @@ class GeocodingJitterTest(unittest.TestCase):
         self.assertAlmostEqual(result["latitude"].iloc[0], 45.75)
         self.assertAlmostEqual(result["longitude"].iloc[0], 4.85)
 
+    def test_position_fiable_survives_geocoding_and_quartiers(self):
+        # ORA-156 : GPS réel (ligne 0) vs point jitteré (ligne 1) — le flag
+        # doit rester lisible dans le CSV final, sans recalcul depuis le brut.
+        df_input = self._sample_df().iloc[:2].copy()
+        df_input["latitude"] = [45.75, None]
+        df_input["longitude"] = [4.85, None]
+
+        result = clean_immo.step_quartiers(clean_immo.step_geocoding(df_input))
+
+        self.assertEqual(result["position_fiable"].tolist(), [True, False])
+
 
 if __name__ == "__main__":
     unittest.main()
