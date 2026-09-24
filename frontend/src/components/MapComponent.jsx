@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import { api } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 import mapLayersConfig from '../config/mapLayers.config.json';
 import { LAYER_MAPPING, layersByGroup } from '../services/mapLayers';
 
@@ -186,7 +186,22 @@ const MapComponent = forwardRef(function MapComponent(
     sendLayerCommand(layerKey, newState);
   };
 
+  // Fond de carte : les tuiles passent par le proxy du backend (/api/tiles),
+  // qui détient la clé CARTO — aucune clé côté navigateur. L'URL dépend du
+  // déploiement (VITE_API_URL), d'où son envoi à l'iframe au chargement plutôt
+  // que son écriture dans la carte générée, versionnée (MAP_CONTRACT.md,
+  // SET_TILE_URL).
+  const sendTileUrl = () => {
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        { type: 'SET_TILE_URL', url: `${getApiBaseUrl()}/tiles/{z}/{x}/{y}{r}.png` },
+        window.location.origin,
+      );
+    }
+  };
+
   const handleIframeLoad = () => {
+    sendTileUrl();
     Object.keys(layers).forEach(key => sendLayerCommand(key, layers[key]));
   };
 
