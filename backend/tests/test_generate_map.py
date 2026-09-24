@@ -402,19 +402,7 @@ class FilterByVilleTest(unittest.TestCase):
         self.assertEqual(len(result), 2)
 
 
-class QuartierLabelsAndLegendTest(unittest.TestCase):
-    def test_labels_are_uppercase_and_skip_fallback_quartiers(self):
-        df = pd.DataFrame({
-            'quartier': ['Ainay'] * 3 + ['Lyon / Non localisé'] * 3 + ['Peu'] * 2,
-            'latitude': [45.75, 45.76, 45.77] + [45.7] * 3 + [45.8] * 2,
-            'longitude': [4.82, 4.83, 4.84] + [4.9] * 3 + [4.7] * 2,
-        })
-
-        labels = generate_map.compute_quartier_labels(df)
-
-        self.assertEqual([l[0] for l in labels], ['AINAY'])
-        self.assertAlmostEqual(labels[0][1], 45.76)
-
+class LegendAndScaleTest(unittest.TestCase):
     def test_legend_lists_the_layers_of_the_shared_config(self):
         layers = [
             {'name': 'Immo T2', 'label': 'Apparts T2', 'group': 'immobilier', 'uiColor': '#22c55e'},

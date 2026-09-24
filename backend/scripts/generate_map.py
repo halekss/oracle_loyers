@@ -221,25 +221,7 @@ def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_ur
     """
 
 
-# --- ORA-165/166 : labels de quartiers, légende, échelle ---
-
-# Quartiers de repli, sans nom de lieu réel : pas d'étiquette sur la carte.
-UNLABELLED_QUARTIER_MARKERS = ('non localisé', 'secteur ', 'inconnu')
-
-
-def compute_quartier_labels(df_immo, min_listings=3):
-    """`[(NOM EN CAPITALES, lat, lon)]` : centre de chaque quartier réel
-    (moyenne des annonces localisées). Les quartiers de repli (« Non
-    localisé », « Secteur … ») n'ont pas de position significative : ignorés."""
-    if df_immo.empty or not {'quartier', 'latitude', 'longitude'}.issubset(df_immo.columns):
-        return []
-    located = df_immo.dropna(subset=['quartier', 'latitude', 'longitude'])
-    labels = []
-    for nom, group in located.groupby('quartier'):
-        if len(group) < min_listings or any(m in str(nom).lower() for m in UNLABELLED_QUARTIER_MARKERS):
-            continue
-        labels.append((str(nom).upper(), float(group['latitude'].mean()), float(group['longitude'].mean())))
-    return labels
+# --- ORA-166 : légende, échelle ---
 
 
 def build_legend_html(layers_config):
@@ -267,9 +249,8 @@ def build_legend_html(layers_config):
 
 
 def build_legend_and_scale_script(map_var, legend_html):
-    """Injecte la légende, l'échelle métrique et les classes de zoom
-    (`oracle-z13`/`oracle-z14`, qui révèlent labels de quartiers et noms de
-    stations) ; grise les lignes de légende des calques masqués."""
+    """Injecte la légende et l'échelle métrique ; grise les lignes de
+    légende des calques masqués."""
     legend_js = json.dumps(legend_html)
     # `load` : Folium rend le script d'init de la carte APRÈS </body> ; à
     # l'exécution de ce bloc, `{map_var}` n'est donc pas encore défini.
@@ -287,12 +268,6 @@ def build_legend_and_scale_script(map_var, legend_html):
         }}
         map.on('overlayadd', function(e) {{ setLegend(e.name, true); }});
         map.on('overlayremove', function(e) {{ setLegend(e.name, false); }});
-        function updateZoomClasses() {{
-            document.body.classList.toggle('oracle-z13', map.getZoom() >= 13);
-            document.body.classList.toggle('oracle-z14', map.getZoom() >= 14);
-        }}
-        map.on('zoomend', updateZoomClasses);
-        updateZoomClasses();
     }});
     """
 
@@ -605,8 +580,6 @@ def main(ville='lyon'):
                         [lat, lon],
                         icon=folium.DivIcon(html=icon_html, icon_size=(24, 24), icon_anchor=(12, 12)),
                         popup=folium.Popup(popup_txt, max_width=200, className='oracle-popup'),
-                        # ORA-165 : nom de la station, affiché à partir du zoom 14 (CSS)
-                        tooltip=folium.Tooltip(html.escape(str(nom_station)), permanent=True, direction='right', offset=(12, 0), class_name='oracle-metro-label'),
                     ).add_to(target_group)
                     count_stations += 1
 
@@ -647,18 +620,6 @@ def main(ville='lyon'):
         print(f"🗺️ Quartiers chargés : {len(quartiers_geojson.get('features', []))} arrondissements tracés.")
     else:
         print(f"⚠️ GeoJSON des quartiers introuvable ou invalide ({paths['quartiers_geojson']}), couche ignorée.")
-
-    # --- 6ter. LABELS DE QUARTIERS EN CAPITALES (ORA-165) ---
-    # Hors LayerControl (control=False) : toujours présents, révélés par CSS à
-    # partir du zoom 13 ; non interactifs pour ne pas gêner les clics marqueurs.
-    fg_quartier_labels = folium.FeatureGroup(name='Noms de quartiers', control=False)
-    for nom, lat, lon in compute_quartier_labels(df_immo):
-        folium.Marker(
-            [lat, lon],
-            icon=folium.DivIcon(html=f"<div class='oracle-quartier-label'>{html.escape(nom)}</div>", icon_size=(160, 16), icon_anchor=(80, 8), class_name='oracle-quartier-icon'),
-            interactive=False, keyboard=False,
-        ).add_to(fg_quartier_labels)
-    fg_quartier_labels.add_to(m)
 
     # --- 7. CAVALIERS ---
     mapping_simple = {'vice': (fg_vice, COLORS['Vice']), 'gentrification': (fg_gentri, COLORS['Gentrification']), 'nuisance': (fg_nuisance, COLORS['Nuisance']), 'superstition': (fg_superstition, COLORS['Superstition'])}
@@ -724,20 +685,6 @@ def main(ville='lyon'):
         .leaflet-popup-close-button {{ color: #94a3b8 !important; }}
         .leaflet-popup-close-button:hover {{ color: #f8fafc !important; }}
         .leaflet-interactive {{ cursor: pointer !important; }}
-
-        /* Noms de stations (zoom >= 14) et labels de quartiers (zoom >= 13) */
-        .leaflet-tooltip.oracle-metro-label {{
-            display: none; background: transparent; border: none; box-shadow: none;
-            color: #e2e8f0; font: 600 10px sans-serif; text-shadow: 0 0 3px #070a12, 0 0 3px #070a12;
-        }}
-        .leaflet-tooltip.oracle-metro-label::before {{ display: none; }}
-        body.oracle-z14 .leaflet-tooltip.oracle-metro-label {{ display: block; }}
-        .oracle-quartier-icon {{ background: transparent !important; border: none !important; display: none; }}
-        body.oracle-z13 .oracle-quartier-icon {{ display: block; }}
-        .oracle-quartier-label {{
-            width: 160px; text-align: center; color: #cbd5e1; font: 700 10px sans-serif;
-            letter-spacing: 0.12em; text-shadow: 0 0 4px #070a12, 0 0 4px #070a12; pointer-events: none;
-        }}
 
         /* Légende (ORA-166) */
         .oracle-legend {{
