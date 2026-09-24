@@ -38,6 +38,7 @@ __all__ = [
     "load_site_config",
     "pick_user_agent",
     "pick_proxy",
+    "blank_short_descriptions",
     "load_existing_rows",
     "today_iso",
     "should_continue_pagination",
@@ -376,6 +377,18 @@ def clean_description(text):
     text = re.sub(r"\s+", " ", text or "").strip()
     text = re.sub(r"^description\b[\s:.-]*", "", text, flags=re.IGNORECASE)
     return text if len(text) >= MIN_DESCRIPTION_CHARS else ""
+
+
+def blank_short_descriptions(rows, desc_index):
+    """Vide les descriptions trop courtes pour en être une (bruit type « France
+    Lille » capté par un ancien sélecteur) afin que `enrich_descriptions` les
+    retente. Renvoie le nombre de lignes vidées."""
+    n = 0
+    for row in rows:
+        if row[desc_index] and not clean_description(row[desc_index]):
+            row[desc_index] = ""
+            n += 1
+    return n
 
 
 def load_details_config(config_path=None):

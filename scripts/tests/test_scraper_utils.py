@@ -543,5 +543,13 @@ class LoadDetailsConfigTest(unittest.TestCase):
         self.assertLessEqual(config["delay_min_s"], config["delay_max_s"])
 
 
+class BlankShortDescriptionsTest(unittest.TestCase):
+    def test_only_too_short_descriptions_are_blanked(self):
+        rows = [["a", "France Lille"], ["b", LONG_TEXT], ["c", ""]]
+        self.assertEqual(scraper_utils.blank_short_descriptions(rows, 1), 1)
+        self.assertEqual([r[1] for r in rows], ["", LONG_TEXT, ""])
+
+
 if __name__ == "__main__":
     unittest.main()
+

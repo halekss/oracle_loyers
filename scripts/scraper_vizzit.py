@@ -9,6 +9,8 @@ import sys
 
 from scraper_utils import (
     atomic_csv_writer,
+    blank_short_descriptions,
+    enrich_descriptions,
     find_first_image_url,
     get_chrome_driver,
     get_scraper_logger,
@@ -17,6 +19,7 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
+    selenium_description_fetcher,
     should_continue_pagination,
     today_iso,
 )
@@ -53,13 +56,16 @@ DETAIL_SELECTORS = [
     "span[class*='detail']",
     "[class*='feature']",
 ]
-DESC_SELECTORS = ["p.description__text", "p[class*='description']", "div[class*='description']", "[class*='desc']"]
+# Vérifié sur le DOM réel (2026-09) : `.description-text` porte la description ; les anciens
+# `p.description__text` et `[class*='desc']` (qui captait `feature-desc` = "France Lille") sont retirés.
+DESC_SELECTORS = [".description-text", ".main-description"]
+# Vérifié sur le DOM réel (2026-09) : les photos de l'annonce sont sous `/Photos/` ; `picture img`
+# et `img` seuls captaient le logo Vizzit (ou un pixel base64) -> retirés, pas de repli générique.
 IMAGE_SELECTORS = [
+    "img[src*='/Photos/']",
     "img[class*='gallery']",
     "img[class*='carousel']",
-    "picture img",
     "img[class*='photo']",
-    "img",
 ]
 
 def find_text(element, selectors, default=""):
@@ -215,15 +221,13 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
             try:
                 load_page(driver, info['lien'])
                 description = ""
+                # find_elements sans attente : driver.get() a déjà attendu le chargement ;
+                # l'ancien WebDriverWait(10 s) × sélecteurs coûtait ~20 s par annonce.
                 for sel in DESC_SELECTORS:
-                    try:
-                        desc_elem = WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, sel))
-                        )
-                        description = desc_elem.text.strip().replace('\n', ' ')
+                    desc_elems = driver.find_elements(By.CSS_SELECTOR, sel)
+                    if desc_elems:
+                        description = desc_elems[0].text.strip().replace('\n', ' ')
                         break
-                    except Exception:
-                        continue
 
                 image = find_first_image_url(driver, selectors=IMAGE_SELECTORS, base_url=driver.current_url)
 
@@ -264,6 +268,7 @@ if __name__ == '__main__':
 
     CSV_HEADER = ['Lieu', 'Prix', 'Details', 'Description', 'Lien', 'Image', 'DerniereVue']
     LIEN_INDEX = CSV_HEADER.index('Lien')
+    DESCRIPTION_INDEX = CSV_HEADER.index('Description')
     DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
 
     existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
@@ -292,6 +297,13 @@ if __name__ == '__main__':
         total_nouveaux_run += nouveaux
         total_cards_vues += cards_vues
         erreurs += band_erreurs
+
+    # Stock existant : le scrape ne revisite pas les annonces connues, donc les descriptions
+    # vides ou parasites (« France Lille ») sont complétées ici, plafonné par run (cf. scraper_utils).
+    blank_short_descriptions(rows_by_lien.values(), DESCRIPTION_INDEX)
+    enrich_descriptions(rows_by_lien, LIEN_INDEX, DESCRIPTION_INDEX,
+                        selenium_description_fetcher(driver, DESC_SELECTORS), logger)
+    checkpoint()
 
     driver.quit()
 
