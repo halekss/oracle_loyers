@@ -79,6 +79,9 @@ class ComparableSchema(BaseModel):
     type_local: Optional[str] = None
     prix: Optional[float] = None
     surface: Optional[float] = None
+    # ORA-177 : source de l'annonce (colonne `site`), affichée dans la
+    # colonne SOURCE du tableau "annonces comparables" du rapport PDF.
+    site: Optional[str] = None
 
 
 class PdfReportRequestSchema(BaseModel):
@@ -94,6 +97,12 @@ class PdfReportRequestSchema(BaseModel):
     facteurs: Optional[List[FacteurSchema]] = None
     historique: Optional[List[PriceHistoryPointSchema]] = None
     comparables: Optional[List[ComparableSchema]] = None
+    # ORA-177 : alignement du rapport PDF sur la maquette 09 — surface pour
+    # le libellé "ESTIMATION XX M²" (absent en mode scan sans surface,
+    # auquel cas la case correspondante n'est pas affichée) et date de
+    # fraîcheur des données déjà calculée côté frontend (Topbar "Données au").
+    surface: Optional[float] = None
+    data_as_of: Optional[str] = None
 
     @field_validator("quartier")
     @classmethod

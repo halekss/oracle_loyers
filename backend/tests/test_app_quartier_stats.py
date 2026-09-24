@@ -41,15 +41,18 @@ class QuartierStatsRouteTest(unittest.TestCase):
             self.assertIn("items", detail)
             self.assertIn("empty_message", detail)
 
-    def test_route_returns_up_to_3_comparables(self):
-        """ORA-122/ORA-128 : quelques biens comparables réels (échantillon),
-        pour le rapport PDF et l'explication de la confiance côté frontend."""
+    def test_route_returns_up_to_12_comparables(self):
+        """ORA-122/ORA-128/ORA-177 : échantillon de biens comparables réels,
+        pour le rapport PDF (tableau des 12 annonces comparables, maquette 09)
+        et l'explication de la confiance côté frontend (qui n'en affiche que
+        les 3 premiers à l'écran)."""
         client = app.app.test_client()
         controlled_df = pd.DataFrame({
             'quartier': ['Gerland'] * 5,
             'prix': [700, 750, 800, 850, 1200],
             'surface': [30, 32, 35, 38, 50],
             'type_local': ['T2'] * 5,
+            'site': ['Vizzit', 'PAP', 'SeLoger', 'Orpi', 'ParuVendu'],
         })
 
         with patch.object(app.data_loader, "get_data", return_value=controlled_df):
@@ -61,12 +64,13 @@ class QuartierStatsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertIn("comparables", data)
-        self.assertLessEqual(len(data["comparables"]), 3)
+        self.assertLessEqual(len(data["comparables"]), 12)
         self.assertGreater(len(data["comparables"]), 0)
         for comparable in data["comparables"]:
             self.assertIn("type_local", comparable)
             self.assertIn("prix", comparable)
             self.assertIn("surface", comparable)
+            self.assertIn("site", comparable)
 
     def test_route_returns_empty_comparables_list_when_type_filtered_result_is_empty(self):
         client = app.app.test_client()

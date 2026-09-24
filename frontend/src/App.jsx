@@ -336,7 +336,7 @@ function App() {
             {/* Résultat */}
             {(result || loading) && (
             <div className="p-4 md:p-5 border-b border-slate-800 bg-slate-900/30">
-              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} />
+              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
               {/* ORA-171 : le panneau "Estimation personnalisée" affiche déjà
                   le décompte ("Voir les N →") — cette ligne ne s'applique donc
                   qu'au repli sans prédiction modèle (pas de surface). */}

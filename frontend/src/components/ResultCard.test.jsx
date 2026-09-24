@@ -271,5 +271,63 @@ describe('ResultCard', () => {
         );
       });
     });
+
+    it('includes the surface and data freshness date in the PDF export (ORA-177)', async () => {
+      api.exportEstimationPdf.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+      URL.revokeObjectURL = vi.fn();
+      const user = userEvent.setup();
+
+      render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} dataAsOf="12/08/2026" />);
+      await user.click(screen.getByRole('button', { name: /exporter en pdf/i }));
+
+      await waitFor(() => {
+        expect(api.exportEstimationPdf).toHaveBeenCalledWith(
+          expect.objectContaining({ surface: 45, data_as_of: '12/08/2026' }),
+        );
+      });
+    });
+
+    it('does not send a surface in the PDF export without a real model prediction', async () => {
+      api.exportEstimationPdf.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+      URL.revokeObjectURL = vi.fn();
+      const user = userEvent.setup();
+
+      render(<ResultCard data={baseData} loading={false} />);
+      await user.click(screen.getByRole('button', { name: /exporter en pdf/i }));
+
+      await waitFor(() => {
+        expect(api.exportEstimationPdf).toHaveBeenCalledWith(
+          expect.objectContaining({ surface: undefined }),
+        );
+      });
+    });
+
+    it('caps the on-screen comparables list at 3 but sends the full list to the PDF export (ORA-177)', async () => {
+      api.exportEstimationPdf.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+      URL.revokeObjectURL = vi.fn();
+      const user = userEvent.setup();
+      const manyComparables = Array.from({ length: 6 }, (_, i) => ({
+        type_local: 'T2', prix: 1000 + i, surface: 45, site: 'Vizzit',
+      }));
+      const dataWithMany = { ...modelData, comparables: manyComparables };
+
+      render(<ResultCard data={dataWithMany} loading={false} ville="lyon" health={health} />);
+      expect(screen.getByText('1 000 €')).toBeInTheDocument();
+      expect(screen.queryByText('1 005 €')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /exporter en pdf/i }));
+
+      await waitFor(() => {
+        expect(api.exportEstimationPdf).toHaveBeenCalledWith(
+          expect.objectContaining({ comparables: manyComparables }),
+        );
+      });
+    });
   });
 });

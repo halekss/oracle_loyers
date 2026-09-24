@@ -568,14 +568,18 @@ def get_quartier_stats():
         # ORA-122/ORA-128 : échantillon de biens comparables réels (les plus
         # proches du prix moyen, donc les plus représentatifs), pour le
         # rapport PDF et l'explication de la confiance côté frontend.
+        # ORA-177 : échantillon élargi à 12 (au lieu de 3) pour le tableau
+        # "annonces comparables" du rapport PDF — le frontend (ResultCard)
+        # ne garde que les 3 premiers pour l'affichage compact à l'écran.
         comparables_df = filtered_df.assign(
             _ecart=(filtered_df['prix'] - mean_price).abs()
-        ).sort_values('_ecart').head(3)
+        ).sort_values('_ecart').head(12)
         comparables = [
             {
                 "type_local": row.get('type_local'),
                 "prix": round(float(row['prix']), 0),
                 "surface": round(float(row['surface']), 0) if pd.notna(row.get('surface')) else None,
+                "site": row.get('site') if pd.notna(row.get('site')) else None,
             }
             for _, row in comparables_df.iterrows()
         ]

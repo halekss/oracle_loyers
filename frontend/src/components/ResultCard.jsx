@@ -15,7 +15,9 @@ const formatM2 = (p) => (p ? p.toLocaleString('fr-FR', { maximumFractionDigits: 
 // `ville`/`health` (ORA-171) : alimentent "± N € (erreur moyenne du modèle
 // XGBoost <Ville>)" et "entraîné sur N annonces" avec les vraies métriques
 // du modèle actif plutôt que des chiffres codés en dur.
-export default function ResultCard({ data, loading, priceHistory, onViewAnnonces, ville, health }) {
+// `dataAsOf` (ORA-177) : badge "Données au" déjà calculé pour la Topbar,
+// repris tel quel dans l'en-tête du rapport PDF exporté.
+export default function ResultCard({ data, loading, priceHistory, onViewAnnonces, ville, health, dataAsOf }) {
 
   const safeData = data || {};
   const stats = safeData.stats || {};
@@ -25,7 +27,11 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
   const confiance = safeData.confiance;
   const quartier = safeData.quartier;
   const facteurs = safeData.facteurs || [];
+  // ORA-177 : le backend renvoie désormais jusqu'à 12 comparables (pour le
+  // tableau du rapport PDF) — l'affichage à l'écran reste volontairement
+  // compact (3 max), le PDF exporte la liste complète `comparables`.
   const comparables = safeData.comparables || [];
+  const onScreenComparables = comparables.slice(0, 3);
   const surface = safeData.surface;
   // ORA-171 : le panneau "Estimation personnalisée" (maquette 03) ne
   // s'affiche que si une vraie prédiction XGBoost a eu lieu (surface +
@@ -87,6 +93,8 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
         confiance,
         count: safeData.count,
         type_local: safeData.type,
+        surface: hasModelEstimate ? surface : undefined,
+        data_as_of: dataAsOf || undefined,
         facteurs,
         historique: priceHistory?.historique || undefined,
         comparables: comparables.length > 0 ? comparables : undefined,
@@ -226,7 +234,7 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
         </div>
 
         {/* Surfaces proches · écart à l'estimation */}
-        {comparables.length > 0 && (
+        {onScreenComparables.length > 0 && (
           <div className="mt-3 bg-ink-900 border border-ink-700 rounded-xl p-3">
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">
@@ -243,7 +251,7 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
               )}
             </div>
             <ul className="space-y-1">
-              {comparables.map((c, i) => {
+              {onScreenComparables.map((c, i) => {
                 const expected = m2PriceRaw * c.surface;
                 const ecart = expected > 0 ? Math.round(((c.prix - expected) / expected) * 100) : null;
                 return (
@@ -330,11 +338,11 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
         </div>
       </div>
 
-      {comparables.length > 0 && (
+      {onScreenComparables.length > 0 && (
         <div className="mt-3 bg-slate-900 rounded-xl border border-slate-700 p-3">
           <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">Biens comparables</p>
           <ul className="space-y-1">
-            {comparables.map((c, i) => (
+            {onScreenComparables.map((c, i) => (
               <li key={i} className="flex justify-between text-[11px] text-slate-300">
                 <span>{c.type_local || '—'}</span>
                 <span>{formatPrice(c.prix)} € · {formatPrice(c.surface)} m²</span>
