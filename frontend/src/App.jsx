@@ -83,6 +83,11 @@ function App() {
   // exploitable (repli explicite sur le centre-ville dans MapComponent).
   const [mapBounds, setMapBounds] = useState(undefined);
   const [listings, setListings] = useState([]);
+  // ORA-179 : état d'erreur du fetch /api/listings + jeton incrémenté par le
+  // bouton "Réessayer" de l'Accueil pour relancer la requête (cf. useEffect
+  // de chargement des listings plus bas).
+  const [listingsError, setListingsError] = useState(null);
+  const [listingsRetryToken, setListingsRetryToken] = useState(0);
   const [activeTab, setActiveTab] = useState('oracle');
   // ORA-127 : lien direct depuis un quartier scanné vers ses annonces —
   // `token` change à chaque clic (même quartier compris) pour que
@@ -130,20 +135,30 @@ function App() {
   const ficheDetail = useAnnonceDetail(selectedAnnonceId);
 
   // ORA-105 : chargé une fois, sert à résoudre les coordonnées des quartiers
-  // des annonces affichées (AnnoncesList n'a pas de latitude/longitude).
+  // des annonces affichées (AnnoncesList n'a pas de latitude/longitude), et
+  // à calculer les agrégats "Le marché en un coup d'œil" (Accueil). Un échec
+  // silencieux ici (ex : quota /api/listings dépassé au chargement) laissait
+  // auparavant l'Accueil afficher "0 ARRONDISSEMENTS"/"—" indéfiniment, sans
+  // recours ni explication — `listingsError` + `listingsRetryToken`
+  // permettent d'afficher un message clair et de relancer la requête.
   useEffect(() => {
     let cancelled = false;
+    setListingsError(null);
 
     api.getListings()
       .then((data) => {
         if (!cancelled) setListings(data || []);
       })
-      .catch((err) => console.error("Listings indisponibles pour le recentrage carte :", err));
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Listings indisponibles pour le recentrage carte :", err);
+        setListingsError(describeApiError(err));
+      });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [listingsRetryToken]);
 
   // ORA-171 : chargé une fois, indépendant du quartier scanné (les métriques
   // du modèle ne changent qu'à un ré-entraînement, pas à chaque scan).
@@ -616,6 +631,20 @@ function App() {
               <div className={activeView === 'immotep' ? 'hidden' : 'h-full'}>
                 {activeView === 'accueil' && (
                   <>
+                    {listingsError && listings.length === 0 && (
+                      <div className="mx-4 md:mx-5 mt-4 flex items-center justify-between gap-2 bg-red-900/20 border border-red-900/50 rounded-lg px-3 py-2">
+                        <p className="text-[11px] text-red-400 font-bold">
+                          Impossible de charger les données du marché : {listingsError}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setListingsRetryToken((t) => t + 1)}
+                          className="shrink-0 text-[10px] uppercase tracking-widest font-bold text-red-300 hover:text-red-200 underline underline-offset-2"
+                        >
+                          Réessayer
+                        </button>
+                      </div>
+                    )}
                     <HomeOverview
                       stats={homeStats}
                       ville={ville}
@@ -715,12 +744,28 @@ function App() {
             )}
 
             {!result && !loading && !ambiguousQuartier && (
-              <HomeOverview
-                stats={homeStats}
-                ville={ville}
-                onOpenChat={() => setIsChatOpen(true)}
-                onSelectQuartier={(quartier) => handleScan(quartier, 'Tout', '')}
-              />
+              <>
+                {listingsError && listings.length === 0 && (
+                  <div className="mx-4 md:mx-5 mt-4 flex items-center justify-between gap-2 bg-red-900/20 border border-red-900/50 rounded-lg px-3 py-2">
+                    <p className="text-[11px] text-red-400 font-bold">
+                      Impossible de charger les données du marché : {listingsError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setListingsRetryToken((t) => t + 1)}
+                      className="shrink-0 text-[10px] uppercase tracking-widest font-bold text-red-300 hover:text-red-200 underline underline-offset-2"
+                    >
+                      Réessayer
+                    </button>
+                  </div>
+                )}
+                <HomeOverview
+                  stats={homeStats}
+                  ville={ville}
+                  onOpenChat={() => setIsChatOpen(true)}
+                  onSelectQuartier={(quartier) => handleScan(quartier, 'Tout', '')}
+                />
+              </>
             )}
 
             {(result || loading) && (
