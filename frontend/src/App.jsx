@@ -244,6 +244,13 @@ function App() {
       let estimatedPrice = data.prix_moyen;
       let priceM2 = data.prix_m2_moyen;
       let confiance = null;
+      // ORA-179 : distingue "aucune prédiction tentée" (surface/type non
+      // fournis, vue Estimation vide et invite normalement) de "prédiction
+      // tentée mais indisponible" (le modèle actif n'a pas assez de données
+      // pour ce couple quartier/type précis, ex: T3 à Ainay) — l'ancien
+      // message d'invite blâmait l'utilisateur même quand il avait tout
+      // rempli correctement.
+      let predictionUnavailable = false;
 
       const surfaceValue = parseFloat(surfaceInput);
       const hasValidSurface = Number.isFinite(surfaceValue) && surfaceValue > 0;
@@ -259,8 +266,11 @@ function App() {
             estimatedPrice = prediction.estimated_price;
             priceM2 = prediction.price_m2;
             confiance = prediction.confiance;
+          } else {
+            predictionUnavailable = true;
           }
         } catch (predictErr) {
+          predictionUnavailable = true;
           console.error("Estimation IA indisponible, repli sur la moyenne réelle du secteur :", predictErr);
         }
       }
@@ -272,6 +282,7 @@ function App() {
         count: data.count,
         type: data.type_filtre,
         confiance,
+        predictionUnavailable,
         facteurs: data.facteurs || [],
         // ORA-172 : détail complet (tous les sous-types, pas juste le plus
         // présent) pour le panneau "Les 4 Cavaliers", en plus des phrases résumées ci-dessus (PDF).
@@ -394,12 +405,17 @@ function App() {
   // (maquette 03), vide et explicite tant qu'aucune surface n'a été saisie.
   function renderEstimationView() {
     if (!hasModelEstimate) {
+      // ORA-179 : une surface/type ont bien été fournis mais le modèle actif
+      // n'a pas assez de données pour cette combinaison précise (ex: peu
+      // d'annonces T3 à Ainay) — message honnête plutôt que de laisser
+      // penser que l'utilisateur a oublié de remplir un champ.
+      const message = result?.predictionUnavailable
+        ? `Estimation indisponible pour ${result.quartier} en ${result.type} : données insuffisantes pour cette combinaison quartier/type dans le modèle actif. Le loyer moyen réel du secteur reste visible dans Scan.`
+        : "Saisissez une surface et un type de bien précis (T1-T4+) dans Recherche pour obtenir l'estimation personnalisée du modèle.";
       return (
         <>
           {renderSummaryChip()}
-          <p className="p-4 md:p-5 text-xs text-slate-500">
-            Saisissez une surface et un type de bien précis (T1-T4+) dans Recherche pour obtenir l'estimation personnalisée du modèle.
-          </p>
+          <p className="p-4 md:p-5 text-xs text-slate-500">{message}</p>
         </>
       );
     }
