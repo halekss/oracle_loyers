@@ -92,38 +92,21 @@ describe('MapComponent', () => {
     );
   });
 
-  describe('clé CARTO des tuiles (SET_TILE_KEY)', () => {
-    const renderWithFakeWindow = () => {
+  describe('fond de carte via le proxy du backend (SET_TILE_URL)', () => {
+    it('sends the backend tile proxy URL to the page origin when the iframe loads, never a key', () => {
       render(<MapComponent center={null} />);
       const iframe = screen.getByTitle('Carte Oracle');
       const postMessage = vi.fn();
       Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
       fireEvent.load(iframe);
-      return postMessage;
-    };
-
-    afterEach(() => vi.unstubAllEnvs());
-
-    it('sends the key to the page origin when the iframe loads', () => {
-      vi.stubEnv('VITE_CARTO_API_KEY', 'cb1_test-key');
-
-      const postMessage = renderWithFakeWindow();
 
       expect(postMessage).toHaveBeenCalledWith(
-        { type: 'SET_TILE_KEY', key: 'cb1_test-key' },
+        { type: 'SET_TILE_URL', url: 'http://localhost:5000/api/tiles/{z}/{x}/{y}{r}.png' },
         window.location.origin,
       );
-    });
-
-    it('sends nothing when no key is configured', () => {
-      vi.stubEnv('VITE_CARTO_API_KEY', '');
-
-      const postMessage = renderWithFakeWindow();
-
-      expect(postMessage).not.toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'SET_TILE_KEY' }),
-        expect.anything(),
-      );
+      const tileMessages = postMessage.mock.calls.map(([message]) => message).filter((m) => m.type === 'SET_TILE_URL');
+      expect(JSON.stringify(tileMessages)).not.toMatch(/key/i);
     });
   });
 

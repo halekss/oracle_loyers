@@ -44,21 +44,21 @@ Recentre/zoome la carte sur une bounding-box (transition animée, `flyToBounds`)
 
 **Traité par** : `build_bridge_message_script` → `<map>.flyToBounds(bounds)`.
 
-### `SET_TILE_KEY`
+### `SET_TILE_URL`
 
-Fournit à la carte la clé API CARTO de ses tuiles, au runtime. La carte est un fichier HTML **versionné** : la clé n'y est jamais écrite (sinon elle finirait dans l'historique git) ; sans ce message, les tuiles s'affichent avec le filigrane « API KEY REQUIRED ».
+Indique à la carte où aller chercher ses tuiles : le **proxy de tuiles du backend** (`GET /api/tiles/<z>/<x>/<y>.png`). La clé API CARTO reste côté serveur (`CARTO_API_KEY`), le navigateur ne la voit jamais — ni dans ce message, ni dans le HTML de la carte (versionné), ni dans les requêtes réseau. L'URL dépend du déploiement (`VITE_API_URL`), d'où un envoi au runtime plutôt qu'une écriture dans la carte générée ; avant ce message, la couche pointe sur un pixel transparent inline (aucune requête).
 
-**Émis par** : `MapComponent.jsx`, à chaque chargement de l'iframe (`handleIframeLoad`), uniquement si `VITE_CARTO_API_KEY` est définie (alimentée par `CARTO_API_KEY` du `.env` via `docker-compose`, ou définie au build du frontend hors compose).
+**Émis par** : `MapComponent.jsx`, à chaque chargement de l'iframe (`handleIframeLoad`).
 
 ```json
-{ "type": "SET_TILE_KEY", "key": "cb1_xxxxxxxx" }
+{ "type": "SET_TILE_URL", "url": "http://localhost:5000/api/tiles/{z}/{x}/{y}{r}.png" }
 ```
 
-* `key` : clé CARTO ; doit correspondre à `^[A-Za-z0-9_-]+$`, sinon le message est ignoré (elle est concaténée à une URL).
+* `url` : modèle d'URL Leaflet ; doit commencer par `http://` ou `https://`, finir par `/{z}/{x}/{y}{r}.png` et ne contenir ni espace, ni guillemet, ni chevron, sinon le message est ignoré.
 
-**Traité par** : `build_bridge_message_script` → `setUrl(<url sans query> + '?key=' + key)` sur chaque `L.TileLayer` dont l'URL pointe vers `basemaps.cartocdn.com`.
+**Traité par** : `build_bridge_message_script` → `setUrl(url)` sur chaque `L.TileLayer` de la carte.
 
-**Sécurité** : la clé reste visible côté navigateur (elle l'a toujours été : c'est un paramètre d'URL de tuile) — la restreindre à son domaine dans le tableau de bord CARTO. Le message est soumis à la même vérification d'origine que les autres.
+**Côté backend** : `services/tile_proxy.py` appelle `basemaps.cartocdn.com` avec la clé, met les tuiles en cache mémoire, limite le débit (`RATE_LIMIT_TILES`, 3000/h par défaut) et valide `z`/`x`/`y` ; sans clé configurée, CARTO renvoie un filigrane « API KEY REQUIRED » (dégradation visible, pas une panne).
 
 ### `TOGGLE_LAYER`
 

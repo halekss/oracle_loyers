@@ -16,10 +16,6 @@ CMD ["npm", "run", "dev", "--", "--host"]
 
 FROM node:20-slim AS build
 WORKDIR /app
-# Clé des tuiles CARTO, embarquée dans le bundle (visible côté navigateur par
-# nature) : docker build --build-arg VITE_CARTO_API_KEY=...
-ARG VITE_CARTO_API_KEY
-ENV VITE_CARTO_API_KEY=$VITE_CARTO_API_KEY
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .

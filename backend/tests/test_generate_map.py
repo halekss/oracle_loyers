@@ -225,30 +225,25 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("map_abc123.flyToBounds(", script)
         self.assertIn("e.data.bounds", script)
 
-    def test_handles_set_tile_key_and_validates_the_key_before_using_it(self):
-        """La clé CARTO arrive au runtime (jamais écrite dans le HTML versionné) :
-        validée par regex avant d'être concaténée à l'URL des tuiles."""
+    def test_handles_set_tile_url_and_validates_the_url_template(self):
+        """L'URL du proxy de tuiles arrive au runtime (dépend du déploiement) :
+        validée (http(s), modèle {z}/{x}/{y}{r}.png, pas de caractère dangereux)."""
         script = generate_map.build_bridge_message_script("map_abc123")
 
-        self.assertIn("SET_TILE_KEY", script)
-        self.assertIn("[A-Za-z0-9_-]+", script)
+        self.assertIn("SET_TILE_URL", script)
+        self.assertIn("indexOf('https://')", script)
+        self.assertIn("/{z}/{x}/{y}{r}.png", script)
         self.assertIn("map_abc123.eachLayer(", script)
-        self.assertIn("basemaps.cartocdn.com", script)
-        self.assertIn("setUrl(", script)
+        self.assertIn("setUrl(tileUrl)", script)
 
 
-class CartoTilesNeverEmbedTheKeyTest(unittest.TestCase):
-    def test_tile_url_has_no_key_even_when_the_env_var_is_set(self):
-        import importlib
-        from unittest.mock import patch
+class TileLayerNeverEmbedsAKeyTest(unittest.TestCase):
+    """Aucune clé, ni URL CARTO, dans la carte générée (fichier versionné)."""
 
-        with patch.dict(os.environ, {"CARTO_API_KEY": "secret-key-123"}):
-            reloaded = importlib.reload(generate_map)
-            try:
-                self.assertNotIn("key=", reloaded.CARTO_DARK_MATTER_URL)
-                self.assertNotIn("secret-key-123", reloaded.CARTO_DARK_MATTER_URL)
-            finally:
-                importlib.reload(generate_map)
+    def test_placeholder_is_an_inline_pixel_without_network_or_key(self):
+        self.assertTrue(generate_map.TILE_PLACEHOLDER_URL.startswith("data:image/gif;base64,"))
+        self.assertNotIn("carto", generate_map.TILE_PLACEHOLDER_URL.lower())
+        self.assertFalse(hasattr(generate_map, "CARTO_API_KEY"))
 
 
 class LoadLayersConfigTest(unittest.TestCase):

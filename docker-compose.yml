@@ -12,6 +12,8 @@ services:
       - ./scripts:/scripts:ro
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Clé des tuiles CARTO : reste côté serveur (proxy /api/tiles), jamais envoyée au navigateur.
+      - CARTO_API_KEY=${CARTO_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
       - GEMINI_MAX_OUTPUT_TOKENS=${GEMINI_MAX_OUTPUT_TOKENS:-800}
       # Doit suivre FRONTEND_PORT : le navigateur appelle ce backend depuis
@@ -48,9 +50,6 @@ services:
       # ce suffixe, chaque appel visait une URL inexistante (404 -> "Requête
       # invalide" côté frontend, voir services/api.js#classifyResponseError).
       - VITE_API_URL=http://localhost:5000/api
-      # Clé des tuiles CARTO (fond de carte), transmise à la carte au runtime :
-      # jamais écrite dans les cartes générées (versionnées). Voir MAP_CONTRACT.md.
-      - VITE_CARTO_API_KEY=${CARTO_API_KEY:-}
     depends_on:
       - backend
     # Vite écoute sur le port publié (et non 5173) pour que l'URL affichée

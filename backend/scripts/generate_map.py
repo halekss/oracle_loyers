@@ -22,13 +22,14 @@ FRONTEND_DATA_DIR = os.path.join(PROJECT_ROOT, 'frontend', 'public', 'data')
 IMMO_CSV = os.path.join(DATA_DIR, 'master_immo_final.csv')
 ANNONCES_DB_PATH = os.path.join(DATA_DIR, 'annonces.db')
 
-# CARTO exige désormais une clé API sur ses tuiles gratuites (basemaps.cartocdn.com,
-# depuis fin août 2026) : sans elle, les tuiles s'affichent quand même (HTTP 200)
-# mais avec un filigrane "API KEY REQUIRED" incrusté dans l'image. La clé n'est
-# JAMAIS écrite dans la carte générée (fichier versionné) : le frontend l'envoie
-# à l'iframe au chargement via le message SET_TILE_KEY (MAP_CONTRACT.md), depuis
-# VITE_CARTO_API_KEY. Clé gratuite (5M requêtes/mois) : https://carto.com/basemaps/apikey/.
-CARTO_DARK_MATTER_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+# CARTO exige une clé API sur ses tuiles (filigrane "API KEY REQUIRED" sinon).
+# La carte générée (fichier versionné) ne contient NI la clé NI l'URL de CARTO :
+# les tuiles passent par le proxy du backend (/api/tiles/..., la clé reste côté
+# serveur, jamais dans le navigateur). L'URL du proxy dépend du déploiement : le
+# frontend l'envoie à l'iframe au chargement (message SET_TILE_URL,
+# MAP_CONTRACT.md). En attendant, la couche pointe sur un pixel transparent
+# (aucune requête réseau, pas de filigrane).
+TILE_PLACEHOLDER_URL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
 CARTO_ATTRIBUTION = (
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
     'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -409,14 +410,17 @@ def build_bridge_message_script(map_js_var_name):
             {map_js_var_name}.flyTo([e.data.lat, e.data.lng], e.data.zoom || {map_js_var_name}.getZoom());
         }} else if (e.data.type === 'FLY_TO_BOUNDS') {{
             {map_js_var_name}.flyToBounds(e.data.bounds);
-        }} else if (e.data.type === 'SET_TILE_KEY') {{
-            // Clé CARTO fournie au runtime (jamais écrite dans ce fichier) :
-            // validée avant d'être concaténée à l'URL des tuiles.
-            var tileKey = String(e.data.key || '');
-            if (/^[A-Za-z0-9_-]+$/.test(tileKey)) {{
+        }} else if (e.data.type === 'SET_TILE_URL') {{
+            // URL du proxy de tuiles du backend, fournie au runtime (dépend du
+            // déploiement) : modèle strict http(s)://…/{{z}}/{{x}}/{{y}}{{r}}.png.
+            var tileUrl = String(e.data.url || '');
+            var tileSuffix = '/{{z}}/{{x}}/{{y}}{{r}}.png';
+            var isHttp = tileUrl.indexOf('http://') === 0 || tileUrl.indexOf('https://') === 0;
+            var hasTemplate = tileUrl.slice(-tileSuffix.length) === tileSuffix;
+            if (isHttp && hasTemplate && !/[ "'<>]/.test(tileUrl)) {{
                 {map_js_var_name}.eachLayer(function(layer) {{
-                    if (layer instanceof L.TileLayer && layer._url.indexOf('basemaps.cartocdn.com') !== -1) {{
-                        layer.setUrl(layer._url.split('?')[0] + '?key=' + tileKey);
+                    if (layer instanceof L.TileLayer) {{
+                        layer.setUrl(tileUrl);
                     }}
                 }});
             }}
@@ -470,7 +474,7 @@ def main(ville='lyon'):
     print(f"🛑 GENERATION CARTE {ville.upper()} (METRO LIGNES AUTO)...")
     m = folium.Map(location=paths['center'], zoom_start=13, tiles=None, zoom_control=False)
     folium.TileLayer(
-        tiles=CARTO_DARK_MATTER_URL,
+        tiles=TILE_PLACEHOLDER_URL,
         attr=CARTO_ATTRIBUTION,
         name='CartoDB dark_matter',
     ).add_to(m)
