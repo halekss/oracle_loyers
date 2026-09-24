@@ -38,7 +38,10 @@ const SORT_OPTIONS = [
 // — alimentent le badge d'écart de chaque AnnonceCard et le tri "Meilleures
 // affaires" ci-dessous. `referenceType` évite de comparer un T4+ à une
 // référence calculée pour des T2 (gammes de prix différentes).
-export default function AnnoncesList({ compact = false, onItemsChange, focusedQuartier, referencePrixM2, referenceType }) {
+// `onSelectAnnonce` (optionnel, ORA-178) : transmis tel quel à chaque
+// AnnonceCard (`onOpenDetail`) — bascule sur la vue "Fiche" du rail au clic
+// sur "Détails" au lieu d'ouvrir la modale locale.
+export default function AnnoncesList({ compact = false, onItemsChange, focusedQuartier, referencePrixM2, referenceType, onSelectAnnonce }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -272,7 +275,7 @@ export default function AnnoncesList({ compact = false, onItemsChange, focusedQu
       ) : (
         <div className="grid grid-cols-2 gap-3">
           {displayedItems.map((annonce) => (
-            <AnnonceCard key={annonce.id} annonce={annonce} referencePrixM2={referencePrixM2} referenceType={referenceType} />
+            <AnnonceCard key={annonce.id} annonce={annonce} referencePrixM2={referencePrixM2} referenceType={referenceType} onOpenDetail={onSelectAnnonce} />
           ))}
         </div>
       )}

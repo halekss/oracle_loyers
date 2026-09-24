@@ -54,7 +54,11 @@ function AnnonceIllustration({ titre, surface }) {
 // lequel cette référence a été calculée, ex. "T2") : le badge ne s'affiche
 // que si l'annonce est du même type — comparer un T4+ à une référence T2
 // produirait un écart trompeur (types à des gammes de prix différentes).
-export default function AnnonceCard({ annonce, referencePrixM2, referenceType }) {
+// `onOpenDetail` (optionnel, ORA-178) : quand fourni (rail présent, App.jsx),
+// "Détails" bascule sur la vue "Fiche" du panneau au lieu d'ouvrir la modale
+// locale — repli sur l'ancien comportement (modale) sans ce prop, pour tout
+// appelant qui ne le fournit pas encore.
+export default function AnnonceCard({ annonce, referencePrixM2, referenceType, onOpenDetail }) {
   const [detailOpen, setDetailOpen] = useState(false);
   // ORA-132 : favoris "Mes favoris" — persistance localStorage uniquement
   // (décision de cadrage, cf. useFavorites.js), pas de compte utilisateur.
@@ -175,7 +179,11 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType })
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setDetailOpen(true);
+                if (onOpenDetail) {
+                  onOpenDetail(id);
+                } else {
+                  setDetailOpen(true);
+                }
               }}
               className="text-[9px] uppercase tracking-widest font-bold text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2"
             >
