@@ -25,7 +25,7 @@ describe('computeQuartierOptions', () => {
 
   it('filters by ville (case-insensitive)', () => {
     const options = computeQuartierOptions(listings, 'lille');
-    expect(options).toEqual([{ quartier: 'Vieux-Lille', count: 1, prixM2Median: 18.3 }]);
+    expect(options).toEqual([{ quartier: 'Vieux-Lille', count: 1, prixM2Median: 18.3, arrondissement: 'Lille' }]);
   });
 
   it('sorts alphabetically (locale-aware, accents included)', () => {
@@ -46,5 +46,35 @@ describe('computeQuartierOptions', () => {
     const ainay = options.find((o) => o.quartier === 'Ainay');
     expect(ainay.count).toBe(3);
     expect(ainay.prixM2Median).toBe(19.4);
+  });
+
+  describe('arrondissement (ORA-179, sous-titre des suggestions de recherche)', () => {
+    it('derives "Lyon <N>e" from the most frequent code_postal of the quartier', () => {
+      const options = computeQuartierOptions(
+        [
+          { ville: 'Lyon', quartier: 'Ainay', prix_m2: 19.6, code_postal: 69002 },
+          { ville: 'Lyon', quartier: 'Ainay', prix_m2: 19.2, code_postal: 69002 },
+          { ville: 'Lyon', quartier: 'Ainay', prix_m2: 19.9, code_postal: 69001 },
+        ],
+        'lyon',
+      );
+      expect(options.find((o) => o.quartier === 'Ainay').arrondissement).toBe('Lyon 2e');
+    });
+
+    it('falls back to the ville name alone without a usable code_postal', () => {
+      const options = computeQuartierOptions(
+        [{ ville: 'Lyon', quartier: 'Ainay', prix_m2: 19.6 }],
+        'lyon',
+      );
+      expect(options.find((o) => o.quartier === 'Ainay').arrondissement).toBe('Lyon');
+    });
+
+    it('never derives an arrondissement for Lille (no such découpage)', () => {
+      const options = computeQuartierOptions(
+        [{ ville: 'Lille', quartier: 'Vieux-Lille', prix_m2: 18.3, code_postal: 59000 }],
+        'lille',
+      );
+      expect(options.find((o) => o.quartier === 'Vieux-Lille').arrondissement).toBe('Lille');
+    });
   });
 });

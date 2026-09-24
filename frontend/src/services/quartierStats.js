@@ -23,26 +23,62 @@ function isLocated(quartier) {
   return typeof quartier === 'string' && quartier.length > 0 && !/non localisé/i.test(quartier);
 }
 
+// ORA-179 : même dérivation que homeStats.js#arrondissementLabel (dupliquée
+// volontairement, cf. note en tête de fichier) — alimente le sous-titre de
+// chaque suggestion de la palette de recherche ("Lyon 2e · 31 annonces").
+// Les arrondissements lyonnais sont codés 69001-69009 ; Lille n'a pas ce
+// découpage (retombe sur le nom de ville seul).
+function arrondissementLabel(codePostal) {
+  const n = Number(codePostal);
+  if (!Number.isInteger(n) || n < 69001 || n > 69009) return null;
+  const numero = n - 69000;
+  return numero === 1 ? '1er' : `${numero}e`;
+}
+
+function mostFrequent(values) {
+  const counts = new Map();
+  for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+  let best = null;
+  let bestCount = 0;
+  for (const [v, c] of counts) {
+    if (c > bestCount) {
+      best = v;
+      bestCount = c;
+    }
+  }
+  return best;
+}
+
 // `listings` : payload brut de /api/listings. `ville` : 'lyon' | 'lille'.
-// Renvoie [{ quartier, count, prixM2Median }], trié alphabétiquement.
+// Renvoie [{ quartier, count, prixM2Median, arrondissement }], trié
+// alphabétiquement. `arrondissement` : "Lyon 2e" (code postal le plus
+// fréquent du quartier) ou juste "Lyon"/"Lille" si non déterminable.
 export function computeQuartierOptions(listings, ville) {
+  const villeLabel = (ville || '').toLowerCase() === 'lille' ? 'Lille' : 'Lyon';
   const byQuartier = new Map();
   for (const item of listings || []) {
     if ((item.ville || '').toLowerCase() !== (ville || '').toLowerCase()) continue;
     if (!isLocated(item.quartier)) continue;
-    if (!byQuartier.has(item.quartier)) byQuartier.set(item.quartier, { count: 0, prixM2Values: [] });
+    if (!byQuartier.has(item.quartier)) byQuartier.set(item.quartier, { count: 0, prixM2Values: [], codePostaux: [] });
     const entry = byQuartier.get(item.quartier);
     entry.count += 1;
     if (isFiniteNumber(item.prix_m2) && item.prix_m2 > 0) {
       entry.prixM2Values.push(item.prix_m2);
     }
+    if (item.code_postal != null) {
+      entry.codePostaux.push(item.code_postal);
+    }
   }
 
-  const options = [...byQuartier.entries()].map(([quartier, { count, prixM2Values }]) => ({
-    quartier,
-    count,
-    prixM2Median: median(prixM2Values),
-  }));
+  const options = [...byQuartier.entries()].map(([quartier, { count, prixM2Values, codePostaux }]) => {
+    const arr = arrondissementLabel(mostFrequent(codePostaux));
+    return {
+      quartier,
+      count,
+      prixM2Median: median(prixM2Values),
+      arrondissement: arr ? `${villeLabel} ${arr}` : villeLabel,
+    };
+  });
   options.sort((a, b) => a.quartier.localeCompare(b.quartier, 'fr'));
   return options;
 }

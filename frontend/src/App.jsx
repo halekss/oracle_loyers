@@ -11,6 +11,7 @@ import CavaliersDetail from './components/CavaliersDetail';
 import QuartierAmbigu from './components/QuartierAmbigu';
 import PanelNav from './components/PanelNav';
 import PanelSheet from './components/PanelSheet';
+import SearchForm from './components/SearchForm';
 import AnnonceDetailContent from './components/AnnonceDetailContent';
 import { useAnnonceDetail } from './hooks/useAnnonceDetail';
 import { api, describeApiError } from './services/api';
@@ -19,7 +20,6 @@ import { computeHomeStats } from './services/homeStats';
 import { computeQuartierOptions } from './services/quartierStats';
 import { computeLatestDataDate } from './services/latestDataDate';
 import { layersByGroup } from './services/mapLayers';
-import { loadRecentSearches } from './services/recentSearchesStorage';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
 // l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
@@ -83,6 +83,11 @@ function App() {
   // exploitable (repli explicite sur le centre-ville dans MapComponent).
   const [mapBounds, setMapBounds] = useState(undefined);
   const [listings, setListings] = useState([]);
+  // ORA-179 : état d'erreur du fetch /api/listings + jeton incrémenté par le
+  // bouton "Réessayer" de l'Accueil pour relancer la requête (cf. useEffect
+  // de chargement des listings plus bas).
+  const [listingsError, setListingsError] = useState(null);
+  const [listingsRetryToken, setListingsRetryToken] = useState(0);
   const [activeTab, setActiveTab] = useState('oracle');
   // ORA-127 : lien direct depuis un quartier scanné vers ses annonces —
   // `token` change à chaque clic (même quartier compris) pour que
@@ -99,6 +104,12 @@ function App() {
   // ORA-178 : annonce sélectionnée (clic "Détails" dans la liste, ou clic sur
   // un marker de la carte via ANNONCE_CLICK) — alimente la vue "Fiche".
   const [selectedAnnonceId, setSelectedAnnonceId] = useState(null);
+  // ORA-167/179 : "+ Surface" (ResultCard, `onAddSurface`) — bascule sur la
+  // vue Recherche et demande à SearchForm de focus directement le champ
+  // Surface plutôt que Quartier (déjà rempli). Remis à `false` dès qu'on
+  // quitte la vue Recherche, pour qu'une visite ultérieure (rail direct)
+  // n'hérite pas de ce focus ciblé.
+  const [focusSurfaceNext, setFocusSurfaceNext] = useState(false);
   // ORA-178 : miroir de l'état interne de MapComponent (calques + compteurs),
   // pour que la vue "Calques" du rail affiche exactement ce qu'il sait déjà
   // — jamais recalculé ici, seulement reflété (cf. MapComponent#onLayersChange).
@@ -130,20 +141,30 @@ function App() {
   const ficheDetail = useAnnonceDetail(selectedAnnonceId);
 
   // ORA-105 : chargé une fois, sert à résoudre les coordonnées des quartiers
-  // des annonces affichées (AnnoncesList n'a pas de latitude/longitude).
+  // des annonces affichées (AnnoncesList n'a pas de latitude/longitude), et
+  // à calculer les agrégats "Le marché en un coup d'œil" (Accueil). Un échec
+  // silencieux ici (ex : quota /api/listings dépassé au chargement) laissait
+  // auparavant l'Accueil afficher "0 ARRONDISSEMENTS"/"—" indéfiniment, sans
+  // recours ni explication — `listingsError` + `listingsRetryToken`
+  // permettent d'afficher un message clair et de relancer la requête.
   useEffect(() => {
     let cancelled = false;
+    setListingsError(null);
 
     api.getListings()
       .then((data) => {
         if (!cancelled) setListings(data || []);
       })
-      .catch((err) => console.error("Listings indisponibles pour le recentrage carte :", err));
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Listings indisponibles pour le recentrage carte :", err);
+        setListingsError(describeApiError(err));
+      });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [listingsRetryToken]);
 
   // ORA-171 : chargé une fois, indépendant du quartier scanné (les métriques
   // du modèle ne changent qu'à un ré-entraînement, pas à chaque scan).
@@ -160,6 +181,30 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  // ORA-179 : raccourci "/" — ouvre la vue Recherche et focus le champ
+  // Quartier (SearchForm s'autofocus au montage), sauf si l'utilisateur est
+  // déjà en train de saisir du texte ailleurs (jamais d'interception d'une
+  // frappe "/" légitime dans un champ). Desktop uniquement (rail) : sans
+  // effet utile sur mobile (pas de vue "Recherche" séparée, formulaire déjà
+  // visible en permanence dans la colonne Oracle).
+  useEffect(() => {
+    if (!isDesktop) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key !== '/') return;
+      const target = e.target;
+      const isTextInput = target instanceof HTMLElement && (
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+      );
+      if (isTextInput) return;
+      e.preventDefault();
+      setActiveView('recherche');
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDesktop]);
 
   const handleAnnoncesItemsChange = (items) => {
     const quartiers = [...new Set(items.map((item) => item.quartier).filter(Boolean))];
@@ -183,15 +228,43 @@ function App() {
     setActiveView('fiche');
   };
 
+  // ORA-167/179 : "+ Surface" (ResultCard) — sur mobile, SearchForm est déjà
+  // monté en permanence dans la colonne Oracle : on se contente de lui
+  // donner le focus. Sur desktop, la vue Recherche n'est montée que si
+  // active : on y bascule et on lui indique (via `focusSurfaceNext`) de
+  // focus directement le champ Surface au montage plutôt que Quartier
+  // (déjà rempli depuis le dernier `result`).
+  const handleAddSurface = () => {
+    const existingSurfaceInput = document.getElementById('searchform-surface');
+    if (existingSurfaceInput) {
+      existingSurfaceInput.focus();
+      return;
+    }
+    setFocusSurfaceNext(true);
+    setActiveView('recherche');
+  };
+
+  // Consomme `focusSurfaceNext` dès qu'on quitte la vue Recherche, pour
+  // qu'une visite ultérieure (rail direct, sans passer par "+ Surface")
+  // n'hérite pas de ce focus ciblé.
+  useEffect(() => {
+    if (activeView !== 'recherche' && focusSurfaceNext) {
+      setFocusSurfaceNext(false);
+    }
+  }, [activeView, focusSurfaceNext]);
+
   const handleScan = async (quartier, typeLocal, surfaceInput) => {
     setLoading(true);
     setError(null);
     setResult(null);
     setPriceHistory(null);
     setAmbiguousQuartier(null);
-    // ORA-178 : lancer un scan bascule toujours sur la vue "Scan" du rail
-    // (desktop) — sans effet sur mobile, qui garde ses propres onglets.
-    setActiveView('scan');
+    // ORA-179 : lancer un scan bascule immédiatement sur la vue "Scan" du
+    // rail (desktop), ou "Estimation" si une surface a été saisie — connu
+    // synchroniquement, pas besoin d'attendre la réponse du serveur. Sans
+    // effet sur mobile, qui garde ses propres onglets.
+    const initialSurfaceValue = parseFloat(surfaceInput);
+    setActiveView(Number.isFinite(initialSurfaceValue) && initialSurfaceValue > 0 ? 'estimation' : 'scan');
 
     try {
       const data = await api.getQuartierStats(quartier, typeLocal, ville);
@@ -217,6 +290,13 @@ function App() {
       let estimatedPrice = data.prix_moyen;
       let priceM2 = data.prix_m2_moyen;
       let confiance = null;
+      // ORA-179 : distingue "aucune prédiction tentée" (surface/type non
+      // fournis, vue Estimation vide et invite normalement) de "prédiction
+      // tentée mais indisponible" (le modèle actif n'a pas assez de données
+      // pour ce couple quartier/type précis, ex: T3 à Ainay) — l'ancien
+      // message d'invite blâmait l'utilisateur même quand il avait tout
+      // rempli correctement.
+      let predictionUnavailable = false;
 
       const surfaceValue = parseFloat(surfaceInput);
       const hasValidSurface = Number.isFinite(surfaceValue) && surfaceValue > 0;
@@ -232,8 +312,11 @@ function App() {
             estimatedPrice = prediction.estimated_price;
             priceM2 = prediction.price_m2;
             confiance = prediction.confiance;
+          } else {
+            predictionUnavailable = true;
           }
         } catch (predictErr) {
+          predictionUnavailable = true;
           console.error("Estimation IA indisponible, repli sur la moyenne réelle du secteur :", predictErr);
         }
       }
@@ -245,6 +328,7 @@ function App() {
         count: data.count,
         type: data.type_filtre,
         confiance,
+        predictionUnavailable,
         facteurs: data.facteurs || [],
         // ORA-172 : détail complet (tous les sous-types, pas juste le plus
         // présent) pour le panneau "Les 4 Cavaliers", en plus des phrases résumées ci-dessus (PDF).
@@ -280,32 +364,64 @@ function App() {
     }
   };
 
+  // ORA-179 : puce récapitulative du dernier scan ("Ainay · T2 · 45 m²"),
+  // en tête des vues Scan/Estimation — "Modifier" ramène à la vue Recherche,
+  // qui se pré-remplit automatiquement depuis `result` (cf. SearchForm plus
+  // bas, `initialQuartier`/`initialTypeLocal`/`initialSurface`).
+  function renderSummaryChip() {
+    if (!result?.quartier) return null;
+    const parts = [
+      result.quartier,
+      result.type && result.type !== 'Tout' ? result.type : null,
+      result.surface ? `${result.surface} m²` : null,
+    ].filter(Boolean);
+    return (
+      <div className="flex items-center justify-between gap-2 px-4 md:px-5 py-2 bg-ink-900/60 border-b border-ink-800">
+        <span className="text-[11px] font-bold text-slate-300 truncate">{parts.join(' · ')}</span>
+        <button
+          type="button"
+          onClick={() => setActiveView('recherche')}
+          className="shrink-0 text-[10px] uppercase tracking-widest font-bold text-violet-400 hover:text-violet-300"
+        >
+          Modifier
+        </button>
+      </div>
+    );
+  }
+
   // ORA-178 : contenu de la vue "Scan" du rail — reprend tel quel l'ancien
   // contenu principal de la colonne Oracle desktop (ResultCard + détails du
   // quartier), désormais sa propre vue dédiée plutôt qu'un unique panneau.
   function renderScanView() {
     if (ambiguousQuartier && !loading) {
       return (
-        <QuartierAmbigu
-          ambiguous={ambiguousQuartier}
-          quartierOptions={quartierOptions}
-          onSelect={(name) => handleScan(name, ambiguousQuartier.typeLocal, ambiguousQuartier.surfaceInput)}
-        />
+        <>
+          {renderSummaryChip()}
+          <QuartierAmbigu
+            ambiguous={ambiguousQuartier}
+            quartierOptions={quartierOptions}
+            onSelect={(name) => handleScan(name, ambiguousQuartier.typeLocal, ambiguousQuartier.surfaceInput)}
+          />
+        </>
       );
     }
 
     if (!result && !loading) {
       return (
-        <p className="p-4 md:p-5 text-xs text-ink-dim">
-          Lancez un scan depuis la barre de recherche pour voir l'estimation d'un quartier.
-        </p>
+        <>
+          {renderSummaryChip()}
+          <p className="p-4 md:p-5 text-xs text-ink-dim">
+            Lancez un scan depuis la vue Recherche pour voir l'estimation d'un quartier.
+          </p>
+        </>
       );
     }
 
     return (
       <>
+        {renderSummaryChip()}
         <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
-          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} onAddSurface={() => document.getElementById('topbar-surface')?.focus()} ville={ville} health={health} dataAsOf={latestDataDate} />
+          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} onAddSurface={handleAddSurface} ville={ville} health={health} dataAsOf={latestDataDate} />
           {result && !(result.surface && result.confiance) && (
             <div className="mt-2 text-center text-[10px] text-ink-dim uppercase tracking-widest">
               Données réelles ({result.count} biens)
@@ -337,16 +453,27 @@ function App() {
   // (maquette 03), vide et explicite tant qu'aucune surface n'a été saisie.
   function renderEstimationView() {
     if (!hasModelEstimate) {
+      // ORA-179 : une surface/type ont bien été fournis mais le modèle actif
+      // n'a pas assez de données pour cette combinaison précise (ex: peu
+      // d'annonces T3 à Ainay) — message honnête plutôt que de laisser
+      // penser que l'utilisateur a oublié de remplir un champ.
+      const message = result?.predictionUnavailable
+        ? `Estimation indisponible pour ${result.quartier} en ${result.type} : données insuffisantes pour cette combinaison quartier/type dans le modèle actif. Le loyer moyen réel du secteur reste visible dans Scan.`
+        : "Saisissez une surface et un type de bien précis (T1-T4+) dans Recherche pour obtenir l'estimation personnalisée du modèle.";
       return (
-        <p className="p-4 md:p-5 text-xs text-ink-dim">
-          Saisissez une surface dans la barre de recherche pour obtenir l'estimation personnalisée du modèle.
-        </p>
+        <>
+          {renderSummaryChip()}
+          <p className="p-4 md:p-5 text-xs text-ink-dim">{message}</p>
+        </>
       );
     }
     return (
-      <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
-        <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
-      </div>
+      <>
+        {renderSummaryChip()}
+        <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
+          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
+        </div>
+      </>
     );
   }
 
@@ -401,64 +528,24 @@ function App() {
     );
   }
 
-  // ORA-178 : vue "Recherche" — ville + recherches récentes déjà persistées
-  // (ORA-176, `recentSearchesStorage.js`) ; le champ de recherche avec
-  // suggestions/ambiguïté reste celui de la Topbar (pas de duplication de sa
-  // logique de palette ici, juste un raccourci pour lui donner le focus).
-  function renderRechercheView() {
-    const recent = loadRecentSearches();
+  // ORA-179 : vue "Recherche" — SearchForm (ville, quartier + suggestions,
+  // type, surface, scan, recherches récentes), pré-rempli depuis le dernier
+  // `result` (lien "Modifier" des vues Scan/Estimation, ou simplement rouvrir
+  // Recherche après un scan). Aucune logique dupliquée : mêmes props/
+  // `handleScan` que la mobile (rendu plus bas dans la colonne Oracle mobile).
+  function renderSearchForm() {
     return (
-      <div className="p-4 md:p-5 space-y-4">
-        <div>
-          <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">Ville</p>
-          <div className="flex gap-2">
-            {['lyon', 'lille'].map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setVille(v)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                  ville === v ? 'bg-accent text-white' : 'bg-ink-900 border border-ink-700 text-ink-muted hover:text-ink'
-                }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => document.getElementById('topbar-quartier-input')?.focus()}
-          className="w-full text-left bg-ink-900 border border-ink-700 hover:border-accent rounded-xl px-3 py-2.5 text-[11px] text-ink-muted transition-colors"
-        >
-          Rechercher un quartier <span className="text-accent-light">→ utiliser la barre de recherche en haut</span>
-        </button>
-
-        <div>
-          <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">Recherches récentes</p>
-          {recent.length === 0 ? (
-            <p className="text-[11px] text-ink-dim">Aucune recherche récente.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {recent.map((entry, i) => (
-                <li key={i}>
-                  <button
-                    type="button"
-                    onClick={() => handleScan(entry.quartier, entry.typeLocal || 'Tout', entry.surface || '')}
-                    className="w-full flex items-center justify-between gap-2 bg-ink-900 border border-ink-700 hover:border-accent rounded-lg px-3 py-2 text-left transition-colors"
-                  >
-                    <span className="text-xs text-ink truncate">
-                      {entry.quartier}{entry.typeLocal ? ` · ${entry.typeLocal}` : ''}{entry.surface ? ` · ${entry.surface} m²` : ''}
-                    </span>
-                    <span className="text-[9px] uppercase text-accent-light font-bold shrink-0">Scanner</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
+      <SearchForm
+        ville={ville}
+        onVilleChange={setVille}
+        onScan={handleScan}
+        isLoading={loading}
+        quartierOptions={quartierOptions}
+        initialQuartier={result?.quartier || ''}
+        initialTypeLocal={result?.type || 'Tout'}
+        initialSurface={result?.surface || ''}
+        autoFocusSurface={focusSurfaceNext}
+      />
     );
   }
 
@@ -485,8 +572,10 @@ function App() {
           title: 'Fiche annonce',
         };
       }
+      // ORA-179 : SearchForm porte déjà son propre en-tête ("Nouvelle
+      // recherche" / "Que cherches-tu ?"), comme Accueil/Immotep.
       case 'recherche':
-        return { title: 'Recherche' };
+        return {};
       default:
         return {};
     }
@@ -497,10 +586,10 @@ function App() {
   return (
     <div className="flex flex-col h-screen w-screen bg-ink-950 text-ink overflow-hidden font-sans selection:bg-accent/30">
 
-      {/* Topbar (ORA-170) : logo, ville, recherche quartier, filtres type,
-          surface et bouton SCAN — pleine largeur, persistante au-dessus de
-          la carte ET du panneau latéral, quel que soit l'onglet mobile actif. */}
-      <Topbar ville={ville} onVilleChange={setVille} onScan={handleScan} isLoading={loading} dataAsOf={latestDataDate} quartierOptions={quartierOptions} />
+      {/* Topbar (ORA-179) : logo + badge "Données au" uniquement — la
+          recherche vit désormais dans SearchForm (vue "Recherche" du rail
+          desktop, colonne Oracle mobile). */}
+      <Topbar dataAsOf={latestDataDate} />
 
       {error && (
         <div className="shrink-0 mx-3 md:mx-4 mt-2 text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
@@ -519,7 +608,7 @@ function App() {
           id="panel-carte"
           role="tabpanel"
           aria-labelledby="tab-carte"
-          className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] h-full relative border-r border-ink-800`}
+          className={`${activeTab === 'carte' ? 'flex' : 'hidden'} md:flex w-full md:w-[60%] md:min-w-0 h-full relative border-r border-ink-800`}
         >
           {shouldMountMap && (
             <ErrorBoundary fallback={makePanelFallback('La carte')}>
@@ -540,7 +629,7 @@ function App() {
         {/* COLONNE DROITE DESKTOP — rail "classeur" + feuille de contenu
             (ORA-178, maquette nav-b3-classeur). Mobile garde sa propre
             colonne ci-dessous, inchangée. */}
-        <div className="hidden md:flex w-[40%] h-full relative z-10">
+        <div className="hidden md:flex w-[40%] min-w-0 h-full relative z-10">
           <PanelNav
             activeView={activeView}
             onChange={setActiveView}
@@ -575,13 +664,39 @@ function App() {
 
               <div className={activeView === 'immotep' ? 'hidden' : 'h-full'}>
                 {activeView === 'accueil' && (
-                  <HomeOverview
-                    stats={homeStats}
-                    ville={ville}
-                    onOpenChat={() => setActiveView('immotep')}
-                    onSelectQuartier={(quartier) => handleScan(quartier, 'Tout', '')}
-                  />
+                  <>
+                    {listingsError && listings.length === 0 && (
+                      <div className="mx-4 md:mx-5 mt-4 flex items-center justify-between gap-2 bg-red-900/20 border border-red-900/50 rounded-lg px-3 py-2">
+                        <p className="text-[11px] text-red-400 font-bold">
+                          Impossible de charger les données du marché : {listingsError}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setListingsRetryToken((t) => t + 1)}
+                          className="shrink-0 text-[10px] uppercase tracking-widest font-bold text-red-300 hover:text-red-200 underline underline-offset-2"
+                        >
+                          Réessayer
+                        </button>
+                      </div>
+                    )}
+                    <HomeOverview
+                      stats={homeStats}
+                      ville={ville}
+                      onOpenChat={() => setActiveView('immotep')}
+                      onSelectQuartier={(quartier) => handleScan(quartier, 'Tout', '')}
+                    />
+                    <div className="px-4 md:px-5 pb-4 md:pb-5">
+                      <button
+                        type="button"
+                        onClick={() => setActiveView('recherche')}
+                        className="w-full min-h-[44px] rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold uppercase text-xs tracking-widest transition-colors"
+                      >
+                        Lancer une recherche
+                      </button>
+                    </div>
+                  </>
                 )}
+                {activeView === 'recherche' && renderSearchForm()}
                 {activeView === 'scan' && renderScanView()}
                 {activeView === 'estimation' && renderEstimationView()}
                 {activeView === 'calques' && renderCalquesView()}
@@ -591,7 +706,6 @@ function App() {
                   </div>
                 )}
                 {activeView === 'fiche' && renderFicheView()}
-                {activeView === 'recherche' && renderRechercheView()}
               </div>
             </PanelSheet>
           </ErrorBoundary>
@@ -631,6 +745,30 @@ function App() {
             className={isChatOpen ? 'hidden' : 'flex-1 min-h-0 overflow-y-auto custom-scrollbar'}
           >
           <ErrorBoundary fallback={makePanelFallback("Le panneau d'estimation")}>
+            {/* ORA-179 : la Topbar ne porte plus la recherche — mobile
+                (pas de rail) garde donc un accès permanent à SearchForm ici,
+                le seul composant de recherche restant (aucune logique
+                dupliquée avec la vue "Recherche" desktop ci-dessus). */}
+            <details className="border-b border-slate-800 group" open>
+              <summary className="px-4 md:px-5 py-2.5 bg-slate-900/20 text-[9px] uppercase text-slate-500 font-bold tracking-widest cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between hover:text-slate-300 transition-colors">
+                <span>Recherche</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-open:rotate-180">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </summary>
+              <SearchForm
+                ville={ville}
+                onVilleChange={setVille}
+                onScan={handleScan}
+                isLoading={loading}
+                quartierOptions={quartierOptions}
+                initialQuartier={result?.quartier || ''}
+                initialTypeLocal={result?.type || 'Tout'}
+                initialSurface={result?.surface || ''}
+                autoFocus={false}
+              />
+            </details>
+
             {ambiguousQuartier && !loading && (
               <QuartierAmbigu
                 ambiguous={ambiguousQuartier}
@@ -640,17 +778,33 @@ function App() {
             )}
 
             {!result && !loading && !ambiguousQuartier && (
-              <HomeOverview
-                stats={homeStats}
-                ville={ville}
-                onOpenChat={() => setIsChatOpen(true)}
-                onSelectQuartier={(quartier) => handleScan(quartier, 'Tout', '')}
-              />
+              <>
+                {listingsError && listings.length === 0 && (
+                  <div className="mx-4 md:mx-5 mt-4 flex items-center justify-between gap-2 bg-red-900/20 border border-red-900/50 rounded-lg px-3 py-2">
+                    <p className="text-[11px] text-red-400 font-bold">
+                      Impossible de charger les données du marché : {listingsError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setListingsRetryToken((t) => t + 1)}
+                      className="shrink-0 text-[10px] uppercase tracking-widest font-bold text-red-300 hover:text-red-200 underline underline-offset-2"
+                    >
+                      Réessayer
+                    </button>
+                  </div>
+                )}
+                <HomeOverview
+                  stats={homeStats}
+                  ville={ville}
+                  onOpenChat={() => setIsChatOpen(true)}
+                  onSelectQuartier={(quartier) => handleScan(quartier, 'Tout', '')}
+                />
+              </>
             )}
 
             {(result || loading) && (
             <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
-              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
+              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} onAddSurface={handleAddSurface} ville={ville} health={health} dataAsOf={latestDataDate} />
               {result && !(result.surface && result.confiance) && (
                 <div className="mt-2 text-center text-[10px] text-ink-dim uppercase tracking-widest">
                   Données réelles ({result.count} biens)
