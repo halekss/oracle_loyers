@@ -44,6 +44,42 @@ describe('ResultCard', () => {
     expect(screen.getByText(/Confiance IA : Élevée/)).toBeInTheDocument();
   });
 
+  describe('estimation loyer — fourchette, période, CTA surface (ORA-167)', () => {
+    const prixStats = { min: 504, p25: 660, mediane: 789, p75: 880, max: 947 };
+    const historique = [{ date: '2026-08-12' }, { date: '2026-08-03' }, { date: '2026-08-14' }];
+
+    it('renders min · P25 · médiane · P75 · max from prixStats', () => {
+      render(<ResultCard data={{ ...baseData, prixStats }} loading={false} />);
+
+      const range = screen.getByTestId('price-range');
+      for (const value of Object.values(prixStats)) {
+        expect(range).toHaveTextContent(String(value));
+      }
+      expect(range).toHaveTextContent('Médiane');
+    });
+
+    it('does not render the range without prixStats', () => {
+      render(<ResultCard data={baseData} loading={false} />);
+      expect(screen.queryByTestId('price-range')).not.toBeInTheDocument();
+    });
+
+    it('shows the period covered by the price history', () => {
+      render(<ResultCard data={{ ...baseData, prixStats }} loading={false} priceHistory={{ historique }} />);
+      expect(screen.getByText('03/08 → 14/08')).toBeInTheDocument();
+    });
+
+    it('offers a "+ Surface" CTA only without a surface, and calls onAddSurface', async () => {
+      const onAddSurface = vi.fn();
+      const { rerender } = render(<ResultCard data={baseData} loading={false} onAddSurface={onAddSurface} />);
+
+      await userEvent.click(screen.getByRole('button', { name: /\+ surface/i }));
+      expect(onAddSurface).toHaveBeenCalledTimes(1);
+
+      rerender(<ResultCard data={{ ...baseData, surface: 45 }} loading={false} onAddSurface={onAddSurface} />);
+      expect(screen.queryByRole('button', { name: /\+ surface/i })).not.toBeInTheDocument();
+    });
+  });
+
   it('explains the confidence using the comparables count (ORA-128)', () => {
     render(<ResultCard data={{ ...baseData, count: 12 }} loading={false} />);
 

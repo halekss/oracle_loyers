@@ -9,6 +9,20 @@ const MIN_SCENARIO_SURFACE = 9;
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : "--");
 const formatM2 = (p) => (p ? p.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) : "--");
 
+const formatShortDate = (d) => new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+
+// Période couverte par les snapshots de l'historique (ORA-167) : "03/08 → 14/08".
+function historyPeriod(historique) {
+  const dates = (historique || []).map((p) => p.date).filter(Boolean).sort();
+  if (dates.length < 2) return null;
+  return `${formatShortDate(dates[0])} → ${formatShortDate(dates[dates.length - 1])}`;
+}
+
+// Position (0-100 %) d'une valeur sur la barre min → max.
+const positionOnRange = (v, min, max) => (max > min ? ((v - min) / (max - min)) * 100 : 50);
+
+const RANGE_LABELS = [['min', 'Min'], ['p25', 'P25'], ['mediane', 'Médiane'], ['p75', 'P75'], ['max', 'Max']];
+
 // `onViewAnnonces` (optionnel, ORA-127) : appelé avec le quartier scanné
 // (`data.quartier`) quand l'utilisateur clique le lien direct vers ses
 // annonces — le parent (App) s'en sert pour présélectionner AnnoncesList.
@@ -17,7 +31,7 @@ const formatM2 = (p) => (p ? p.toLocaleString('fr-FR', { maximumFractionDigits: 
 // du modèle actif plutôt que des chiffres codés en dur.
 // `dataAsOf` (ORA-177) : badge "Données au" déjà calculé pour la Topbar,
 // repris tel quel dans l'en-tête du rapport PDF exporté.
-export default function ResultCard({ data, loading, priceHistory, onViewAnnonces, ville, health, dataAsOf }) {
+export default function ResultCard({ data, loading, priceHistory, onViewAnnonces, onAddSurface, ville, health, dataAsOf }) {
 
   const safeData = data || {};
   const stats = safeData.stats || {};
@@ -33,6 +47,8 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
   const comparables = safeData.comparables || [];
   const onScreenComparables = comparables.slice(0, 3);
   const surface = safeData.surface;
+  const prixStats = safeData.prixStats;
+  const period = historyPeriod(priceHistory?.historique);
   // ORA-171 : le panneau "Estimation personnalisée" (maquette 03) ne
   // s'affiche que si une vraie prédiction XGBoost a eu lieu (surface +
   // type précis fournis) — sinon on garde l'affichage "moyenne du secteur"
@@ -288,22 +304,22 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
       <div className="flex gap-3">
 
         {/* GROS BLOC : LOYER */}
-        <div className="flex-1 bg-gradient-to-br from-slate-800 to-slate-900 p-4 rounded-xl border border-purple-500/20 shadow-[0_4px_20px_rgba(0,0,0,0.2)] relative overflow-hidden group">
+        <div className="flex-1 bg-gradient-to-br from-ink-800 to-ink-900 p-4 rounded-xl border border-accent/20 shadow-[0_4px_20px_rgba(0,0,0,0.2)] relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-2 opacity-5 text-6xl font-black text-white pointer-events-none">€</div>
 
           <div className="flex justify-between items-start">
             <div>
-                <p className="text-[10px] uppercase text-purple-400 font-bold tracking-widest mb-1">Estimation Loyer</p>
+                <p className="text-[10px] uppercase text-accent-light font-bold tracking-widest mb-1">Estimation Loyer</p>
                 <div className="flex items-baseline gap-1">
                     <span className="text-4xl font-black text-white tracking-tighter shadow-black drop-shadow-lg">
                     {formatPrice(estimatedPrice)}
                     </span>
-                    <span className="text-lg text-slate-500">€</span>
+                    <span className="text-lg text-ink-dim">€</span>
                 </div>
             </div>
             {confiance && (
               <span
-                className={`text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border ${confidenceStyles[confiance] || 'bg-slate-800 text-slate-400 border-slate-700'}`}
+                className={`text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border ${confidenceStyles[confiance] || 'bg-ink-800 text-ink-muted border-ink-700'}`}
                 title={safeData.count != null ? `Basée sur ${safeData.count} bien(s) comparable(s) du même quartier et type` : undefined}
               >
                 Confiance IA : {confiance}
@@ -312,7 +328,7 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
           </div>
           {/* ORA-128 : explique la confiance plutôt que de la laisser abstraite */}
           {safeData.count != null && (
-            <p className="mt-2 text-[9px] text-slate-500">
+            <p className="mt-2 text-[9px] text-ink-dim">
               Basée sur {safeData.count} bien{safeData.count > 1 ? 's' : ''} comparable{safeData.count > 1 ? 's' : ''} du même quartier et type.
             </p>
           )}
@@ -321,29 +337,70 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
             <button
               type="button"
               onClick={() => onViewAnnonces(quartier)}
-              className="mt-2 text-[9px] uppercase tracking-widest font-bold text-purple-400 hover:text-purple-300 transition-colors underline decoration-purple-500/40 underline-offset-2"
+              className="mt-2 text-[9px] uppercase tracking-widest font-bold text-accent-light hover:text-accent-light transition-colors underline decoration-accent/40 underline-offset-2"
             >
               Voir les annonces de {quartier} →
+            </button>
+          )}
+          {/* ORA-167 : ouvre la saisie de surface pour l'estimation modèle */}
+          {onAddSurface && !surface && (
+            <button
+              type="button"
+              onClick={onAddSurface}
+              className="mt-2 ml-3 text-[9px] uppercase tracking-widest font-bold text-ink border border-accent/60 rounded px-1.5 py-0.5 hover:bg-accent/20 transition-colors"
+            >
+              + Surface
             </button>
           )}
         </div>
 
         {/* PETIT BLOC : PRIX M2 */}
-        <div className="w-1/3 bg-slate-900 p-3 rounded-xl border border-slate-700 flex flex-col justify-center items-center relative">
-          <p className="text-[9px] uppercase text-slate-500 font-bold mb-1">Prix m²</p>
+        <div className="w-1/3 bg-ink-900 p-3 rounded-xl border border-ink-700 flex flex-col justify-center items-center relative">
+          <p className="text-[9px] uppercase text-ink-dim font-bold mb-1">Prix m²</p>
           <div className="text-xl font-bold text-yellow-400 font-mono">
             {formatPrice(m2PriceRaw)}
           </div>
-          <p className="text-[9px] text-slate-600 mt-1">Moyenne</p>
+          <p className="text-[9px] text-ink-dim mt-1">Moyenne</p>
         </div>
       </div>
 
+      {prixStats && (
+        <div className="mt-3 bg-ink-900 rounded-xl border border-ink-700 p-3" data-testid="price-range">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest">Fourchette des loyers</p>
+            {period && <p className="text-[9px] text-ink-dim">{period}</p>}
+          </div>
+          <div className="relative h-1.5 bg-ink-800 rounded-full">
+            <div
+              className="absolute inset-y-0 bg-accent/60 rounded-full"
+              style={{
+                left: `${positionOnRange(prixStats.p25, prixStats.min, prixStats.max)}%`,
+                width: `${positionOnRange(prixStats.p75, prixStats.min, prixStats.max) - positionOnRange(prixStats.p25, prixStats.min, prixStats.max)}%`,
+              }}
+            />
+            <div
+              className="absolute -top-1 w-3.5 h-3.5 rounded-full bg-market-within border-2 border-ink-900 -translate-x-1/2"
+              style={{ left: `${positionOnRange(prixStats.mediane, prixStats.min, prixStats.max)}%` }}
+              title={`Médiane : ${formatPrice(prixStats.mediane)} €`}
+            />
+          </div>
+          <dl className="mt-3 grid grid-cols-5 text-center">
+            {RANGE_LABELS.map(([key, label]) => (
+              <div key={key}>
+                <dd className={`text-[11px] font-bold ${key === 'mediane' ? 'text-market-within' : 'text-ink'}`}>{formatPrice(prixStats[key])}</dd>
+                <dt className="text-[8px] uppercase tracking-wide text-ink-dim">{label}</dt>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
       {onScreenComparables.length > 0 && (
-        <div className="mt-3 bg-slate-900 rounded-xl border border-slate-700 p-3">
-          <p className="text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-2">Biens comparables</p>
+        <div className="mt-3 bg-ink-900 rounded-xl border border-ink-700 p-3">
+          <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">Biens comparables</p>
           <ul className="space-y-1">
             {onScreenComparables.map((c, i) => (
-              <li key={i} className="flex justify-between text-[11px] text-slate-300">
+              <li key={i} className="flex justify-between text-[11px] text-ink">
                 <span>{c.type_local || '—'}</span>
                 <span>{formatPrice(c.prix)} € · {formatPrice(c.surface)} m²</span>
               </li>
@@ -358,7 +415,7 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
             type="button"
             onClick={handleExportPdf}
             disabled={exporting}
-            className="mt-3 w-full text-[10px] uppercase tracking-widest font-bold text-purple-400 border border-purple-500/30 rounded-lg py-2 hover:bg-purple-500/10 transition-colors disabled:opacity-50"
+            className="mt-3 w-full text-[10px] uppercase tracking-widest font-bold text-accent-light border border-accent/30 rounded-lg py-2 hover:bg-accent/10 transition-colors disabled:opacity-50"
           >
             {exporting ? 'Génération du PDF...' : 'Exporter en PDF'}
           </button>
