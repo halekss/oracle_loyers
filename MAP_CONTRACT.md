@@ -109,6 +109,17 @@ Notifie React qu'un utilisateur a cliqué sur le lien "Voir l'annonce" d'un popu
 
 **Traité par** : `MapComponent.jsx`, un listener `message` dédié (distinct du contrat React → iframe ci-dessus) qui appelle `api.logAnnonceClick(id)` — même fonction que `AnnonceCard.jsx`, donc même comportement (fire-and-forget, ne bloque jamais la navigation vers l'annonce qui s'ouvre via le `<a href>` natif du popup, indépendant de ce message).
 
+## Rendu des marqueurs, légende et échelle (ORA-165/166)
+
+Conventions visuelles de la carte générée — sans nouveau type de message `postMessage` :
+
+* **Pastille prix** : chaque annonce est une pastille « 765 € » (`folium.DivIcon`), colorée selon l'écart de son loyer à la **médiane de son quartier et de son type** (médiane du type sur la ville si moins de 3 annonces dans le quartier). Seuil et couleurs dans `frontend/src/config/marketBands.config.json` (±5 % : `below` < −5 %, `within`, `above` > +5 %), lus par `generate_map.market_band` et par `services/marketBand.js` (panneau React) — un seul endroit à modifier.
+* **Marqueur groupé** : annonces aux coordonnées identiques (~1 m, typiquement Vizzit sur une même rue) = un seul marqueur avec badge du nombre d'annonces ; la bulle affiche « N annonces · même adresse » (surface, prix, écart, lien) et « Géolocalisées sur la même rue (Vizzit) » quand toutes viennent de Vizzit. Les marqueurs sont focusables au clavier (Tab, Entrée ouvre la bulle — comportement natif Leaflet).
+* **Légende** (`build_legend_html`) : injectée au chargement de la page, ses lignes de calques portent `data-layer` = `name` Folium et sont grisées quand le calque est masqué (`overlayadd`/`overlayremove`) — donc suit `TOGGLE_LAYER` sans message dédié.
+* **Échelle** métrique (`L.control.scale`) et classes `oracle-z13`/`oracle-z14` sur `<body>` : les labels de quartiers (capitales, centre des annonces du quartier) apparaissent dès le zoom 13, les noms de stations de métro dès le zoom 14.
+
+Le script de légende s'exécute sur l'événement `load` : Folium rend le script d'initialisation de la carte **après** `</body>`, la variable `map_…` n'existe pas encore lors de l'exécution d'un bloc injecté avant.
+
 ## Ajouter un nouveau type de message
 
 1. Documenter le type ici (payload, émetteur, effet attendu).
