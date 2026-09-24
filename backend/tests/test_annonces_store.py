@@ -60,6 +60,15 @@ class AnnoncesStoreTest(unittest.TestCase):
         self.assertEqual(result["items"][0]["titre"], "Nouveau titre")
         self.assertEqual(result["items"][0]["prix"], 900)
 
+    def test_list_annonces_ville_filter_is_case_insensitive(self):
+        """Le frontend envoie le slug de la ville active ("lyon"), la colonne stocke "Lyon"."""
+        annonces_store.upsert_annonce(url="https://example.com/l", ville="Lyon", db_path=self.db_path)
+        annonces_store.upsert_annonce(url="https://example.com/m", ville="Lille", db_path=self.db_path)
+
+        result = annonces_store.list_annonces(ville="lyon", db_path=self.db_path)
+
+        self.assertEqual([i["url"] for i in result["items"]], ["https://example.com/l"])
+
     def test_list_annonces_filters_by_ville_and_quartier(self):
         annonces_store.upsert_annonce(
             url="https://example.com/a", ville="Lyon", quartier="Gerland", db_path=self.db_path,
