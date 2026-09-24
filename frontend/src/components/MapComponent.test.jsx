@@ -1,3 +1,4 @@
+import { createRef } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -13,6 +14,7 @@ vi.mock('../services/api', async () => {
 import { api } from '../services/api';
 import MapComponent from './MapComponent';
 import mapLayersConfig from '../config/mapLayers.config.json';
+import { LAYER_MAPPING } from '../services/mapLayers';
 
 describe('MapComponent', () => {
   beforeEach(() => {
@@ -285,10 +287,10 @@ describe('MapComponent', () => {
   });
 
   describe('panneau "Les 4 Cavaliers" et compteurs (ORA-172)', () => {
-    const originalFetch = global.fetch;
+    const originalFetch = globalThis.fetch;
 
     afterEach(() => {
-      global.fetch = originalFetch;
+      globalThis.fetch = originalFetch;
     });
 
     it('renames the old generic "Contexte" group to "Les 4 Cavaliers" (maquette 04), always expanded', () => {
@@ -300,15 +302,15 @@ describe('MapComponent', () => {
     });
 
     it('fetches layer counts from the ville-scoped static map metadata', () => {
-      global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ layer_counts: {} }) });
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ layer_counts: {} }) });
 
       render(<MapComponent center={null} ville="lille" />);
 
-      expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/data\/map_metadata_lille\.json/));
+      expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/data\/map_metadata_lille\.json/));
     });
 
     it('shows the count next to a layer once map_metadata layer_counts resolves', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ layer_counts: { Vice: 526, T2: 300 } }),
       });
@@ -320,12 +322,61 @@ describe('MapComponent', () => {
     });
 
     it('does not throw and shows no count when the metadata fetch fails', async () => {
-      global.fetch = vi.fn().mockRejectedValue(new Error('network down'));
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('network down'));
 
       render(<MapComponent center={null} />);
 
       await new Promise((r) => setTimeout(r, 0));
       expect(screen.queryByText('526')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('pilotage externe des calques (ORA-178, vue "Calques" du rail)', () => {
+    it('hides the floating layer panel and reopen button when hidePanel is true', () => {
+      render(<MapComponent center={null} hidePanel />);
+
+      expect(screen.queryByText('Contrôle des Calques')).not.toBeInTheDocument();
+      expect(screen.queryByTitle('Ouvrir les filtres')).not.toBeInTheDocument();
+    });
+
+    it('reports its layers and layer counts to the parent via onLayersChange', () => {
+      const onLayersChange = vi.fn();
+      render(<MapComponent center={null} onLayersChange={onLayersChange} />);
+
+      expect(onLayersChange).toHaveBeenCalledWith(
+        expect.objectContaining({ Vice: expect.any(Boolean) }),
+        expect.any(Object),
+      );
+    });
+
+    it('exposes toggleLayer via ref, sending the same TOGGLE_LAYER message as the internal panel', () => {
+      const ref = createRef();
+      render(<MapComponent center={null} ref={ref} hidePanel />);
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', {
+        value: { postMessage },
+        configurable: true,
+      });
+
+      ref.current.toggleLayer('Vice');
+
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'TOGGLE_LAYER', name: LAYER_MAPPING.Vice, show: expect.any(Boolean) },
+        window.location.origin,
+      );
+    });
+
+    it('calls onAnnonceClick when the iframe reports an ANNONCE_CLICK, in addition to tracking it', () => {
+      const onAnnonceClick = vi.fn();
+      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} />);
+
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'ANNONCE_CLICK', id: 42 },
+        origin: window.location.origin,
+      }));
+
+      expect(onAnnonceClick).toHaveBeenCalledWith(42);
     });
   });
 });

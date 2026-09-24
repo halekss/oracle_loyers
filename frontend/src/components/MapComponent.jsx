@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { api } from '../services/api';
 import mapLayersConfig from '../config/mapLayers.config.json';
+import { LAYER_MAPPING, layersByGroup } from '../services/mapLayers';
 
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
 // (générée par backend/scripts/generate_map.py) : voir MAP_CONTRACT.md (ORA-125).
@@ -19,13 +20,10 @@ const VILLE_CENTERS = {
 // calque = éditer ce JSON, pas ce composant ET le script Python séparément.
 // `LAYER_MAPPING` (clé interne React -> libellé du calque Folium/TOGGLE_LAYER)
 // dérive de ce fichier plutôt que d'être recopié à la main.
-const LAYER_MAPPING = Object.fromEntries(
-  mapLayersConfig.map((layer) => [layer.key, layer.name])
-);
-
-const layersByGroup = (group) => mapLayersConfig.filter((layer) => layer.group === group);
-
-const ToggleItem = ({ label, color, isActive, onToggle, disabled, count }) => (
+// Exporté (ORA-178) : réutilisé tel quel par la vue "Calques" du rail
+// (App.jsx) pour afficher les mêmes lignes que le panneau flottant
+// ci-dessous, sans dupliquer le style des lignes.
+export const ToggleItem = ({ label, color, isActive, onToggle, disabled, count }) => (
   <div
     className={`flex items-center justify-between mb-2 group select-none transition-opacity duration-300 ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
     onClick={!disabled ? onToggle : undefined}
@@ -52,7 +50,20 @@ const ToggleItem = ({ label, color, isActive, onToggle, disabled, count }) => (
   </div>
 );
 
-export default function MapComponent({ center, bounds, chatOpen = false, ville = 'lyon' }) {
+// `hidePanel` (ORA-178, optionnel) : masque le panneau flottant "Contrôle
+// des calques" — utilisé sur desktop une fois que la vue "Calques" du rail
+// (App.jsx) affiche les mêmes lignes dans la feuille de contenu, pour éviter
+// un doublon. Mobile (pas de rail) garde `hidePanel=false` : c'est son seul
+// point d'accès aux calques, comportement inchangé.
+// `onLayersChange`/`onAnnonceClick` (optionnels) : MapComponent reste
+// l'unique source de vérité (état interne inchangé, contrat postMessage
+// intact) — ces callbacks se contentent de refléter son état vers le
+// parent, qui pilote alors les calques à distance via la ref (`toggleLayer`)
+// plutôt que de dupliquer la logique d'envoi des messages à l'iframe.
+const MapComponent = forwardRef(function MapComponent(
+  { center, bounds, chatOpen = false, ville = 'lyon', hidePanel = false, onLayersChange, onAnnonceClick },
+  ref,
+) {
   const [mapUrl, setMapUrl] = useState(() => `/data/map_pings_${ville}_calques.html?t=${Date.now()}`);
   const iframeRef = useRef(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -101,6 +112,14 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
     Object.fromEntries(mapLayersConfig.map((layer) => [layer.key, layer.defaultVisible]))
   );
 
+  // ORA-178 : reflète l'état interne (calques + compteurs) vers le parent à
+  // chaque changement, pour que la vue "Calques" du rail affiche exactement
+  // ce que ce composant sait déjà, sans jamais recalculer/refetcher lui-même.
+  useEffect(() => {
+    onLayersChange?.(layers, layerCounts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers, layerCounts]);
+
   useEffect(() => {
     if (center && iframeRef.current && iframeRef.current.contentWindow) {
       iframeRef.current.contentWindow.postMessage({
@@ -143,9 +162,11 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
       api.logAnnonceClick(e.data.id).catch((err) => {
         console.error('❌ Erreur tracking clic annonce (carte) :', err);
       });
+      onAnnonceClick?.(e.data.id);
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const sendLayerCommand = (layerKey, show) => {
@@ -168,6 +189,11 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
   const handleIframeLoad = () => {
     Object.keys(layers).forEach(key => sendLayerCommand(key, layers[key]));
   };
+
+  // ORA-178 : pilotage à distance depuis la vue "Calques" du rail (App.jsx) —
+  // réutilise `toggleLayer` telle quelle, jamais de second état/logique
+  // d'envoi des calques ailleurs dans le code.
+  useImperativeHandle(ref, () => ({ toggleLayer }));
 
   return (
     <div className="w-full h-full relative z-0 bg-slate-900 overflow-hidden rounded-2xl border border-slate-800 shadow-2xl">
@@ -194,7 +220,7 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
 
       {/* --- BOUTON POUR OUVRIR LES FILTRES (Visible quand fermé, masqué
           tant que le chat est ouvert — ORA-116) --- */}
-      {!isPanelOpen && !chatOpen && (
+      {!hidePanel && !isPanelOpen && !chatOpen && (
         <button
           onClick={() => setIsPanelOpen(true)}
           className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-3 rounded-full border border-slate-700/50 shadow-2xl hover:scale-110 transition-transform duration-200 group"
@@ -207,7 +233,7 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
       )}
 
       {/* --- PANNEAU DE CONTRÔLE (Visible quand ouvert) --- */}
-      {isPanelOpen && (
+      {!hidePanel && isPanelOpen && (
         <div className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md p-4 rounded-xl border border-slate-700/50 shadow-2xl w-64 overflow-y-auto max-h-[80vh] transition-all duration-300 ease-in-out">
           
           <div className="flex items-center justify-between mb-3 border-b border-slate-700 pb-2">
@@ -264,4 +290,6 @@ export default function MapComponent({ center, bounds, chatOpen = false, ville =
       )}
     </div>
   );
-}
+});
+
+export default MapComponent;

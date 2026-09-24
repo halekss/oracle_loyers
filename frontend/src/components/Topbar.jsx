@@ -156,6 +156,7 @@ export default function Topbar({ ville, onVilleChange, onScan, isLoading, dataAs
           </svg>
           <input
             ref={inputRef}
+            id="topbar-quartier-input"
             type="text"
             value={quartier}
             onChange={(e) => {

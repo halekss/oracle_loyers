@@ -1,21 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { api, describeApiError } from '../services/api';
-import { sanitizeListingUrl } from '../services/sanitizeUrl';
-import { deriveSource } from '../services/annonceType';
-import { downloadBlob } from '../services/downloadBlob';
-import { useFavorites } from '../hooks/useFavorites';
+import { useAnnonceDetail } from '../hooks/useAnnonceDetail';
+import AnnonceDetailContent from './AnnonceDetailContent';
 
-const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
-const formatM2 = (p) => (p != null ? p.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) : '--');
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-const CATEGORY_STYLES = {
-  Vice: 'text-red-400',
-  Gentrification: 'text-violet-400',
-  Nuisance: 'text-orange-400',
-  Superstition: 'text-slate-400',
-};
 
 // Vue détail d'une annonce (ORA-131, refondue maquette 06 par ORA-174),
 // consommant GET /api/annonces/:id enrichi (ORA-174 : coordonnées,
@@ -23,40 +11,14 @@ const CATEGORY_STYLES = {
 // Aucune photo/capture du site source affichée (ORA-94/ORA-133) —
 // uniquement un pictogramme générique, jamais une image tierce (contrainte
 // légale, LEGAL_DECISIONS.md). `annonceId` null : rien à afficher.
+//
+// ORA-178 : ce composant ne porte plus que le chrome de la modale (portail,
+// fond, piège de focus, Échap) — le fetch/les actions viennent de
+// `useAnnonceDetail` et le contenu de `AnnonceDetailContent`, partagés avec
+// la vue "Fiche" du rail (rendue inline, sans ce chrome).
 export default function AnnonceDetailModal({ annonceId, onClose }) {
-  const [annonce, setAnnonce] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState(null);
   const dialogRef = useRef(null);
-  const { isFavorite, toggleFavorite } = useFavorites();
-
-  useEffect(() => {
-    if (annonceId == null) return;
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setAnnonce(null);
-
-    api.getAnnonceDetail(annonceId)
-      .then((data) => {
-        if (!cancelled) setAnnonce(data);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error(err);
-        setError(describeApiError(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [annonceId]);
+  const detail = useAnnonceDetail(annonceId);
 
   // ORA-174 : fermeture Échap + piège de focus (a11y d'une modale) — le
   // focus revient sur l'élément qui l'a ouverte à la fermeture, il ne doit
@@ -100,54 +62,7 @@ export default function AnnonceDetailModal({ annonceId, onClose }) {
 
   if (annonceId == null) return null;
 
-  const safeUrl = sanitizeListingUrl(annonce?.url);
-  const source = deriveSource(annonce?.url);
-  const favorite = isFavorite(annonceId);
-
-  const handleVoirAnnonce = () => {
-    api.logAnnonceClick(annonceId).catch((err) => {
-      console.error('❌ Erreur tracking clic annonce:', err);
-    });
-    if (safeUrl) {
-      window.open(safeUrl, '_blank', 'noopener,noreferrer');
-    }
-  };
-
-  // ORA-174 : réutilise le générateur PDF existant (/api/report/pdf, ORA-121)
-  // — pas de nouvel endpoint pour une fiche annonce, dont les champs
-  // recouvrent ceux déjà acceptés (quartier/estimation/prix_m2/facteurs).
-  const handleExportPdf = async () => {
-    setExporting(true);
-    setExportError(null);
-    try {
-      const facteurs = (annonce?.cavaliers_detail || [])
-        .filter((cat) => cat.items.length > 0)
-        .map((cat) => ({
-          categorie: cat.categorie,
-          phrase: `${cat.items[0].poi} à ${cat.items[0].dist_m} m (${cat.total} lieu${cat.total > 1 ? 'x' : ''} dans le rayon).`,
-        }));
-      const blob = await api.exportEstimationPdf({
-        quartier: annonce.quartier,
-        estimated_price: annonce.prix,
-        prix_m2: annonce.prix_m2,
-        type_local: annonce.type_local,
-        facteurs,
-      });
-      const slug = (annonce.quartier || 'annonce').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      downloadBlob(blob, `annonce-oracle-${slug}.pdf`);
-    } catch (err) {
-      console.error(err);
-      setExportError(describeApiError(err));
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const prixM2 = annonce?.prix_m2 ?? (annonce?.prix && annonce?.surface ? annonce.prix / annonce.surface : null);
-  const ecart =
-    prixM2 != null && annonce?.quartier_prix_m2_moyen
-      ? Math.round(((prixM2 - annonce.quartier_prix_m2_moyen) / annonce.quartier_prix_m2_moyen) * 100)
-      : null;
+  const { annonce } = detail;
 
   // ORA-174 (fix visuel) : rendu via portail dans document.body plutôt
   // qu'à sa place dans l'arbre React — une modale `fixed inset-0` imbriquée
@@ -189,132 +104,12 @@ export default function AnnonceDetailModal({ annonceId, onClose }) {
           </button>
         </div>
 
-        {/* ORA-133/légal : pictogramme générique, jamais une photo du bien */}
-        <div className="h-32 flex flex-col items-center justify-center gap-1.5 bg-ink-800 text-slate-600 border-b border-ink-700">
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-            <circle cx="9" cy="9" r="2"></circle>
-            <path d="m21 15-5-5L5 21"></path>
-          </svg>
-          <span className="text-[10px] uppercase tracking-widest font-bold">Photo de l'annonce</span>
-        </div>
-
-        <div className="p-4 space-y-3">
-          {loading && (
-            <div className="animate-pulse space-y-2">
-              <div className="h-5 bg-ink-800 rounded w-3/4"></div>
-              <div className="h-4 bg-ink-800 rounded w-1/2"></div>
-            </div>
-          )}
-
-          {!loading && error && (
-            <p className="text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
-              {error}
-            </p>
-          )}
-
-          {!loading && !error && annonce && (
-            <>
-              <div className="flex items-baseline justify-between gap-2">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-black text-white">{formatPrice(annonce.prix)} €</span>
-                  <span className="text-sm text-slate-500">/ mois</span>
-                </div>
-                {ecart != null && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ecart > 0 ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'}`}>
-                    {ecart > 0 ? '+' : ''}{ecart} % vs médiane du quartier
-                  </span>
-                )}
-              </div>
-
-              <p className="text-xs text-slate-500">
-                Appartement · {annonce.ville}{annonce.quartier ? ` · ${annonce.quartier}` : ''}
-                {source ? ` · publié sur ${source}` : ''}
-              </p>
-
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div className="bg-ink-800 rounded-lg p-2">
-                  <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Surface</p>
-                  <p className="text-sm font-bold text-white">{annonce.surface != null ? `${annonce.surface} m²` : '—'}</p>
-                </div>
-                <div className="bg-ink-800 rounded-lg p-2">
-                  <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Prix m²</p>
-                  <p className="text-sm font-bold text-yellow-400">{formatM2(prixM2)} €</p>
-                </div>
-                <div className="bg-ink-800 rounded-lg p-2">
-                  <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">
-                    Médiane {annonce.type_local || ''}
-                  </p>
-                  <p className="text-sm font-bold text-white">{formatM2(annonce.quartier_prix_m2_moyen)} €/m²</p>
-                </div>
-              </div>
-
-              {/* ORA-174 : "Autour de l'appartement" — cavaliers autour des
-                  coordonnées de CETTE annonce (services/annonce_detail.py),
-                  absence gérée par le 0/"—" plutôt qu'une catégorie masquée. */}
-              {annonce.cavaliers_detail && annonce.cavaliers_detail.length > 0 && (
-                <div>
-                  <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-1.5">
-                    Autour de l'appartement · 500 m
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {annonce.cavaliers_detail.map((cat) => {
-                      const closest = cat.items.length > 0 ? Math.min(...cat.items.map((i) => i.dist_m)) : null;
-                      return (
-                        <div key={cat.categorie} className="bg-ink-800 rounded-lg p-2">
-                          <p className={`text-[11px] font-bold ${CATEGORY_STYLES[cat.categorie] || 'text-slate-400'}`}>
-                            {cat.categorie}
-                          </p>
-                          <p className="text-sm font-bold text-white">{cat.total}</p>
-                          <p className="text-[9px] text-slate-500">
-                            {closest != null ? `le plus proche ${closest} m` : '—'}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleVoirAnnonce}
-                  disabled={!safeUrl}
-                  className="flex-1 text-[10px] uppercase tracking-widest font-bold text-white bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg py-2.5 transition-colors"
-                >
-                  {source ? `Voir sur ${source}` : "Voir l'annonce"} ↗
-                </button>
-                <button
-                  type="button"
-                  onClick={() => toggleFavorite(annonceId)}
-                  aria-pressed={favorite}
-                  aria-label={favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                  className={`shrink-0 text-[10px] uppercase tracking-widest font-bold border rounded-lg py-2.5 px-3 transition-colors ${
-                    favorite ? 'text-amber-400 border-amber-500/40 bg-amber-900/20' : 'text-slate-400 border-ink-700 hover:text-amber-300'
-                  }`}
-                >
-                  {favorite ? '★' : '☆'} favori
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportPdf}
-                  disabled={exporting}
-                  aria-label="Exporter en PDF"
-                  className="shrink-0 text-[10px] uppercase tracking-widest font-bold text-slate-400 hover:text-slate-200 border border-ink-700 rounded-lg py-2.5 px-3 transition-colors disabled:opacity-40"
-                >
-                  {exporting ? '…' : 'PDF'}
-                </button>
-              </div>
-
-              {exportError && (
-                <p className="text-[10px] text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
-                  Erreur lors de l'export PDF : {exportError}
-                </p>
-              )}
-            </>
-          )}
-        </div>
+        <AnnonceDetailContent
+          {...detail}
+          onToggleFavorite={detail.toggleFavorite}
+          onVoirAnnonce={detail.handleVoirAnnonce}
+          onExportPdf={detail.handleExportPdf}
+        />
       </div>
     </div>,
     document.body,
