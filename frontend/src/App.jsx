@@ -8,9 +8,11 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Topbar from './components/Topbar';
 import HomeOverview from './components/HomeOverview';
 import CavaliersDetail from './components/CavaliersDetail';
+import QuartierAmbigu from './components/QuartierAmbigu';
 import { api, describeApiError } from './services/api';
 import { computeBoundsForQuartiers } from './services/mapBounds';
 import { computeHomeStats } from './services/homeStats';
+import { computeQuartierOptions } from './services/quartierStats';
 import { computeLatestDataDate } from './services/latestDataDate';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
@@ -61,6 +63,11 @@ function App() {
   const [priceHistory, setPriceHistory] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // ORA-176 : { query, suggestions, typeLocal, surfaceInput } quand le scan
+  // a échoué sur une ambiguïté (plusieurs quartiers assez proches) — jamais
+  // en même temps que `result`/`error` (handleScan les remet à zéro à chaque
+  // nouvelle tentative).
+  const [ambiguousQuartier, setAmbiguousQuartier] = useState(null);
   const [chatContext, setChatContext] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
   // ORA-105 : bounding-box des annonces actuellement affichées dans
@@ -90,6 +97,8 @@ function App() {
   // ORA-170 : agrégats "Le marché en un coup d'œil", affichés tant qu'aucun
   // quartier n'a été scanné (état par défaut de la colonne Oracle).
   const homeStats = useMemo(() => computeHomeStats(listings, ville), [listings, ville]);
+  // ORA-176 : liste des quartiers pour la palette de recherche de la topbar.
+  const quartierOptions = useMemo(() => computeQuartierOptions(listings, ville), [listings, ville]);
   // ORA-171 : badge "Données au" de la topbar, repris sur toutes les vues.
   const latestDataDate = useMemo(() => computeLatestDataDate(listings, ville), [listings, ville]);
 
@@ -143,12 +152,21 @@ function App() {
     setError(null);
     setResult(null);
     setPriceHistory(null);
+    setAmbiguousQuartier(null);
 
     try {
       const data = await api.getQuartierStats(quartier, typeLocal, ville);
 
       if (!data.found) {
-        setError(data.message || "Aucun résultat trouvé.");
+        // ORA-176 (ORA-111 côté backend) : plusieurs quartiers assez proches
+        // de la saisie — l'Oracle demande explicitement plutôt que deviner.
+        // `typeLocal`/`surfaceInput` mémorisés pour rejouer le scan choisi
+        // avec le même contexte (Topbar ne les expose pas à ce niveau).
+        if (data.ambiguous && data.suggestions?.length) {
+          setAmbiguousQuartier({ query: quartier, suggestions: data.suggestions, typeLocal, surfaceInput });
+        } else {
+          setError(data.message || "Aucun résultat trouvé.");
+        }
         return;
       }
 
@@ -227,7 +245,7 @@ function App() {
       {/* Topbar (ORA-170) : logo, ville, recherche quartier, filtres type,
           surface et bouton SCAN — pleine largeur, persistante au-dessus de
           la carte ET du panneau latéral, quel que soit l'onglet mobile actif. */}
-      <Topbar ville={ville} onVilleChange={setVille} onScan={handleScan} isLoading={loading} dataAsOf={latestDataDate} />
+      <Topbar ville={ville} onVilleChange={setVille} onScan={handleScan} isLoading={loading} dataAsOf={latestDataDate} quartierOptions={quartierOptions} />
 
       {error && (
         <div className="shrink-0 mx-3 md:mx-4 mt-2 text-xs text-red-400 font-bold bg-red-900/20 p-2 rounded border border-red-900/50">
@@ -292,10 +310,21 @@ function App() {
             className={isChatOpen ? 'hidden' : 'flex-1 min-h-0 overflow-y-auto custom-scrollbar'}
           >
           <ErrorBoundary fallback={makePanelFallback("Le panneau d'estimation")}>
+            {/* ORA-176 : ambiguïté détectée (plusieurs quartiers assez
+                proches de la saisie) — l'Oracle demande explicitement au
+                lieu de deviner, prioritaire sur l'aperçu marché ci-dessous. */}
+            {ambiguousQuartier && !loading && (
+              <QuartierAmbigu
+                ambiguous={ambiguousQuartier}
+                quartierOptions={quartierOptions}
+                onSelect={(name) => handleScan(name, ambiguousQuartier.typeLocal, ambiguousQuartier.surfaceInput)}
+              />
+            )}
+
             {/* ORA-170 : tant qu'aucun quartier n'a été scanné, la colonne
                 Oracle affiche l'aperçu marché de la ville sélectionnée
                 (maquette 01) plutôt qu'un résultat vide. */}
-            {!result && !loading && (
+            {!result && !loading && !ambiguousQuartier && (
               <HomeOverview
                 stats={homeStats}
                 ville={ville}
