@@ -17,6 +17,13 @@ describe('PanelNav', () => {
     );
   });
 
+  it('renders the views in the exact ORA-179 order (Accueil, Recherche, Scan, Estimation, Calques, Annonces, Fiche, Immotep)', () => {
+    render(<PanelNav activeView="accueil" onChange={() => {}} sheetId="sheet" />);
+
+    const labels = screen.getAllByRole('button').map((b) => b.textContent.replace(/\d+$/, ''));
+    expect(labels).toEqual(['Accueil', 'Recherche', 'Scan', 'Estimation', 'Calques', 'Annonces', 'Fiche', 'Immotep']);
+  });
+
   it('marks the active view with aria-current="page" and aria-controls pointing to the sheet', () => {
     render(<PanelNav activeView="scan" onChange={() => {}} sheetId="panel-sheet" />);
 
@@ -79,7 +86,7 @@ describe('PanelNav', () => {
 
     screen.getByRole('button', { name: 'Accueil' }).focus();
     await user.keyboard('{ArrowDown}');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Scan' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Recherche' }));
 
     await user.keyboard('{ArrowUp}');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Accueil' }));
@@ -89,9 +96,9 @@ describe('PanelNav', () => {
 
   it('wraps focus from the last item to the first with ArrowDown', async () => {
     const user = userEvent.setup();
-    render(<PanelNav activeView="accueil" onChange={() => {}} sheetId="sheet" />);
+    render(<PanelNav activeView="accueil" onChange={() => {}} chatAvailable={false} sheetId="sheet" />);
 
-    screen.getByRole('button', { name: 'Recherche' }).focus();
+    screen.getByRole('button', { name: 'Immotep' }).focus();
     await user.keyboard('{ArrowDown}');
 
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Accueil' }));
