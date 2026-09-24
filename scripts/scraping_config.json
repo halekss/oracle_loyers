@@ -1,5 +1,10 @@
 {
   "ville_active": "lille",
+  "details": {
+    "max_per_run": 100,
+    "delay_min_s": 2.0,
+    "delay_max_s": 4.0
+  },
   "user_agents": [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",

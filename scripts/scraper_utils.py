@@ -25,6 +25,10 @@ from selenium.webdriver.common.by import By
 from csv_atomic_writer import atomic_csv_writer
 
 __all__ = [
+    "clean_description",
+    "enrich_descriptions",
+    "load_details_config",
+    "selenium_description_fetcher",
     "get_chrome_driver",
     "find_first",
     "find_first_image_url",
@@ -353,3 +357,118 @@ def retry_with_backoff(max_retries=3, backoff_seconds=2, exceptions=(Exception,)
             raise last_error
         return wrapper
     return decorator
+
+
+# --- ORA-161 : description libre depuis la page détail de l'annonce ---------
+
+# En dessous, le texte capturé est un libellé d'interface, pas une description.
+MIN_DESCRIPTION_CHARS = 20
+# Nombre d'échecs consécutifs (page détail inaccessible) après lequel on arrête
+# d'enrichir : signe probable de blocage, inutile d'insister sur le site.
+MAX_CONSECUTIVE_DETAIL_ERRORS = 3
+DEFAULT_DETAILS_CONFIG = {"max_per_run": 100, "delay_min_s": 2.0, "delay_max_s": 4.0}
+
+
+def clean_description(text):
+    """Texte de description normalisé : espaces/retours à la ligne repliés en
+    un seul espace, libellé de section « Description » en tête retiré. Chaîne
+    vide si le résultat est trop court pour être une vraie description."""
+    text = re.sub(r"\s+", " ", text or "").strip()
+    text = re.sub(r"^description\b[\s:.-]*", "", text, flags=re.IGNORECASE)
+    return text if len(text) >= MIN_DESCRIPTION_CHARS else ""
+
+
+def load_details_config(config_path=None):
+    """Réglages de la visite des pages détail (bloc `details` de
+    scraping_config.json) : `max_per_run` (plafond de pages visitées par run,
+    0 = désactivé), `delay_min_s`/`delay_max_s` (pause entre deux pages).
+    Valeurs par défaut prudentes si le bloc est absent."""
+    config = dict(DEFAULT_DETAILS_CONFIG)
+    try:
+        with open(config_path or CONFIG_PATH, encoding="utf-8") as f:
+            config.update(json.load(f).get("details") or {})
+    except (OSError, ValueError):
+        pass
+    return config
+
+
+def enrich_descriptions(rows_by_lien, lien_index, desc_index, fetch_description, logger,
+                        max_per_run=None, delay_range=None, sleep=time.sleep):
+    """Visite la page détail des annonces dont la description est vide et la
+    complète dans `rows_by_lien` (lignes mutables, comme pour `DerniereVue`).
+
+    Volume maîtrisé (risque de blocage, cf. ORA-161) : au plus `max_per_run`
+    pages par run, les annonces les plus récentes d'abord, une pause aléatoire
+    entre deux pages, arrêt après `MAX_CONSECUTIVE_DETAIL_ERRORS` échecs de
+    suite. `fetch_description(url)` renvoie le texte ("" si la page n'en a pas)
+    et lève une exception si la page est inaccessible.
+
+    # ponytail: une annonce sans description sur sa page est re-tentée à
+    # chaque run (pas de marqueur "déjà visitée") ; le plafond borne le coût,
+    # un marqueur persistant s'ajoutera si ces re-visites pèsent.
+
+    Renvoie les statistiques du run (volume, trouvées, vides, erreurs)."""
+    config = load_details_config()
+    if max_per_run is None:
+        max_per_run = config["max_per_run"]
+    if delay_range is None:
+        delay_range = (config["delay_min_s"], config["delay_max_s"])
+
+    todo = [row for row in reversed(list(rows_by_lien.values())) if not row[desc_index]]
+    stats = {"candidates": len(todo), "visited": 0, "found": 0, "empty": 0, "errors": 0, "aborted": False}
+    consecutive_errors = 0
+
+    for row in todo[:max(0, max_per_run)]:
+        stats["visited"] += 1
+        try:
+            text = clean_description(fetch_description(row[lien_index]))
+            consecutive_errors = 0
+        except Exception as exc:
+            stats["errors"] += 1
+            consecutive_errors += 1
+            logger.warning("Page détail inaccessible (%s) : %s", row[lien_index], exc)
+            if consecutive_errors >= MAX_CONSECUTIVE_DETAIL_ERRORS:
+                stats["aborted"] = True
+                logger.error("%s échecs consécutifs sur les pages détail : arrêt (blocage probable).", consecutive_errors)
+                break
+        else:
+            if text:
+                row[desc_index] = text
+                stats["found"] += 1
+            else:
+                stats["empty"] += 1
+        sleep(random.uniform(*delay_range))
+
+    logger.info(
+        "Descriptions (pages détail) : %s à compléter, %s visitées, %s trouvées, %s vides, %s erreurs%s.",
+        stats["candidates"], stats["visited"], stats["found"], stats["empty"], stats["errors"],
+        " (arrêt anticipé)" if stats["aborted"] else "",
+    )
+    return stats
+
+
+def selenium_description_fetcher(driver, selectors, timeout=10):
+    """`fetch_description(url)` pour `enrich_descriptions` avec un driver
+    Selenium : charge la page, attend qu'un des sélecteurs (cascade, du plus
+    au moins précis) apparaisse et renvoie le premier texte non vide. Page
+    sans description (timeout sur l'attente) = "" et non une erreur ; un
+    échec de chargement de la page lève."""
+    from selenium.common.exceptions import TimeoutException
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    def fetch(url):
+        driver.get(url)
+        try:
+            WebDriverWait(driver, timeout).until(
+                lambda d: any(d.find_elements(By.CSS_SELECTOR, sel) for sel in selectors)
+            )
+        except TimeoutException:
+            return ""
+        for sel in selectors:
+            for element in driver.find_elements(By.CSS_SELECTOR, sel):
+                text = clean_description(element.text)
+                if text:
+                    return text
+        return ""
+
+    return fetch
