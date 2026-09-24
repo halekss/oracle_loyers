@@ -604,6 +604,16 @@ def get_quartier_stats():
             "count": int(count),
             "prix_moyen": round(float(mean_price), 0),
             "prix_m2_moyen": round(float(mean_price_m2), 0),
+            # ORA-167 : distribution sur TOUS les biens filtrés (pas sur les
+            # 12 `comparables`, échantillon autour de la moyenne) pour la
+            # barre de fourchette min · P25 · médiane · P75 · max.
+            "prix_stats": {
+                "min": round(float(filtered_df['prix'].min()), 0),
+                "p25": round(float(filtered_df['prix'].quantile(0.25)), 0),
+                "mediane": round(float(filtered_df['prix'].median()), 0),
+                "p75": round(float(filtered_df['prix'].quantile(0.75)), 0),
+                "max": round(float(filtered_df['prix'].max()), 0),
+            },
             "center": center,
             "facteurs": summarize_cavaliers(filtered_df),
             # ORA-172 : détail complet (tous les sous-types, pas juste le plus

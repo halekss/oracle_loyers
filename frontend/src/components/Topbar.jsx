@@ -258,6 +258,7 @@ export default function Topbar({ ville, onVilleChange, onScan, isLoading, dataAs
         </div>
 
         <input
+          id="topbar-surface"
           type="number"
           min="1"
           value={surface}

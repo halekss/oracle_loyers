@@ -41,6 +41,25 @@ class QuartierStatsRouteTest(unittest.TestCase):
             self.assertIn("items", detail)
             self.assertIn("empty_message", detail)
 
+    def test_route_returns_price_distribution_over_all_listings(self):
+        """ORA-167 : min/P25/médiane/P75/max calculés sur tous les biens
+        filtrés, pas sur les 12 comparables."""
+        client = app.app.test_client()
+        controlled_df = pd.DataFrame({
+            'quartier': ['Gerland'] * 5,
+            'prix': [700, 750, 800, 850, 1200],
+            'surface': [30, 32, 35, 38, 50],
+            'type_local': ['T2'] * 5,
+        })
+
+        with patch.object(app.data_loader, "get_data", return_value=controlled_df):
+            data = client.post("/api/quartier-stats", json={"quartier": "Gerland", "type_local": "T2"}).get_json()
+
+        self.assertEqual(
+            data["prix_stats"],
+            {"min": 700, "p25": 750, "mediane": 800, "p75": 850, "max": 1200},
+        )
+
     def test_route_returns_up_to_12_comparables(self):
         """ORA-122/ORA-128/ORA-177 : échantillon de biens comparables réels,
         pour le rapport PDF (tableau des 12 annonces comparables, maquette 09)

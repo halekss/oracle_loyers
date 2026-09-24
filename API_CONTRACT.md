@@ -224,6 +224,7 @@ Calcule des statistiques réelles (prix moyen, prix/m², nombre de biens) à par
   "count": 42,
   "prix_moyen": 780,
   "prix_m2_moyen": 16,
+  "prix_stats": { "min": 504, "p25": 700, "mediane": 780, "p75": 860, "max": 1347 },
   "center": { "lat": 45.735, "lng": 4.831 },
   "facteurs": [
     { "categorie": "Vice", "phrase": "2 bar(s) à moins de 500m — parfait pour un verre, moins pour dormir." },
@@ -240,6 +241,8 @@ Calcule des statistiques réelles (prix moyen, prix/m², nombre de biens) à par
 ```
 
 `facteurs` (ORA-73) : résumé des 4 "Cavaliers" pour le quartier détecté, sous forme de phrases concrètes (pas un score abstrait) générées par `backend/services/cavaliers_factors.py` à partir des colonnes `dist_*`/`nb_*_500m` de `master_immo_final.csv`. Utilisé par le frontend pour l'export PDF de l'estimation (bouton "Exporter en PDF", `POST /api/report/pdf`, ORA-121).
+
+`prix_stats` (ORA-167) : distribution des loyers sur **tous** les biens du quartier/type (euros arrondis), alimente la barre de fourchette de l'écran de scan. Absent quand `count` vaut 0.
 
 `comparables` (ORA-122/ORA-128) : jusqu'à 3 biens réels du même quartier/type, les plus proches du prix moyen (`prix_moyen`) — pas un échantillon aléatoire. Vide si aucun bien ne correspond au filtre type demandé.
 

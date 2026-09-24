@@ -257,6 +257,8 @@ function App() {
         // modèle ci-dessus) à la comparaison "vs moyenne T{type} du quartier".
         surface: hasValidSurface ? surfaceValue : undefined,
         quartierPrixM2: data.prix_m2_moyen,
+        // ORA-167 : barre de fourchette min · P25 · médiane · P75 · max
+        prixStats: data.prix_stats,
       });
       setChatContext(`Quartier: ${data.quartier_detecte}, Type: ${data.type_filtre}, Prix Moyen: ${data.prix_moyen}€, Prix m²: ${data.prix_m2_moyen}€`);
       if (data.center?.lat && data.center?.lng) {
@@ -303,7 +305,7 @@ function App() {
     return (
       <>
         <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
-          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
+          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} onAddSurface={() => document.getElementById('topbar-surface')?.focus()} ville={ville} health={health} dataAsOf={latestDataDate} />
           {result && !(result.surface && result.confiance) && (
             <div className="mt-2 text-center text-[10px] text-ink-dim uppercase tracking-widest">
               Données réelles ({result.count} biens)
