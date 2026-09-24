@@ -99,9 +99,24 @@ describe('AnnonceCard', () => {
     const user = userEvent.setup();
 
     render(<AnnonceCard annonce={{ ...baseAnnonce, url: 'javascript:alert(1)' }} />);
-    await user.click(screen.getByRole('button', { name: /voir l'annonce : t2 gerland/i }));
+    await user.click(screen.getByRole('button', { name: /lien indisponible : t2 gerland/i }));
 
     expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
+
+  it.each([null, ''])('shows a disabled "Lien indisponible" state when url is %j (ORA-113)', async (url) => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    render(<AnnonceCard annonce={{ ...baseAnnonce, url }} />);
+    const card = screen.getByRole('button', { name: /lien indisponible : t2 gerland/i });
+    expect(card).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText('Lien indisponible')).toBeInTheDocument();
+
+    await user.click(card);
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(api.logAnnonceClick).not.toHaveBeenCalled();
     openSpy.mockRestore();
   });
 

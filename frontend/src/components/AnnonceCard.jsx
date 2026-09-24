@@ -77,6 +77,9 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
     prixM2 != null && Number.isFinite(referencePrixM2) && referencePrixM2 > 0 && sameTypeAsReference
       ? Math.round(((prixM2 - referencePrixM2) / referencePrixM2) * 100)
       : null;
+  // ORA-113 : sans URL exploitable (absente, vide ou rejetée par la
+  // sanitisation), la carte est explicitement désactivée au lieu d'un clic muet.
+  const safeUrl = sanitizeListingUrl(url);
 
   const handleToggleFavorite = (e) => {
     e.stopPropagation();
@@ -84,6 +87,7 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
   };
 
   const handleOpen = () => {
+    if (!safeUrl) return;
     if (id != null) {
       // Fire-and-forget (ORA-89/ORA-91) : le tracking ne doit jamais retarder
       // ni bloquer la redirection vers le site source.
@@ -91,10 +95,7 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
         console.error('❌ Erreur tracking clic annonce:', error);
       });
     }
-    const safeUrl = sanitizeListingUrl(url);
-    if (safeUrl) {
-      window.open(safeUrl, '_blank', 'noopener,noreferrer');
-    }
+    window.open(safeUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleKeyDown = (e) => {
@@ -108,10 +109,17 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Voir l'annonce${titre ? ` : ${titre}` : ''} sur le site source`}
+      aria-disabled={!safeUrl}
+      aria-label={
+        safeUrl
+          ? `Voir l'annonce${titre ? ` : ${titre}` : ''} sur le site source`
+          : `Lien indisponible${titre ? ` : ${titre}` : ''}`
+      }
       onClick={handleOpen}
       onKeyDown={handleKeyDown}
-      className="animate-fade-in text-left w-full bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-purple-500/20 overflow-hidden cursor-pointer hover:border-purple-500/50 transition-colors group"
+      className={`animate-fade-in text-left w-full bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-purple-500/20 overflow-hidden group ${
+        safeUrl ? 'cursor-pointer hover:border-purple-500/50 transition-colors' : 'cursor-not-allowed opacity-60'
+      }`}
     >
       <AnnonceIllustration titre={titre} surface={surface} />
 
@@ -171,9 +179,13 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-[10px] uppercase tracking-widest font-bold text-purple-400 group-hover:text-purple-300">
-            Voir l'annonce ↗
-          </p>
+          {safeUrl ? (
+            <p className="text-[10px] uppercase tracking-widest font-bold text-purple-400 group-hover:text-purple-300">
+              Voir l'annonce ↗
+            </p>
+          ) : (
+            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-500">Lien indisponible</p>
+          )}
           {id != null && (
             <button
               type="button"
