@@ -67,9 +67,6 @@ VILLE_CONFIG = {
 # (Python) à la main à chaque nouveau calque (ORA-130, lié à ORA-125) —
 # partagée par toutes les villes, pas de déclinaison par ville.
 LAYERS_CONFIG_JSON = os.path.join(PROJECT_ROOT, 'frontend', 'src', 'config', 'mapLayers.config.json')
-# Seuil ±5 % et couleurs des bandes de marché (ORA-165/168), partagés avec le
-# panneau React (services/marketBand.js) : carte et panneau restent cohérents.
-MARKET_BANDS_CONFIG_JSON = os.path.join(PROJECT_ROOT, 'frontend', 'src', 'config', 'marketBands.config.json')
 
 
 def resolve_ville_paths(ville):
@@ -224,131 +221,10 @@ def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_ur
     """
 
 
-# --- ORA-165/166 : pastilles prix, bandes de marché, regroupement, légende ---
+# --- ORA-165/166 : labels de quartiers, légende, échelle ---
 
-# Couleur du texte de la pastille, lisible sur chaque fond de bande.
-BAND_TEXT_COLORS = {'below': '#052e16', 'within': '#1c1400', 'above': '#ffffff'}
-# En dessous de ce nombre d'annonces, la médiane d'un (quartier, type) est trop
-# peu fiable : repli sur la médiane du type sur toute la ville.
-MIN_LISTINGS_FOR_QUARTIER_MEDIAN = 3
 # Quartiers de repli, sans nom de lieu réel : pas d'étiquette sur la carte.
 UNLABELLED_QUARTIER_MARKERS = ('non localisé', 'secteur ', 'inconnu')
-
-
-def load_market_bands(path=MARKET_BANDS_CONFIG_JSON):
-    """`{thresholdPct, bands: {below|within|above: {label, color}}}` (config partagée)."""
-    with open(path, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-
-def market_band(ecart_pct, threshold_pct):
-    """Bande de marché d'un écart en % (mêmes bornes que marketBand.js) :
-    < -seuil = 'below', > +seuil = 'above', sinon 'within'."""
-    if ecart_pct < -threshold_pct:
-        return 'below'
-    if ecart_pct > threshold_pct:
-        return 'above'
-    return 'within'
-
-
-def ecart_vs_median(prix, median):
-    """Écart en % (arrondi) d'un loyer à la médiane de référence, None si incalculable."""
-    try:
-        prix, median = float(prix), float(median)
-    except (TypeError, ValueError):
-        return None
-    if median <= 0 or pd.isna(prix) or pd.isna(median):
-        return None
-    return round((prix - median) / median * 100)
-
-
-def compute_reference_medians(df_immo):
-    """Loyer médian de référence par annonce (Series alignée sur `df_immo`) :
-    médiane de son (quartier, type_local) s'il compte assez d'annonces, sinon
-    médiane de son type sur toute la ville."""
-    if df_immo.empty or not {'prix', 'quartier', 'type_local'}.issubset(df_immo.columns):
-        return pd.Series(index=df_immo.index, dtype=float)
-    by_quartier = df_immo.groupby(['quartier', 'type_local'])['prix']
-    quartier_median = by_quartier.transform('median')
-    quartier_count = by_quartier.transform('count')
-    type_median = df_immo.groupby('type_local')['prix'].transform('median')
-    return quartier_median.where(quartier_count >= MIN_LISTINGS_FOR_QUARTIER_MEDIAN, type_median)
-
-
-def build_price_pill_html(prix, band, bands_config, count=None):
-    """Pastille prix d'un marqueur d'annonce, colorée selon la bande de marché.
-    `count` (>=2) : marqueur groupé, badge du nombre d'annonces."""
-    color = bands_config['bands'][band]['color']
-    text_color = BAND_TEXT_COLORS[band]
-    safe_prix = html.escape(str(prix))
-    badge = (
-        f"<span class='oracle-pill-count'>{int(count)}</span>" if count and count >= 2 else ""
-    )
-    return (
-        f"<div class='oracle-pill' style='background:{color}; color:{text_color};'>"
-        f"{safe_prix} €{badge}</div>"
-    )
-
-
-def group_by_exact_position(entries, precision=5):
-    """Regroupe les annonces à coordonnées identiques (~1 m, `precision`
-    décimales) : typiquement des annonces Vizzit géolocalisées sur la même
-    rue. Renvoie une liste de groupes (listes d'entrées), ordre d'apparition
-    conservé. Chaque entrée est un dict avec au moins `lat` et `lon`."""
-    groups = {}
-    for entry in entries:
-        key = (round(entry['lat'], precision), round(entry['lon'], precision))
-        groups.setdefault(key, []).append(entry)
-    return list(groups.values())
-
-
-def build_group_popup_html(group, bands_config):
-    """Bulle d'un marqueur groupé (ORA-166) : « N annonces · même adresse »,
-    une ligne surface / prix / écart % par annonce, et la mention de la source
-    de géolocalisation quand toutes viennent de Vizzit (GPS réel)."""
-    threshold = bands_config['thresholdPct']
-    rows = []
-    for entry in group:
-        ecart = entry.get('ecart')
-        ecart_html = ""
-        if ecart is not None:
-            band = market_band(ecart, threshold)
-            color = bands_config['bands'][band]['color']
-            sign = '+' if ecart > 0 else ''
-            ecart_html = f"<b style='color:{color};'>{sign}{int(ecart)} %</b>"
-        surface = entry.get('surface')
-        surface_txt = f"{int(surface)} m²" if surface is not None and pd.notna(surface) else "— m²"
-        link_html = ""
-        if entry.get('url'):
-            safe_url = html.escape(entry['url'], quote=True)
-            onclick = ""
-            if entry.get('annonce_id') is not None:
-                onclick = (
-                    " onclick=\"parent.postMessage({type: 'ANNONCE_CLICK', "
-                    f"id: {int(entry['annonce_id'])}}}, window.location.origin)\""
-                )
-            link_html = (
-                f" <a href='{safe_url}' target='_blank' rel='noopener noreferrer'{onclick} "
-                "style='color:#22c55e;' aria-label='Voir l&#39;annonce'>&#8599;</a>"
-            )
-        rows.append(
-            "<li style='display:flex; justify-content:space-between; gap:10px; padding:2px 0;'>"
-            f"<span>{html.escape(str(entry.get('type_local', '')))} · {surface_txt}</span>"
-            f"<span><b>{html.escape(str(entry['prix']))} €</b> {ecart_html}{link_html}</span></li>"
-        )
-    sources = {str(e.get('site', '')).strip().lower() for e in group}
-    note = (
-        "Géolocalisées sur la même rue (Vizzit)"
-        if sources == {'vizzit'}
-        else "Coordonnées identiques"
-    )
-    return (
-        "<div style='font-family:sans-serif; min-width:200px; font-size:12px;'>"
-        f"<div style='font-size:14px; font-weight:bold; margin-bottom:4px;'>{len(group)} annonces · même adresse</div>"
-        f"<ul style='list-style:none; margin:0; padding:0;'>{''.join(rows)}</ul>"
-        f"<div style='color:#94a3b8; font-size:11px; margin-top:6px;'>{note}</div>"
-        "</div>"
-    )
 
 
 def compute_quartier_labels(df_immo, min_listings=3):
@@ -366,22 +242,11 @@ def compute_quartier_labels(df_immo, min_listings=3):
     return labels
 
 
-def build_legend_html(layers_config, bands_config):
+def build_legend_html(layers_config):
     """Légende en coin de carte (ORA-166) : groupes Annonces / Métro /
-    Cavaliers / Quartiers issus de la config partagée des calques, plus
-    l'échelle « Écart au loyer médian du quartier ». Chaque ligne porte
-    `data-layer` (nom Folium du calque) : un script grise la ligne quand le
+    Cavaliers / Quartiers issus de la config partagée des calques. Chaque
+    ligne porte `data-layer` (nom Folium du calque) : un script grise la ligne quand le
     calque est masqué depuis le panneau de contrôle."""
-    threshold = bands_config['thresholdPct']
-    band_rows = ''.join(
-        f"<li><span class='oracle-legend-swatch' style='background:{cfg['color']};'></span>"
-        f"{html.escape(cfg['label'])} <span class='oracle-legend-muted'>{rule}</span></li>"
-        for cfg, rule in (
-            (bands_config['bands']['below'], f"&lt; −{threshold} %"),
-            (bands_config['bands']['within'], f"± {threshold} %"),
-            (bands_config['bands']['above'], f"&gt; +{threshold} %"),
-        )
-    )
     groups = [
         ('immobilier', 'Annonces'), ('transports', 'Métro'), ('contexte', 'Cavaliers & quartiers'),
     ]
@@ -397,8 +262,7 @@ def build_legend_html(layers_config, bands_config):
     return (
         "<div class='oracle-legend' role='region' aria-label='Légende de la carte'>"
         f"{''.join(sections)}"
-        "<div class='oracle-legend-title'>Écart au loyer médian du quartier</div>"
-        f"<ul>{band_rows}</ul></div>"
+        "</div>"
     )
 
 
@@ -626,20 +490,15 @@ def main(ville='lyon'):
     fg_superstition = folium.FeatureGroup(name=layer_by_key['Superstition']['name'], show=layer_by_key['Superstition']['defaultVisible'])
 
     # --- 5. GENERATION POINTS IMMO ---
-    # ORA-165/166 : pastille prix colorée selon l'écart au loyer médian du
-    # quartier (bandes ±5 %, config partagée avec le panneau React) ; les
-    # annonces à coordonnées identiques (typiquement Vizzit, même rue) sont
-    # regroupées en un marqueur unique avec bulle « N annonces · même adresse ».
-    bands_config = load_market_bands()
-    band_threshold = bands_config['thresholdPct']
-    reference_medians = compute_reference_medians(df_immo) if not df_immo.empty else pd.Series(dtype=float)
-
-    entries = []
-    for idx, row in df_immo.iterrows():
+    for _, row in df_immo.iterrows():
         if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')):
+            lat = row['latitude'] + random.uniform(-0.0001, 0.0001)
+            lon = row['longitude'] + random.uniform(-0.0001, 0.0001)
+
             type_local = str(row.get('type_local', '')).strip()
             prix = str(row.get('prix', '?')).replace('.0', '')
             listing_url = sanitize_listing_url(row.get('url'))
+            image_url = row.get('image')
 
             # ORA-107 : résout l'id SQLite (annonces.db) à partir de l'URL pour
             # que le clic sur le marker puisse être tracké (via ANNONCE_CLICK/
@@ -651,55 +510,29 @@ def main(ville='lyon'):
                 if existing:
                     annonce_id = existing['id']
 
-            ecart = ecart_vs_median(row.get('prix'), reference_medians.get(idx))
-            entries.append({
-                'lat': float(row['latitude']), 'lon': float(row['longitude']),
-                'type_local': type_local, 'prix': prix, 'surface': row.get('surface'),
-                'quartier': row.get('quartier', ville.capitalize()), 'url': listing_url,
-                'image': row.get('image'), 'annonce_id': annonce_id,
-                'site': row.get('site'), 'ecart': ecart,
-            })
-
-    def target_group_for(type_local):
-        if type_local == 'Studio/T1': return fg_studio
-        if type_local == 'T2': return fg_t2
-        if type_local == 'T3': return fg_t3
-        if type_local == 'Grand (T4+)': return fg_t4
-        return None
-
-    for group in group_by_exact_position(entries):
-        first = group[0]
-        target_group = target_group_for(first['type_local'])
-        if target_group is None:
-            continue
-        band = market_band(first['ecart'], band_threshold) if first['ecart'] is not None else 'within'
-
-        if len(group) >= 2:
-            # Marqueur groupé : position exacte (pas de jitter), bulle dédiée.
-            lat, lon = first['lat'], first['lon']
-            txt_popup = build_group_popup_html(group, bands_config)
-            txt_tooltip = f"{len(group)} annonces · même adresse"
-            pill = build_price_pill_html(first['prix'], band, bands_config, count=len(group))
-        else:
-            lat = first['lat'] + random.uniform(-0.0001, 0.0001)
-            lon = first['lon'] + random.uniform(-0.0001, 0.0001)
-            txt_tooltip = build_immo_tooltip_html(first['type_local'], first['prix'])
+            txt_tooltip = build_immo_tooltip_html(type_local, prix)
             txt_popup = build_immo_popup_html(
-                first['type_local'], first['prix'], first['quartier'], first['url'], first['image'], first['annonce_id'],
+                type_local, prix, row.get('quartier', ville.capitalize()), listing_url, image_url, annonce_id,
             )
-            pill = build_price_pill_html(first['prix'], band, bands_config)
 
-        # Popup (pas Tooltip) : reste ouvert au clic au lieu de disparaître
-        # dès que la souris quitte le marker, ce qui rendait le lien "Voir
-        # l'annonce" à l'intérieur impossible à atteindre (ORA-134). Le
-        # tooltip au survol reste utilisé en parallèle pour un aperçu
-        # rapide sans lien (ORA-99, build_immo_tooltip_html).
-        folium.Marker(
-            [lat, lon],
-            icon=folium.DivIcon(html=pill, icon_size=(54, 20), icon_anchor=(27, 10), class_name='oracle-pill-icon'),
-            tooltip=folium.Tooltip(txt_tooltip, class_name='oracle-popup'),
-            popup=folium.Popup(txt_popup, max_width=260, className='oracle-popup'),
-        ).add_to(target_group)
+            target_group = None
+            if type_local == 'Studio/T1': target_group = fg_studio
+            elif type_local == 'T2': target_group = fg_t2
+            elif type_local == 'T3': target_group = fg_t3
+            elif type_local == 'Grand (T4+)': target_group = fg_t4
+
+            if target_group:
+                # Popup (pas Tooltip) : reste ouvert au clic au lieu de disparaître
+                # dès que la souris quitte le marker, ce qui rendait le lien "Voir
+                # l'annonce" à l'intérieur impossible à atteindre (ORA-134). Le
+                # tooltip au survol reste utilisé en parallèle pour un aperçu
+                # rapide sans lien (ORA-99, build_immo_tooltip_html).
+                marker = folium.CircleMarker(
+                    [lat, lon], radius=5, color=COLORS['Immo'], weight=1, fill=True, fill_color=COLORS['Immo'], fill_opacity=0.8,
+                    tooltip=folium.Tooltip(txt_tooltip, class_name='oracle-popup'),
+                    popup=folium.Popup(txt_popup, max_width=220, className='oracle-popup'),
+                )
+                marker.add_to(target_group)
 
     # --- 6. GESTION DU MÉTRO VIA JSON (LIGNES + STATIONS) ---
     if os.path.exists(paths['metro_json']):
@@ -878,21 +711,6 @@ def main(ville='lyon'):
         .leaflet-popup-close-button:hover {{ color: #f8fafc !important; }}
         .leaflet-interactive {{ cursor: pointer !important; }}
 
-        /* ORA-165 : pastille prix (bande de marché) */
-        .oracle-pill-icon {{ background: transparent !important; border: none !important; }}
-        .oracle-pill {{
-            width: 54px; height: 20px; border-radius: 10px; box-sizing: border-box;
-            display: flex; align-items: center; justify-content: center; position: relative;
-            font: 700 10px/1 sans-serif; border: 1px solid rgba(7,10,18,0.55);
-            box-shadow: 0 1px 4px rgba(0,0,0,0.6); white-space: nowrap;
-        }}
-        .oracle-pill-count {{
-            position: absolute; top: -7px; right: -7px; min-width: 15px; height: 15px; padding: 0 3px;
-            border-radius: 8px; background: #0f172a; color: #f8fafc; border: 1px solid #f8fafc;
-            font: 700 9px/13px sans-serif; text-align: center; box-sizing: border-box;
-        }}
-        .leaflet-marker-icon:focus-visible .oracle-pill {{ outline: 2px solid #a78bfa; outline-offset: 2px; }}
-
         /* Noms de stations (zoom >= 14) et labels de quartiers (zoom >= 13) */
         .leaflet-tooltip.oracle-metro-label {{
             display: none; background: transparent; border: none; box-shadow: none;
@@ -922,7 +740,7 @@ def main(ville='lyon'):
 
     <script>
     {build_bridge_message_script(m.get_name())}
-    {build_legend_and_scale_script(m.get_name(), build_legend_html(layers_config, bands_config))}
+    {build_legend_and_scale_script(m.get_name(), build_legend_html(layers_config))}
     </script>
     </body>
     """
