@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import numpy as np
 import os
@@ -5,7 +6,7 @@ import random
 import sys
 import warnings
 import re
-from shapely.geometry import MultiPoint, Point, Polygon, box
+from shapely.geometry import MultiPoint, Point, Polygon, box, shape
 from shapely.ops import unary_union
 from sklearn.neighbors import BallTree
 
@@ -32,6 +33,7 @@ INPUT_RAW_CSV = os.path.join(data_dir, "base_de_donnees_immo_complet.csv")
 CAVALIERS_CSV = os.path.join(data_dir, "cavaliers_all.csv")
 OUTPUT_FINAL_CSV = os.path.join(data_dir, "master_immo_final.csv")
 ANNONCES_DB_PATH = os.path.join(data_dir, "annonces.db")
+LILLE_QUARTIERS_GEOJSON = os.path.join(data_dir, "lille_quartiers.geojson")
 
 # Paramètres globaux
 RADIUS_METERS = 500
@@ -76,6 +78,20 @@ QUARTIERS_LILLE = {
     "Fives": {"lat_min": 50.6153, "lat_max": 50.6422, "lon_min": 3.0785, "lon_max": 3.1039, "centroid_lat": 50.6280, "centroid_lon": 3.0914},
     "Saint-Maurice Pellevoisin": {"lat_min": 50.6372, "lat_max": 50.6572, "lon_min": 3.0747, "lon_max": 3.1040, "centroid_lat": 50.6470, "centroid_lon": 3.0849},
 }
+
+def load_lille_quartier_polygons(path=LILLE_QUARTIERS_GEOJSON):
+    """Contours réels {nom: polygone shapely (lon, lat)} des quartiers de Lille
+    (+ Lomme/Hellemmes/Euralille), issus de fetch_lille_quartiers.py (ORA-157).
+    Dict vide si le fichier est absent : le code retombe alors sur les bbox /
+    cercles historiques ci-dessous (ORA-158)."""
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding='utf-8') as f:
+        features = json.load(f)['features']
+    return {feat['properties']['nom']: shape(feat['geometry']) for feat in features}
+
+
+QUARTIERS_LILLE_POLYGONS = load_lille_quartier_polygons()
 
 # Zones de repli pour le jitter (annonces sans coordonnées réelles) : CP
 # fiables Lomme/Hellemmes/Euralille.
@@ -250,7 +266,22 @@ def match_quartier_lille(lat, lon):
     """Quartier réel dont la boîte englobante contient (lat, lon) ; en cas de
     chevauchement (quartiers limitrophes) ou d'absence de correspondance,
     renvoie le quartier au centroïde le plus proche — toujours un vrai nom,
-    jamais de résultat vide pour un point dans l'agglomération lilloise."""
+    jamais de résultat vide pour un point dans l'agglomération lilloise.
+
+    Avec les contours réels (ORA-158) : quartier dont le polygone contient le
+    point ; sinon (trou entre deux tracés, point à l'extérieur) le polygone
+    le plus proche parmi les 10 quartiers centraux."""
+    real = {n: QUARTIERS_LILLE_POLYGONS[n] for n in QUARTIERS_LILLE if n in QUARTIERS_LILLE_POLYGONS}
+    if real:
+        point = Point(lon, lat)
+        containing = [n for n, poly in real.items() if poly.contains(point)]
+        if not containing:
+            return min(real, key=lambda n: real[n].distance(point))
+        return min(
+            containing,
+            key=lambda n: (lat - QUARTIERS_LILLE[n]["centroid_lat"]) ** 2
+            + (lon - QUARTIERS_LILLE[n]["centroid_lon"]) ** 2,
+        )
     candidates = [
         name for name, z in QUARTIERS_LILLE.items()
         if z["lat_min"] <= lat <= z["lat_max"] and z["lon_min"] <= lon <= z["lon_max"]
@@ -505,6 +536,10 @@ def get_point_for_zipcode(cp, polygons_map, url=None):
             elif cp == '59260': hint = "Hellemmes"
             elif cp == '59777': hint = "Euralille"
         if hint:
+            # ORA-158 : contour réel du quartier (GeoJSON OSM) en priorité,
+            # avant l'enveloppe des cavaliers ou le cercle de repli.
+            if hint in QUARTIERS_LILLE_POLYGONS:
+                return get_random_point_in_polygon(QUARTIERS_LILLE_POLYGONS[hint])
             # Comme pour Lyon : si assez de vrais cavaliers dessinent une
             # forme pour ce quartier, on place le point dedans plutôt que
             # dans un simple cercle (build_shapes_from_cavaliers).
