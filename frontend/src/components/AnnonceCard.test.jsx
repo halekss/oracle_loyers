@@ -226,6 +226,16 @@ describe('AnnonceCard', () => {
       expect(screen.getByText('+89 %')).toBeInTheDocument();
     });
 
+    it.each([
+      [23, 'text-market-below'], // 18,9 €/m² vs 23 -> -18 %
+      [19, 'text-market-within'], // 18,9 vs 19 -> -1 %
+      [10, 'text-market-above'], // +89 %
+    ])('colors the badge by market band (reference %s €/m² -> %s)', (reference, expectedClass) => {
+      render(<AnnonceCard annonce={baseAnnonce} referencePrixM2={reference} />);
+
+      expect(screen.getByText(/ %$/).className).toContain(expectedClass);
+    });
+
     it('does not show an écart badge without a reference €/m² (no active scan)', () => {
       render(<AnnonceCard annonce={baseAnnonce} />);
 

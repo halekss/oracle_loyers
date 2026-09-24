@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api, describeApiError } from "../services/api";
 import { downloadBlob } from "../services/downloadBlob";
+import { BAND_BADGE_CLASSES, MARKET_BANDS, ecartPct, marketBand } from "../services/marketBand";
 
 const VILLE_LABELS = { lyon: { nom: 'Lyon', gentile: 'lyonnaises' }, lille: { nom: 'Lille', gentile: 'lilloises' } };
 const SCENARIO_DELTAS = [-15, 0, 15];
@@ -397,14 +398,43 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
 
       {onScreenComparables.length > 0 && (
         <div className="mt-3 bg-ink-900 rounded-xl border border-ink-700 p-3">
-          <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest mb-2">Biens comparables</p>
-          <ul className="space-y-1">
-            {onScreenComparables.map((c, i) => (
-              <li key={i} className="flex justify-between text-[11px] text-ink">
-                <span>{c.type_local || '—'}</span>
-                <span>{formatPrice(c.prix)} € · {formatPrice(c.surface)} m²</span>
-              </li>
-            ))}
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[9px] uppercase text-ink-dim font-bold tracking-widest">Annonces représentatives</p>
+            {onViewAnnonces && safeData.count != null && (
+              <button
+                type="button"
+                onClick={() => onViewAnnonces(quartier)}
+                className="text-[9px] uppercase tracking-widest font-bold text-accent-light hover:text-ink transition-colors"
+              >
+                Voir les {safeData.count} →
+              </button>
+            )}
+          </div>
+          <ul className="space-y-1.5">
+            {onScreenComparables.map((c, i) => {
+              const prixM2 = c.surface > 0 ? c.prix / c.surface : null;
+              const ecart = ecartPct(prixM2, m2PriceRaw);
+              const band = ecart != null ? marketBand(ecart) : null;
+              return (
+                <li key={i} className="flex items-center justify-between gap-2 text-[11px] text-ink bg-ink-800/60 rounded-lg px-2.5 py-1.5">
+                  <span className="min-w-0 truncate">
+                    <span className="font-bold">{c.type_local || '—'}</span>
+                    <span className="text-ink-muted"> · {formatPrice(c.surface)} m²{prixM2 != null && ` · ${formatM2(prixM2)} €/m²`}</span>
+                  </span>
+                  <span className="shrink-0 flex items-center gap-2">
+                    <span className="font-bold">{formatPrice(c.prix)} €</span>
+                    {ecart != null && (
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${BAND_BADGE_CLASSES[band]}`}
+                        title={`${MARKET_BANDS[band].label} — écart vs €/m² moyen du quartier`}
+                      >
+                        {ecart > 0 ? '+' : ''}{ecart} %
+                      </span>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
