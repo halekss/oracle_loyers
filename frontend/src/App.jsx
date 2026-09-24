@@ -235,8 +235,14 @@ function App() {
   // focus directement le champ Surface au montage plutôt que Quartier
   // (déjà rempli depuis le dernier `result`).
   const handleAddSurface = () => {
+    // ORA-179 : la colonne Oracle mobile garde SearchForm monté en
+    // permanence (masqué en CSS sur desktop via `md:hidden`, pas démonté) —
+    // `getElementById` seul le retrouverait même sur desktop où il est
+    // invisible. `offsetParent` (null si l'élément ou un ancêtre est
+    // `display:none`) distingue une instance réellement affichée (mobile)
+    // d'une instance simplement présente dans le DOM (desktop, masquée).
     const existingSurfaceInput = document.getElementById('searchform-surface');
-    if (existingSurfaceInput) {
+    if (existingSurfaceInput && existingSurfaceInput.offsetParent !== null) {
       existingSurfaceInput.focus();
       return;
     }
