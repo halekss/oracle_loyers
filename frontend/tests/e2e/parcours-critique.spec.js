@@ -12,25 +12,37 @@ test('recherche, carte et chatbot fonctionnent de bout en bout', async ({ page }
   // La carte est visible (iframe montée par défaut sur desktop).
   await expect(page.getByTitle('Carte Oracle')).toBeVisible();
 
-  // Saisie des critères : quartier + type de bien.
-  await page.getByPlaceholder(/entrez un quartier/i).fill('Gerland');
-  await page.getByRole('button', { name: 'T2', exact: true }).click();
+  // SearchForm est monté deux fois (colonne mobile masquée en CSS + panneau
+  // desktop) : on ne cible que les éléments visibles.
+  const visible = (locator) => locator.locator('visible=true');
 
-  // Un résultat d'estimation réel (chiffré) doit s'afficher.
-  await expect(page.getByText('Estimation Loyer')).toBeVisible();
-  await expect(page.getByText(/^\d[\d\s]*$/).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/Données réelles \(\d+ biens\)/)).toBeVisible();
+  // Desktop : la vue par défaut est « Accueil », la recherche est dans la vue « Recherche ».
+  await page.getByRole('button', { name: 'Lancer une recherche' }).click();
 
-  // Chatbot : ouverture de la bulle flottante (le chat est un overlay
-  // fermé par défaut, cf. App.jsx), puis envoi d'un message et réception
-  // d'une réponse (le backend répond même sans GEMINI_API_KEY configuré,
+  // Saisie des critères : quartier (suggestion choisie, sinon la liste recouvre les
+  // boutons de type de bien) + type de bien, puis lancement du scan.
+  await visible(page.getByPlaceholder(/entrez un quartier/i)).fill('Gerland');
+  await visible(page.getByRole('option', { name: /Gerland/ })).first().click();
+  await visible(page.getByRole('button', { name: 'T2', exact: true })).click();
+  await page.locator('form:visible button[type="submit"]').click();
+
+  // Un résultat d'estimation réel (chiffré, avec son nombre de biens comparables) doit s'afficher.
+  await expect(visible(page.getByText('Estimation Loyer')).first()).toBeVisible();
+  await expect(visible(page.getByText(/^\d[\d\s]*$/)).first()).toBeVisible({ timeout: 15_000 });
+  await expect(visible(page.getByText(/Basée sur \d+ biens comparables/))).toBeVisible();
+
+  // Chatbot : sur desktop, vue « Immotep » du rail de navigation (la bulle flottante
+  // « Ouvrir le chat Immotep » n'existe que sur mobile), puis envoi d'un message et
+  // réception d'une réponse (le backend répond même sans GEMINI_API_KEY configuré,
   // avec un message explicite).
-  await page.getByRole('button', { name: 'Ouvrir le chat Immotep' }).click();
-  const chatInput = page.getByPlaceholder('Prix, surface, quartier...');
+  await visible(page.getByRole('button', { name: /Immotep, chat disponible/ })).click();
+  const chatInput = visible(page.getByPlaceholder('Prix, surface, quartier...'));
   await chatInput.fill('Bonjour Immotep');
-  await page.getByRole('button', { name: /envoyer le message/i }).click();
+  await visible(page.getByRole('button', { name: /envoyer le message/i })).click();
 
-  const messages = page.getByTestId('chat-message');
+  // Messages du chat visible seulement : l'instance mobile (masquée) recopie l'historique,
+  // donc le comptage global varie selon le timing (3 ou 4 constatés).
+  const messages = visible(page.getByTestId('chat-message'));
   await expect(messages).toHaveCount(3, { timeout: 20_000 }); // accueil + user + réponse
   await expect(messages.nth(1)).toContainText('Bonjour Immotep');
   await expect(messages.nth(2)).not.toBeEmpty();
