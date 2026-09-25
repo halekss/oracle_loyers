@@ -75,6 +75,26 @@ Active/désactive un calque Folium (`LayerControl`) depuis le panneau de contrô
 
 **Traité par** : `build_bridge_message_script` → simule un clic sur la case à cocher Leaflet correspondante si son état diverge de `show` (Folium n'expose pas d'API JS directe pour piloter `LayerControl` par nom).
 
+### `SHOW_RADIUS_CIRCLE` / `HIDE_RADIUS_CIRCLE`
+
+Dessine (ou retire) un cercle Leaflet pointillé violet autour du centre du quartier scanné, dans la vue "Calques" du rail — matérialise le rayon utilisé par les 4 cavaliers (500 m actuellement, cf. `services/cavaliers_factors.py`).
+
+**Émis par** : `MapComponent.jsx`, quand la vue "Calques" est active ET qu'un quartier a été scanné (`center` connu) ; `HIDE_RADIUS_CIRCLE` dès que l'une des deux conditions cesse d'être vraie (changement de vue, ou aucun scan).
+
+```json
+{ "type": "SHOW_RADIUS_CIRCLE", "lat": 45.750, "lng": 4.832, "radius": 500, "color": "#A78BFA" }
+```
+
+```json
+{ "type": "HIDE_RADIUS_CIRCLE" }
+```
+
+* `lat`, `lng` : centre du quartier scanné (`center` de `/api/quartier-stats`).
+* `radius` : rayon en mètres.
+* `color` (optionnel) : couleur du tracé, replie sur `#A78BFA` (violet) si absent.
+
+**Traité par** : `build_bridge_message_script` → `L.circle([lat, lng], { radius, color, dashArray: '6 6', fill: false })`, en retirant l'éventuel cercle précédent (`window.__oracleRadiusCircle`) avant d'ajouter le nouveau — un seul cercle affiché à la fois, jamais empilés à chaque nouveau scan.
+
 ## Config partagée des calques (ORA-130)
 
 Avant ORA-130, la liste des calques (clé interne, libellé Folium/`TOGGLE_LAYER`, visibilité par défaut) était codée en dur à deux endroits qu'il fallait synchroniser à la main : `LAYER_MAPPING`/l'état initial `layers` dans `MapComponent.jsx` côté React, et les `folium.FeatureGroup`/`folium.GeoJson` (`name=`, `show=`) dans `generate_map.py` côté Python. Un calque oublié d'un côté ne cassait rien immédiatement (le contrat `TOGGLE_LAYER` échoue silencieusement si `name` ne correspond à aucun `<label>` Leaflet), ce qui rendait l'oubli facile à manquer en revue.

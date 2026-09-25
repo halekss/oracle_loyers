@@ -399,6 +399,27 @@ def build_bridge_message_script(map_js_var_name):
                     }}
                 }});
             }}
+        }} else if (e.data.type === 'SHOW_RADIUS_CIRCLE') {{
+            // Vue "Calques" du rail (ORA-178) : cercle pointillé violet du
+            // rayon des cavaliers autour du quartier scanné. Un seul cercle à
+            // la fois — on retire l'ancien avant de dessiner le nouveau
+            // plutôt que de les empiler à chaque nouveau scan.
+            if (window.__oracleRadiusCircle) {{
+                {map_js_var_name}.removeLayer(window.__oracleRadiusCircle);
+            }}
+            window.__oracleRadiusCircle = L.circle([e.data.lat, e.data.lng], {{
+                radius: e.data.radius,
+                color: e.data.color || '#A78BFA',
+                weight: 2,
+                dashArray: '6 6',
+                fill: false,
+            }});
+            {map_js_var_name}.addLayer(window.__oracleRadiusCircle);
+        }} else if (e.data.type === 'HIDE_RADIUS_CIRCLE') {{
+            if (window.__oracleRadiusCircle) {{
+                {map_js_var_name}.removeLayer(window.__oracleRadiusCircle);
+                window.__oracleRadiusCircle = null;
+            }}
         }}
     }});
     """

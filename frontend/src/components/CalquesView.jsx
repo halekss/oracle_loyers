@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import mapLayersConfig from '../config/mapLayers.config.json';
-import { defaultExpandedCategory } from '../services/cavaliersDisplay';
+import { CAVALIER_STYLES, defaultExpandedCategory } from '../services/cavaliersDisplay';
 import CavalierRow from './CavalierRow';
 import LayerSwitch from './LayerSwitch';
 
@@ -9,13 +9,6 @@ import LayerSwitch from './LayerSwitch';
 // à Lyon, sans source dynamique dans l'app (aucun calque par ligne) — pas
 // affichés pour une autre ville tant qu'ils ne sont pas vérifiés pour elle.
 const LYON_LINE_CODES = { Metro: 'A B C D', Funicular: 'F1 F2' };
-
-const CAVALIER_STYLES = [
-  { categorie: 'Vice', color: '#F87171', shape: 'circle' },
-  { categorie: 'Gentrification', color: '#C084FC', shape: 'diamond' },
-  { categorie: 'Nuisance', color: '#FB923C', shape: 'triangle' },
-  { categorie: 'Superstition', color: '#CBD5E1', shape: 'square' },
-];
 
 const quartiersLayer = mapLayersConfig.find((layer) => layer.key === 'Quartiers');
 

@@ -27,6 +27,21 @@ export function cavalierMeta(cat) {
   return { count: 0, distM: parseClosestDistance(cat.empty_message) };
 }
 
+// Forme + couleur de chacun des 4 cavaliers (maquette vue-calques.png) —
+// partagées entre la vue Calques (CavalierRow) et la légende "Cavaliers
+// affichés" de la carte (MapComponent), pour ne jamais les définir deux fois.
+export const CAVALIER_STYLES = [
+  { categorie: 'Vice', color: '#F87171', shape: 'circle' },
+  { categorie: 'Gentrification', color: '#C084FC', shape: 'diamond' },
+  { categorie: 'Nuisance', color: '#FB923C', shape: 'triangle' },
+  { categorie: 'Superstition', color: '#CBD5E1', shape: 'square' },
+];
+
+// Rayon des cavaliers (mètres) : seul rayon précalculé côté backend
+// (services/cavaliers_factors.py) — cf. sélecteur 300 m/500 m/1 km de la vue
+// Calques (500 m seul actif) et cercle tracé sur la carte.
+export const CAVALIERS_RADIUS_M = 500;
+
 // Catégorie dépliée par défaut (une seule à la fois) : celle qui compte le
 // plus de lieux. `null` sans détail (aucun scan encore lancé).
 export function defaultExpandedCategory(cavaliersDetail) {

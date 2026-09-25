@@ -236,6 +236,32 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("map_abc123.eachLayer(", script)
         self.assertIn("setUrl(tileUrl)", script)
 
+    def test_handles_show_radius_circle_by_drawing_a_leaflet_circle(self):
+        """Vue "Calques" du rail (ORA-178) : cercle pointillé violet du rayon
+        des cavaliers autour du quartier scanné."""
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("SHOW_RADIUS_CIRCLE", script)
+        self.assertIn("L.circle(", script)
+        self.assertIn("e.data.lat", script)
+        self.assertIn("e.data.lng", script)
+        self.assertIn("e.data.radius", script)
+        self.assertIn("map_abc123.addLayer(", script)
+
+    def test_handles_hide_radius_circle_by_removing_the_existing_circle(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("HIDE_RADIUS_CIRCLE", script)
+        self.assertIn("map_abc123.removeLayer(", script)
+
+    def test_replaces_the_previous_radius_circle_instead_of_stacking_them(self):
+        """Un second SHOW_RADIUS_CIRCLE (nouveau scan) ne doit pas laisser
+        l'ancien cercle affiché en plus du nouveau."""
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        show_branch = script.split("SHOW_RADIUS_CIRCLE")[1].split("else if")[0]
+        self.assertIn("removeLayer(", show_branch)
+
 
 class TileLayerNeverEmbedsAKeyTest(unittest.TestCase):
     """Aucune clé, ni URL CARTO, dans la carte générée (fichier versionné)."""

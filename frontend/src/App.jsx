@@ -21,6 +21,7 @@ import { computeHomeStats } from './services/homeStats';
 import { computeQuartierOptions } from './services/quartierStats';
 import { computeLatestDataDate } from './services/latestDataDate';
 import { useLayerVisibility } from './hooks/useLayerVisibility';
+import { CAVALIERS_RADIUS_M } from './services/cavaliersDisplay';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
 // l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
@@ -341,6 +342,9 @@ function App() {
         // présent) pour le panneau "Les 4 Cavaliers", en plus des phrases résumées ci-dessus (PDF).
         cavaliersDetail: data.cavaliers_detail || [],
         comparables: data.comparables || [],
+        // ORA-178 : centre du quartier scanné — vue "Calques", cercle de
+        // rayon des cavaliers tracé sur la carte (MapComponent#radiusCircle).
+        center: data.center,
         // ORA-171 : "Estimation personnalisée" (maquette 03) ne s'affiche que
         // lorsqu'une vraie prédiction modèle a eu lieu (confiance non nulle) ;
         // `surface` sert d'entrée aux scénarios "et si la surface change ?" et
@@ -639,6 +643,11 @@ function App() {
                 layers={layerVisibility}
                 onToggleLayer={toggleLayer}
                 onAnnonceClick={handleSelectAnnonce}
+                radiusCircle={
+                  activeView === 'calques' && result?.center
+                    ? { lat: result.center.lat, lng: result.center.lng, radius: CAVALIERS_RADIUS_M }
+                    : null
+                }
               />
             </ErrorBoundary>
           )}

@@ -416,4 +416,71 @@ describe('MapComponent', () => {
       expect(onAnnonceClick).toHaveBeenCalledWith(42);
     });
   });
+
+  describe('cercle de rayon des cavaliers (vue "Calques", ORA-178)', () => {
+    it('sends SHOW_RADIUS_CIRCLE when a radiusCircle prop is provided', () => {
+      const { rerender } = render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
+      rerender(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} radiusCircle={{ lat: 45.75, lng: 4.83, radius: 500 }} />,
+      );
+
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'SHOW_RADIUS_CIRCLE', lat: 45.75, lng: 4.83, radius: 500, color: '#A78BFA' },
+        window.location.origin,
+      );
+    });
+
+    it('sends HIDE_RADIUS_CIRCLE when radiusCircle goes back to null', () => {
+      const { rerender } = render(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} radiusCircle={{ lat: 45.75, lng: 4.83, radius: 500 }} />,
+      );
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
+      rerender(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} radiusCircle={null} />);
+
+      expect(postMessage).toHaveBeenCalledWith({ type: 'HIDE_RADIUS_CIRCLE' }, window.location.origin);
+    });
+  });
+
+  describe('légende "Cavaliers affichés" (remplace le panneau flottant, ORA-178)', () => {
+    it('lists only the cavalier layers that are currently active', () => {
+      const layers = { ...defaultLayerVisibility(), Vice: true, Gentrification: false, Nuisance: true, Superstition: false };
+      render(<MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} />);
+
+      expect(screen.getByText('Cavaliers affichés')).toBeInTheDocument();
+      expect(screen.getByText('Vice')).toBeInTheDocument();
+      expect(screen.getByText('Nuisance')).toBeInTheDocument();
+      expect(screen.queryByText('Gentrification')).not.toBeInTheDocument();
+      expect(screen.queryByText('Superstition')).not.toBeInTheDocument();
+    });
+
+    it('shows the radius alongside the legend when a radiusCircle is provided', () => {
+      const layers = { ...defaultLayerVisibility(), Vice: true };
+      render(
+        <MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} radiusCircle={{ lat: 45.75, lng: 4.83, radius: 500 }} />,
+      );
+
+      expect(screen.getByText(/500 m/)).toBeInTheDocument();
+    });
+
+    it('is not shown when no cavalier layer is active', () => {
+      const layers = { ...defaultLayerVisibility(), Vice: false, Gentrification: false, Nuisance: false, Superstition: false };
+      render(<MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} />);
+
+      expect(screen.queryByText('Cavaliers affichés')).not.toBeInTheDocument();
+    });
+
+    it('does not replace the mobile floating panel (hidePanel=false) with this legend', () => {
+      const layers = { ...defaultLayerVisibility(), Vice: true };
+      render(<MapComponent center={null} layers={layers} onToggleLayer={noop} />);
+
+      expect(screen.queryByText('Cavaliers affichés')).not.toBeInTheDocument();
+    });
+  });
 });

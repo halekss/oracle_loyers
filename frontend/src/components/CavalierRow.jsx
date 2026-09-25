@@ -1,23 +1,6 @@
 import { cavalierMeta } from '../services/cavaliersDisplay';
+import CavalierShapeIcon from './CavalierShapeIcon';
 import LayerSwitch from './LayerSwitch';
-
-// Formes décoratives (aria-hidden) des 4 cavaliers — la couleur seule ne
-// porte jamais l'information : le nom est toujours écrit en texte à côté.
-const SHAPES = {
-  circle: (color) => <circle cx="6" cy="6" r="5" fill={color} />,
-  diamond: (color) => <polygon points="6,0 12,6 6,12 0,6" fill={color} />,
-  triangle: (color) => <polygon points="6,1 11,11 1,11" fill={color} />,
-  square: (color) => <rect x="1" y="1" width="10" height="10" fill={color} />,
-};
-
-function Shape({ shape, color }) {
-  const render = SHAPES[shape] || SHAPES.circle;
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="shrink-0">
-      {render(color)}
-    </svg>
-  );
-}
 
 function Chevron({ open }) {
   return (
@@ -64,7 +47,7 @@ export default function CavalierRow({
             onClick={onToggleExpand}
             className="flex-1 flex items-center gap-2 min-w-0 text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]"
           >
-            <Shape shape={shape} color={color} />
+            <CavalierShapeIcon shape={shape} color={color} />
             <span className="font-bold text-sm truncate" style={{ color }}>{categorie}</span>
             {metaText && (
               <span className="text-[11px] ml-auto shrink-0 whitespace-nowrap" style={{ color: '#8B93A7' }}>
@@ -75,7 +58,7 @@ export default function CavalierRow({
           </button>
         ) : (
           <div className="flex-1 flex items-center gap-2 min-w-0">
-            <Shape shape={shape} color={color} />
+            <CavalierShapeIcon shape={shape} color={color} />
             <span className="font-bold text-sm truncate" style={{ color }}>{categorie}</span>
           </div>
         )}
