@@ -236,31 +236,43 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("map_abc123.eachLayer(", script)
         self.assertIn("setUrl(tileUrl)", script)
 
-    def test_handles_show_radius_circle_by_drawing_a_leaflet_circle(self):
-        """Vue "Calques" du rail (ORA-178) : cercle pointillé violet du rayon
-        des cavaliers autour du quartier scanné."""
+    def test_handles_set_focus_by_dimming_markers_outside_the_radius(self):
+        """Vue "Calques" (sélecteur de rayon) : les pings de cavaliers hors
+        du rayon passent à 0.25 d'opacité, ceux dans le rayon restent pleins."""
         script = generate_map.build_bridge_message_script("map_abc123")
 
-        self.assertIn("SHOW_RADIUS_CIRCLE", script)
-        self.assertIn("L.circle(", script)
-        self.assertIn("e.data.lat", script)
-        self.assertIn("e.data.lng", script)
-        self.assertIn("e.data.radius", script)
-        self.assertIn("map_abc123.addLayer(", script)
+        self.assertIn("SET_FOCUS", script)
+        self.assertIn("distanceTo(", script)
+        self.assertIn("setOpacity(", script)
+        self.assertIn("0.25", script)
+        self.assertIn("e.data.radius_m", script)
 
-    def test_handles_hide_radius_circle_by_removing_the_existing_circle(self):
+    def test_handles_set_focus_by_drawing_a_filled_dashed_leaflet_circle(self):
         script = generate_map.build_bridge_message_script("map_abc123")
 
-        self.assertIn("HIDE_RADIUS_CIRCLE", script)
-        self.assertIn("map_abc123.removeLayer(", script)
+        set_focus_branch = script.split("'SET_FOCUS'")[1].split("else if")[0]
+        self.assertIn("L.circle(", set_focus_branch)
+        self.assertIn("e.data.lat", set_focus_branch)
+        self.assertIn("e.data.lng", set_focus_branch)
+        self.assertIn("dashArray", set_focus_branch)
+        self.assertIn("fillOpacity", set_focus_branch)
+        self.assertIn("map_abc123.addLayer(", set_focus_branch)
 
-    def test_replaces_the_previous_radius_circle_instead_of_stacking_them(self):
-        """Un second SHOW_RADIUS_CIRCLE (nouveau scan) ne doit pas laisser
-        l'ancien cercle affiché en plus du nouveau."""
+    def test_replaces_the_previous_focus_circle_instead_of_stacking_them(self):
+        """Un second SET_FOCUS (nouveau rayon) ne doit pas laisser l'ancien
+        cercle affiché en plus du nouveau."""
         script = generate_map.build_bridge_message_script("map_abc123")
 
-        show_branch = script.split("SHOW_RADIUS_CIRCLE")[1].split("else if")[0]
-        self.assertIn("removeLayer(", show_branch)
+        set_focus_branch = script.split("'SET_FOCUS'")[1].split("else if")[0]
+        self.assertIn("removeLayer(", set_focus_branch)
+
+    def test_handles_clear_focus_by_restoring_full_opacity_and_removing_the_circle(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("CLEAR_FOCUS", script)
+        clear_focus_branch = script.split("'CLEAR_FOCUS'")[1]
+        self.assertIn("setOpacity(1)", clear_focus_branch)
+        self.assertIn("map_abc123.removeLayer(", clear_focus_branch)
 
 
 class TileLayerNeverEmbedsAKeyTest(unittest.TestCase):
@@ -318,6 +330,20 @@ class LoadLayersConfigTest(unittest.TestCase):
         }
         for key, expected in expected_defaults.items():
             self.assertEqual(layers_by_key[key]["defaultVisible"], expected, key)
+
+    def test_cavalier_layers_declare_a_shape_for_the_map_marker_icon(self):
+        """Source unique (mapLayers.config.json) couleur+forme, lue à la
+        fois par ce script (icônes DivIcon des pings) et par React
+        (CavalierRow, légende carte) — plus de dict COLORS séparé ici."""
+        layers_by_key = {layer["key"]: layer for layer in generate_map.load_layers_config()}
+        expected_shapes = {
+            "Vice": "circle",
+            "Gentrification": "diamond",
+            "Nuisance": "triangle",
+            "Superstition": "square",
+        }
+        for key, shape in expected_shapes.items():
+            self.assertEqual(layers_by_key[key]["shape"], shape, key)
 
     def test_loads_from_an_explicit_path(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -387,6 +413,54 @@ class BuildImmoTooltipHtmlTest(unittest.TestCase):
         html_out = generate_map.build_immo_tooltip_html(type_local="<script>alert(1)</script>", prix="750")
 
         self.assertNotIn("<script>alert(1)</script>", html_out)
+
+
+class CavalierIconHtmlTest(unittest.TestCase):
+    """Remplace les anciens folium.CircleMarker (couleur figée dans un dict
+    COLORS) par des DivIcon aux mêmes formes/couleurs que le panneau React
+    (CavalierRow.jsx) — une classe CSS par forme plutôt qu'un SVG inline par
+    marker (des centaines de cavaliers par carte), pour ne pas alourdir le
+    HTML généré."""
+
+    def test_uses_a_shared_css_class_per_shape_rather_than_inline_svg(self):
+        html_out = generate_map.cavalier_icon_html("circle", "#F87171")
+
+        self.assertIn("oracle-cav-circle", html_out)
+        self.assertNotIn("<svg", html_out)
+
+    def test_applies_the_given_color_as_inline_background(self):
+        html_out = generate_map.cavalier_icon_html("diamond", "#C084FC")
+
+        self.assertIn("#C084FC", html_out)
+        self.assertIn("oracle-cav-diamond", html_out)
+
+    def test_falls_back_to_circle_for_an_unrecognized_shape(self):
+        html_out = generate_map.cavalier_icon_html("hexagon", "#FFFFFF")
+
+        self.assertIn("oracle-cav-circle", html_out)
+
+
+class BuildCavalierMarkersScriptTest(unittest.TestCase):
+    """Référence JS de chaque marker de cavalier (variable Folium + lat/lng +
+    famille) : nécessaire pour que SET_FOCUS (build_bridge_message_script)
+    puisse faire varier son opacité selon la distance au point choisi."""
+
+    def test_declares_a_global_array_with_one_entry_per_marker(self):
+        script = generate_map.build_cavalier_markers_script([
+            {"js_var": "marker_abc", "lat": 45.75, "lng": 4.83, "famille": "vice"},
+            {"js_var": "marker_def", "lat": 45.76, "lng": 4.84, "famille": "gentrification"},
+        ])
+
+        self.assertIn("oracleCavalierMarkers", script)
+        self.assertIn("marker_abc", script)
+        self.assertIn("marker_def", script)
+        self.assertIn("45.75", script)
+        self.assertIn("vice", script)
+
+    def test_returns_an_empty_array_for_no_entries(self):
+        script = generate_map.build_cavalier_markers_script([])
+
+        self.assertIn("oracleCavalierMarkers=[]", script.replace(" ", ""))
 
 
 class ResolveVillePathsTest(unittest.TestCase):

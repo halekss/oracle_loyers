@@ -75,25 +75,29 @@ Active/désactive un calque Folium (`LayerControl`) depuis le panneau de contrô
 
 **Traité par** : `build_bridge_message_script` → simule un clic sur la case à cocher Leaflet correspondante si son état diverge de `show` (Folium n'expose pas d'API JS directe pour piloter `LayerControl` par nom).
 
-### `SHOW_RADIUS_CIRCLE` / `HIDE_RADIUS_CIRCLE`
+### `SET_FOCUS` / `CLEAR_FOCUS`
 
-Dessine (ou retire) un cercle Leaflet pointillé violet autour du centre du quartier scanné, dans la vue "Calques" du rail — matérialise le rayon utilisé par les 4 cavaliers (500 m actuellement, cf. `services/cavaliers_factors.py`).
+Matérialise le rayon des cavaliers choisi (300/500/1000m, `GET /api/cavaliers`) directement sur la carte, dans la vue "Calques" du rail : les pings de cavaliers **dans** le rayon restent pleins (opacité 1), ceux **hors** du rayon passent à 0,25 ; un cercle pointillé violet (rempli à 6 %) matérialise le rayon lui-même. `CLEAR_FOCUS` restaure l'opacité pleine de tous les cavaliers et retire le cercle.
 
-**Émis par** : `MapComponent.jsx`, quand la vue "Calques" est active ET qu'un quartier a été scanné (`center` connu) ; `HIDE_RADIUS_CIRCLE` dès que l'une des deux conditions cesse d'être vraie (changement de vue, ou aucun scan).
+**Émis par** : `MapComponent.jsx`, `SET_FOCUS` quand la vue "Calques" est active ET qu'un quartier a été scanné (`center` connu) ou que le rayon choisi change ; `CLEAR_FOCUS` dès que l'une des deux conditions cesse d'être vraie (changement de vue, ou aucun scan).
 
 ```json
-{ "type": "SHOW_RADIUS_CIRCLE", "lat": 45.750, "lng": 4.832, "radius": 500, "color": "#A78BFA" }
+{ "type": "SET_FOCUS", "lat": 45.750, "lng": 4.832, "radius_m": 500 }
 ```
 
 ```json
-{ "type": "HIDE_RADIUS_CIRCLE" }
+{ "type": "CLEAR_FOCUS" }
 ```
 
-* `lat`, `lng` : centre du quartier scanné (`center` de `/api/quartier-stats`).
-* `radius` : rayon en mètres.
-* `color` (optionnel) : couleur du tracé, replie sur `#A78BFA` (violet) si absent.
+* `lat`, `lng` : centre du quartier scanné (`center` de `/api/quartier-stats`/`/api/cavaliers`).
+* `radius_m` : rayon en mètres (300, 500 ou 1000 — cf. `GET /api/cavaliers`, API_CONTRACT.md).
 
-**Traité par** : `build_bridge_message_script` → `L.circle([lat, lng], { radius, color, dashArray: '6 6', fill: false })`, en retirant l'éventuel cercle précédent (`window.__oracleRadiusCircle`) avant d'ajouter le nouveau — un seul cercle affiché à la fois, jamais empilés à chaque nouveau scan.
+**Traité par** : `build_bridge_message_script` →
+* pour chaque entrée de `oracleCavalierMarkers` (déclaré par `build_cavalier_markers_script`, une entrée `{m, lat, lng, famille}` par marker cavalier posé sur la carte), calcule la distance au point de focus via `L.LatLng#distanceTo` (pas de haversine dupliqué côté JS) et appelle `marker.setOpacity(1)` ou `marker.setOpacity(0.25)` selon qu'elle est dans le rayon ou non ;
+* dessine `L.circle([lat, lng], { radius: radius_m, color: '#A78BFA', dashArray: '6 6', fill: true, fillOpacity: 0.06 })`, en retirant l'éventuel cercle précédent (`window.__oracleFocusCircle`) avant d'ajouter le nouveau — un seul cercle affiché à la fois, jamais empilés à chaque changement de rayon ;
+* `CLEAR_FOCUS` : `setOpacity(1)` sur chaque entrée de `oracleCavalierMarkers`, retire `window.__oracleFocusCircle`.
+
+**Pings des cavaliers (`cavalier_icon_html`, `generate_map.py`)** : depuis ORA-130 (voir ci-dessous), chaque cavalier est un `folium.Marker`/`DivIcon` (plus un `CircleMarker`) dont la forme et la couleur viennent de `mapLayers.config.json` (`shape`/`uiColor`) — même source que le panneau React (`CavalierRow.jsx`) et sa légende carte. Une classe CSS par forme (`oracle-cav-circle`/`-diamond`/`-triangle`/`-square`, injectée une fois dans le `<style>` de la page) plutôt qu'un SVG inline par marker, pour ne pas alourdir le HTML généré (des centaines de cavaliers par carte).
 
 ## Config partagée des calques (ORA-130)
 
@@ -121,7 +125,8 @@ Les deux côtés lisent maintenant le même fichier JSON, source de vérité uni
 * `label` : texte affiché dans le panneau de contrôle React (`ToggleItem`).
 * `group` : section du panneau React (`transports`, `contexte`, `immobilier`) — détermine où le calque apparaît, pas la structure des sections elle-même (toujours codée dans `MapComponent.jsx`).
 * `defaultVisible` : état initial, des deux côtés — `layers` initial dans `MapComponent.jsx` **et** `show=` du `FeatureGroup`/`GeoJson` correspondant dans `generate_map.py`.
-* `uiColor` : couleur du point/pastille affiché à côté du libellé dans le panneau React (`ToggleItem`). Sans effet côté carte Folium (les couleurs des marqueurs/POI restent définies séparément dans `generate_map.COLORS`, une préoccupation distincte de l'identité du calque).
+* `uiColor` : couleur du point/pastille affiché à côté du libellé dans le panneau React (`ToggleItem`). Pour les 4 calques cavaliers, cette même couleur pilote aussi l'icône du marker Folium (`generate_map.cavalier_icon_html`) — une seule source pour panneau/légende/carte, plus de dict `COLORS` séparé côté Python pour ces calques. Sans effet côté carte pour les autres calques (immo, métro, quartiers), dont le rendu vient d'ailleurs (`generate_map.COLORS['Immo']`, `METRO_COLORS`, style GeoJSON).
+* `shape` (cavaliers uniquement) : forme de l'icône, une des 4 valeurs `circle`/`diamond`/`triangle`/`square` — lue à la fois par `generate_map.cavalier_icon_html` (classe CSS `oracle-cav-<shape>`) et par React (`CavalierShapeIcon.jsx`, mêmes noms de forme).
 
 **Consommé par** :
 * `MapComponent.jsx` : `import mapLayersConfig from '../config/mapLayers.config.json'` (import JS statique, bundlé par Vite — synchrone, pas de `fetch` réseau). `LAYER_MAPPING`, l'état initial `layers` et le rendu des `ToggleItem` du panneau en dérivent tous.

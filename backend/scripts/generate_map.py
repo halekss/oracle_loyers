@@ -108,11 +108,56 @@ if BACKEND_DIR not in sys.path:
 from services import annonces_store  # noqa: E402 (après le sys.path.insert nécessaire)
 
 # --- 2. DATA & COULEURS ---
+# Les couleurs/formes des cavaliers ne sont PLUS codées ici : elles viennent
+# de mapLayers.config.json (`uiColor`/`shape`, cf. load_layers_config), seule
+# source partagée avec le panneau React (CavalierRow.jsx) — voir
+# cavalier_icon_html ci-dessous.
 COLORS = {
-    'Vice': '#e74c3c', 'Gentrification': '#3b82f6',
-    'Nuisance': '#f59e0b', 'Superstition': '#9333ea',
     'Immo': '#22c55e'
 }
+
+# Formes de cavalier supportées par cavalier_icon_html — tout `shape` inconnu
+# (config mal renseignée) retombe sur 'circle' plutôt que de planter.
+CAVALIER_SHAPES = ('circle', 'diamond', 'triangle', 'square')
+
+# Icône DivIcon d'un cavalier (cavalier_icon_html) : une classe CSS par forme
+# plutôt qu'un SVG inline par marker — des centaines de cavaliers par carte,
+# un SVG répété alourdirait sensiblement le HTML généré. Contour 1.5px
+# #070A12 obtenu par calque (outer = contour, inner = couleur), mêmes formes
+# que CavalierShapeIcon.jsx (React).
+CAVALIER_ICON_CSS = """
+        .oracle-cav-outer { width: 12px; height: 12px; }
+        .oracle-cav-inner { width: 9px; height: 9px; margin: 1.5px; }
+        .oracle-cav-circle { border-radius: 50%; }
+        .oracle-cav-square { }
+        .oracle-cav-diamond { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+        .oracle-cav-triangle { clip-path: polygon(50% 0%, 100% 100%, 0% 100%); }
+"""
+
+
+def cavalier_icon_html(shape, color):
+    """HTML DivIcon d'un marker cavalier (icon_size=(12,12)) — voir
+    CAVALIER_ICON_CSS pour les classes CSS par forme qu'il référence."""
+    css_shape = shape if shape in CAVALIER_SHAPES else 'circle'
+    return (
+        f'<div class="oracle-cav-outer oracle-cav-{css_shape}" style="background:#070A12">'
+        f'<div class="oracle-cav-inner oracle-cav-{css_shape}" style="background:{color}"></div>'
+        f'</div>'
+    )
+
+
+def build_cavalier_markers_script(entries):
+    """JS `var oracleCavalierMarkers=[...]` : référence (variable Folium du
+    marker, lat/lng, famille) de chaque cavalier posé sur la carte —
+    nécessaire pour que SET_FOCUS (build_bridge_message_script) fasse varier
+    son opacité selon la distance au point choisi, sans dépendre d'un calcul
+    haversine dupliqué côté JS (L.LatLng#distanceTo suffit).
+    `entries` : [{"js_var", "lat", "lng", "famille"}, ...]."""
+    items = ",".join(
+        f'{{m:{entry["js_var"]},lat:{entry["lat"]},lng:{entry["lng"]},famille:{json.dumps(entry["famille"])}}}'
+        for entry in entries
+    )
+    return f"var oracleCavalierMarkers=[{items}];"
 
 METRO_COLORS = {
     'A': '#e9003a', 'B': '#0073ba',
@@ -399,26 +444,41 @@ def build_bridge_message_script(map_js_var_name):
                     }}
                 }});
             }}
-        }} else if (e.data.type === 'SHOW_RADIUS_CIRCLE') {{
-            // Vue "Calques" du rail (ORA-178) : cercle pointillé violet du
-            // rayon des cavaliers autour du quartier scanné. Un seul cercle à
-            // la fois — on retire l'ancien avant de dessiner le nouveau
-            // plutôt que de les empiler à chaque nouveau scan.
-            if (window.__oracleRadiusCircle) {{
-                {map_js_var_name}.removeLayer(window.__oracleRadiusCircle);
+        }} else if (e.data.type === 'SET_FOCUS') {{
+            // Vue "Calques" du rail, sélecteur de rayon : les pings de
+            // cavaliers dans le rayon restent pleins (opacité 1), ceux hors
+            // du rayon s'estompent (0.25) — distance calculée par Leaflet
+            // (L.LatLng#distanceTo), pas de haversine dupliqué ici.
+            // `oracleCavalierMarkers` est déclaré par
+            // build_cavalier_markers_script, plus haut dans ce même script.
+            var oracleFocusPoint = L.latLng(e.data.lat, e.data.lng);
+            (window.oracleCavalierMarkers || []).forEach(function(entry) {{
+                var d = oracleFocusPoint.distanceTo(L.latLng(entry.lat, entry.lng));
+                entry.m.setOpacity(d <= e.data.radius_m ? 1 : 0.25);
+            }});
+            // Cercle pointillé violet du rayon, dessiné par la carte
+            // elle-même (suit zoom/pan) — un seul à la fois, on retire
+            // l'ancien avant d'ajouter le nouveau plutôt que de les empiler
+            // à chaque changement de rayon.
+            if (window.__oracleFocusCircle) {{
+                {map_js_var_name}.removeLayer(window.__oracleFocusCircle);
             }}
-            window.__oracleRadiusCircle = L.circle([e.data.lat, e.data.lng], {{
-                radius: e.data.radius,
-                color: e.data.color || '#A78BFA',
+            window.__oracleFocusCircle = L.circle([e.data.lat, e.data.lng], {{
+                radius: e.data.radius_m,
+                color: '#A78BFA',
                 weight: 2,
                 dashArray: '6 6',
-                fill: false,
+                fill: true,
+                fillOpacity: 0.06,
             }});
-            {map_js_var_name}.addLayer(window.__oracleRadiusCircle);
-        }} else if (e.data.type === 'HIDE_RADIUS_CIRCLE') {{
-            if (window.__oracleRadiusCircle) {{
-                {map_js_var_name}.removeLayer(window.__oracleRadiusCircle);
-                window.__oracleRadiusCircle = null;
+            {map_js_var_name}.addLayer(window.__oracleFocusCircle);
+        }} else if (e.data.type === 'CLEAR_FOCUS') {{
+            (window.oracleCavalierMarkers || []).forEach(function(entry) {{
+                entry.m.setOpacity(1);
+            }});
+            if (window.__oracleFocusCircle) {{
+                {map_js_var_name}.removeLayer(window.__oracleFocusCircle);
+                window.__oracleFocusCircle = null;
             }}
         }}
     }});
@@ -645,17 +705,32 @@ def main(ville='lyon'):
         print(f"⚠️ GeoJSON des quartiers introuvable ou invalide ({paths['quartiers_geojson']}), couche ignorée.")
 
     # --- 7. CAVALIERS ---
-    mapping_simple = {'vice': (fg_vice, COLORS['Vice']), 'gentrification': (fg_gentri, COLORS['Gentrification']), 'nuisance': (fg_nuisance, COLORS['Nuisance']), 'superstition': (fg_superstition, COLORS['Superstition'])}
+    # Couleur/forme des icônes viennent de mapLayers.config.json (uiColor/
+    # shape, layer_by_key) — source unique partagée avec le panneau React
+    # (CavalierRow.jsx), plus de dict COLORS séparé ici (cf. ORA-130).
+    mapping_simple = {
+        'vice': (fg_vice, layer_by_key['Vice']),
+        'gentrification': (fg_gentri, layer_by_key['Gentrification']),
+        'nuisance': (fg_nuisance, layer_by_key['Nuisance']),
+        'superstition': (fg_superstition, layer_by_key['Superstition']),
+    }
+    # Référence JS (variable Folium + lat/lng + famille) de chaque marker
+    # cavalier posé, pour que SET_FOCUS (build_bridge_message_script) puisse
+    # faire varier son opacité selon la distance au point choisi.
+    cavalier_marker_entries = []
     if 'type' in df_poi.columns:
         for _, row in df_poi.iterrows():
             raw_type = str(row.get('type', '')).lower().strip()
             target_config = None
+            famille = None
             for key, config in mapping_simple.items():
                 if key in raw_type:
                     target_config = config
+                    famille = key
                     break
             if target_config and pd.notnull(row.get('latitude')):
-                group, color_hex = target_config
+                group, layer_config = target_config
+                color_hex = layer_config['uiColor']
 
                 # Nettoyage Type (ex: "Vice - Bar" -> "Bar")
                 if ' - ' in raw_type:
@@ -670,10 +745,19 @@ def main(ville='lyon'):
                 </div>
                 """
 
-                folium.CircleMarker(
-                    [row['latitude'], row['longitude']], radius=5, color=color_hex, weight=1, fill=True, fill_color=color_hex, fill_opacity=0.8,
-                    popup=folium.Popup(txt_popup, max_width=200, className='oracle-popup')
-                ).add_to(group)
+                marker = folium.Marker(
+                    [row['latitude'], row['longitude']],
+                    icon=folium.DivIcon(
+                        html=cavalier_icon_html(layer_config.get('shape', 'circle'), color_hex),
+                        icon_size=(12, 12), icon_anchor=(6, 6),
+                    ),
+                    popup=folium.Popup(txt_popup, max_width=200, className='oracle-popup'),
+                )
+                marker.add_to(group)
+                cavalier_marker_entries.append({
+                    'js_var': marker.get_name(),
+                    'lat': row['latitude'], 'lng': row['longitude'], 'famille': famille,
+                })
 
     # --- 8. RENDU ---
     fg_studio.add_to(m)
@@ -720,9 +804,13 @@ def main(ville='lyon'):
         .oracle-legend-swatch {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }}
         .oracle-legend-muted {{ color: #94a3b8; }}
         .oracle-legend-off {{ opacity: 0.35; text-decoration: line-through; }}
+
+        /* Icônes des cavaliers (ORA-130, cavalier_icon_html) */
+        {CAVALIER_ICON_CSS}
     </style>
 
     <script>
+    {build_cavalier_markers_script(cavalier_marker_entries)}
     {build_bridge_message_script(m.get_name())}
     {build_legend_and_scale_script(m.get_name(), build_legend_html(layers_config))}
     </script>
