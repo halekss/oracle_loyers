@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import ResultCard from './components/ResultCard';
 import PriceHistory from './components/PriceHistory';
 import MapComponent, { ToggleItem } from './components/MapComponent';
@@ -19,7 +19,8 @@ import { computeBoundsForQuartiers } from './services/mapBounds';
 import { computeHomeStats } from './services/homeStats';
 import { computeQuartierOptions } from './services/quartierStats';
 import { computeLatestDataDate } from './services/latestDataDate';
-import { layersByGroup } from './services/mapLayers';
+import { layersByGroup, defaultLayerVisibility } from './services/mapLayers';
+import { loadLayerVisibility, saveLayerVisibility } from './services/mapLayersStorage';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
 // l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
@@ -110,11 +111,19 @@ function App() {
   // quitte la vue Recherche, pour qu'une visite ultérieure (rail direct)
   // n'hérite pas de ce focus ciblé.
   const [focusSurfaceNext, setFocusSurfaceNext] = useState(false);
-  // ORA-178 : miroir de l'état interne de MapComponent (calques + compteurs),
-  // pour que la vue "Calques" du rail affiche exactement ce qu'il sait déjà
-  // — jamais recalculé ici, seulement reflété (cf. MapComponent#onLayersChange).
-  const [mapLayersState, setMapLayersState] = useState({ layers: {}, layerCounts: {} });
-  const mapRef = useRef(null);
+  // ORA-178 : visibilité des calques — remontée depuis MapComponent (qui
+  // devient un composant contrôlé) pour qu'App en soit l'unique source de
+  // vérité, partagée par la vue "Calques" du rail ET le panneau flottant
+  // mobile. Persistée en localStorage (mapLayersStorage.js), initialisée
+  // depuis `defaultVisible` (mapLayers.config.json) tant que rien n'a encore
+  // été sauvegardé.
+  const [layerVisibility, setLayerVisibility] = useState(() => loadLayerVisibility(defaultLayerVisibility()));
+
+  useEffect(() => {
+    saveLayerVisibility(layerVisibility);
+  }, [layerVisibility]);
+
+  const toggleLayer = (key) => setLayerVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
   // Sélecteur de ville (ORA-71 POC) : ne change que la carte affichée et le
   // bornage des recherches quartier/historique — les CSV/codes postaux
   // Lyon/Lille restant jamais ambigus entre les deux villes.
@@ -483,30 +492,28 @@ function App() {
     );
   }
 
-  // ORA-178 : vue "Calques" — mêmes lignes que le panneau flottant de
-  // MapComponent (mobile), pilotées à distance via `mapRef.current.toggleLayer`
-  // pour ne jamais dupliquer la logique d'envoi des commandes à l'iframe.
+  // ORA-178 : vue "Calques" — App porte désormais `layerVisibility`
+  // (état remonté, unique source de vérité) et l'applique directement, sans
+  // passer par une ref sur MapComponent (composant contrôlé).
   function renderCalquesView() {
-    const { layers, layerCounts } = mapLayersState;
-    const toggle = (key) => mapRef.current?.toggleLayer(key);
     return (
       <div className="p-4 md:p-5 space-y-4">
         <div>
           <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Transports</h3>
           {layersByGroup('transports').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} />
+            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layerVisibility[layer.key]} onToggle={() => toggleLayer(layer.key)} />
           ))}
         </div>
         <div>
           <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Les 4 Cavaliers</h3>
           {layersByGroup('contexte').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} count={layerCounts[layer.key]} />
+            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layerVisibility[layer.key]} onToggle={() => toggleLayer(layer.key)} />
           ))}
         </div>
         <div>
           <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Offres Immobilières</h3>
           {layersByGroup('immobilier').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} count={layerCounts[layer.key]} />
+            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layerVisibility[layer.key]} onToggle={() => toggleLayer(layer.key)} />
           ))}
         </div>
       </div>
@@ -608,8 +615,9 @@ function App() {
 
         {/* COLONNE GAUCHE — Carte (60% desktop, plein écran mobile). Ne se
             démonte/remonte jamais au changement de vue du rail (ORA-178) :
-            seuls `center`/`bounds` changent, la vue "Calques" pilote ses
-            calques à distance via `mapRef`. */}
+            seuls `center`/`bounds` changent, la vue "Calques" pilote
+            `layerVisibility`, qu'App transmet directement en prop (composant
+            contrôlé). */}
         <div
           id="panel-carte"
           role="tabpanel"
@@ -619,13 +627,13 @@ function App() {
           {shouldMountMap && (
             <ErrorBoundary fallback={makePanelFallback('La carte')}>
               <MapComponent
-                ref={mapRef}
                 center={mapCenter}
                 bounds={mapBounds}
                 chatOpen={isChatOpen}
                 ville={ville}
                 hidePanel={isDesktop}
-                onLayersChange={(layers, layerCounts) => setMapLayersState({ layers, layerCounts })}
+                layers={layerVisibility}
+                onToggleLayer={toggleLayer}
                 onAnnonceClick={handleSelectAnnonce}
               />
             </ErrorBoundary>

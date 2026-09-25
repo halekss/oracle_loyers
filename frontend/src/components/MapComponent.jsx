@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api, getApiBaseUrl } from '../services/api';
-import mapLayersConfig from '../config/mapLayers.config.json';
 import { LAYER_MAPPING, layersByGroup } from '../services/mapLayers';
 
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
@@ -52,18 +51,15 @@ export const ToggleItem = ({ label, color, isActive, onToggle, disabled, count }
 
 // `hidePanel` (ORA-178, optionnel) : masque le panneau flottant "Contrôle
 // des calques" — utilisé sur desktop une fois que la vue "Calques" du rail
-// (App.jsx) affiche les mêmes lignes dans la feuille de contenu, pour éviter
-// un doublon. Mobile (pas de rail) garde `hidePanel=false` : c'est son seul
-// point d'accès aux calques, comportement inchangé.
-// `onLayersChange`/`onAnnonceClick` (optionnels) : MapComponent reste
-// l'unique source de vérité (état interne inchangé, contrat postMessage
-// intact) — ces callbacks se contentent de refléter son état vers le
-// parent, qui pilote alors les calques à distance via la ref (`toggleLayer`)
-// plutôt que de dupliquer la logique d'envoi des messages à l'iframe.
-const MapComponent = forwardRef(function MapComponent(
-  { center, bounds, chatOpen = false, ville = 'lyon', hidePanel = false, onLayersChange, onAnnonceClick },
-  ref,
-) {
+// (App.jsx) affiche les mêmes lignes dans sa propre feuille de contenu, pour
+// éviter un doublon. Mobile (pas de rail) garde `hidePanel=false` : c'est son
+// seul point d'accès aux calques, comportement inchangé.
+// `layers`/`onToggleLayer` : composant CONTRÔLÉ — App est l'unique source de
+// vérité de la visibilité des calques (état remonté, persistée en
+// localStorage) ; ce composant ne fait qu'appliquer `layers` au contrat
+// postMessage (TOGGLE_LAYER) et remonter les clics du panneau flottant
+// mobile via `onToggleLayer`, jamais de second état local dupliqué.
+function MapComponent({ center, bounds, chatOpen = false, ville = 'lyon', hidePanel = false, layers, onToggleLayer, onAnnonceClick }) {
   const [mapUrl, setMapUrl] = useState(() => `/data/map_pings_${ville}_calques.html?t=${Date.now()}`);
   const iframeRef = useRef(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -104,22 +100,6 @@ const MapComponent = forwardRef(function MapComponent(
     if (chatOpen) setIsPanelOpen(false);
   }, [chatOpen]);
   
-  // --- ETATS ---
-  // Visibilité initiale de chaque calque : dérivée de mapLayers.config.json
-  // (`defaultVisible`), même source que le `show=` des FeatureGroup/GeoJson
-  // Folium correspondants côté generate_map.py (ORA-130).
-  const [layers, setLayers] = useState(() =>
-    Object.fromEntries(mapLayersConfig.map((layer) => [layer.key, layer.defaultVisible]))
-  );
-
-  // ORA-178 : reflète l'état interne (calques + compteurs) vers le parent à
-  // chaque changement, pour que la vue "Calques" du rail affiche exactement
-  // ce que ce composant sait déjà, sans jamais recalculer/refetcher lui-même.
-  useEffect(() => {
-    onLayersChange?.(layers, layerCounts);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layers, layerCounts]);
-
   useEffect(() => {
     if (center && iframeRef.current && iframeRef.current.contentWindow) {
       iframeRef.current.contentWindow.postMessage({
@@ -180,11 +160,19 @@ const MapComponent = forwardRef(function MapComponent(
     }
   };
 
-  const toggleLayer = (layerKey) => {
-    const newState = !layers[layerKey];
-    setLayers(prev => ({ ...prev, [layerKey]: newState }));
-    sendLayerCommand(layerKey, newState);
-  };
+  // Envoie TOGGLE_LAYER pour chaque calque dont la visibilité a changé depuis
+  // le rendu précédent — App pilote `layers`, ce composant se contente
+  // d'appliquer le contrat postMessage. Réf initialisée à `layers` lui-même
+  // pour ne rien renvoyer au montage (le chargement de l'iframe s'en charge
+  // déjà, cf. `handleIframeLoad` ci-dessous).
+  const previousLayersRef = useRef(layers);
+  useEffect(() => {
+    const previous = previousLayersRef.current;
+    Object.keys(layers).forEach((key) => {
+      if (layers[key] !== previous[key]) sendLayerCommand(key, layers[key]);
+    });
+    previousLayersRef.current = layers;
+  }, [layers]);
 
   // Fond de carte : les tuiles passent par le proxy du backend (/api/tiles),
   // qui détient la clé CARTO — aucune clé côté navigateur. L'URL dépend du
@@ -204,11 +192,6 @@ const MapComponent = forwardRef(function MapComponent(
     sendTileUrl();
     Object.keys(layers).forEach(key => sendLayerCommand(key, layers[key]));
   };
-
-  // ORA-178 : pilotage à distance depuis la vue "Calques" du rail (App.jsx) —
-  // réutilise `toggleLayer` telle quelle, jamais de second état/logique
-  // d'envoi des calques ailleurs dans le code.
-  useImperativeHandle(ref, () => ({ toggleLayer }));
 
   return (
     <div className="w-full h-full relative z-0 bg-slate-900 overflow-hidden rounded-2xl border border-slate-800 shadow-2xl">
@@ -230,7 +213,6 @@ const MapComponent = forwardRef(function MapComponent(
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
         </span>
-        <span className="text-[10px] font-mono text-purple-200 uppercase tracking-widest font-bold">Oracle Live</span>
       </div>
 
       {/* --- BOUTON POUR OUVRIR LES FILTRES (Visible quand fermé, masqué
@@ -270,7 +252,7 @@ const MapComponent = forwardRef(function MapComponent(
               label={layer.label}
               color={layer.uiColor}
               isActive={layers[layer.key]}
-              onToggle={() => toggleLayer(layer.key)}
+              onToggle={() => onToggleLayer(layer.key)}
             />
           ))}
 
@@ -285,7 +267,7 @@ const MapComponent = forwardRef(function MapComponent(
               label={layer.label}
               color={layer.uiColor}
               isActive={layers[layer.key]}
-              onToggle={() => toggleLayer(layer.key)}
+              onToggle={() => onToggleLayer(layer.key)}
               count={layerCounts[layer.key]}
             />
           ))}
@@ -297,7 +279,7 @@ const MapComponent = forwardRef(function MapComponent(
               label={layer.label}
               color={layer.uiColor}
               isActive={layers[layer.key]}
-              onToggle={() => toggleLayer(layer.key)}
+              onToggle={() => onToggleLayer(layer.key)}
               count={layerCounts[layer.key]}
             />
           ))}
@@ -305,6 +287,6 @@ const MapComponent = forwardRef(function MapComponent(
       )}
     </div>
   );
-});
+}
 
 export default MapComponent;

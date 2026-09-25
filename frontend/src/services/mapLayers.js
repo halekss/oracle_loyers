@@ -9,3 +9,9 @@ export const LAYER_MAPPING = Object.fromEntries(
 );
 
 export const layersByGroup = (group) => mapLayersConfig.filter((layer) => layer.group === group);
+
+// Visibilité initiale de chaque calque (`defaultVisible`) — source unique
+// réutilisée à la fois par `App` (état remonté, source de vérité) et
+// `mapLayersStorage` (repli quand rien n'est encore persisté).
+export const defaultLayerVisibility = () =>
+  Object.fromEntries(mapLayersConfig.map((layer) => [layer.key, layer.defaultVisible]));
