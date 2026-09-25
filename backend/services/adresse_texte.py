@@ -21,7 +21,7 @@ _ADRESSE = re.compile(
 )
 # Mots capitalisés qui ne font plus partie d'un nom de rue (ville, bâtiment, début de phrase).
 _FIN_NOM = {
-    "lyon", "bat", "batiment", "appartement", "studio", "garage", "parking", "disponible", "libre",
+    "lyon", "lille", "bat", "batiment", "appartement", "studio", "garage", "parking", "disponible", "libre",
     "ce", "cet", "cette", "il", "elle", "au", "aux", "dans", "situe", "situee", "proche", "ideal",
     "idealement", "decouvrez", "orpi", "nous", "vous", "les", "un", "une", "loyer", "charges",
     "quartier", "sur", "tram", "metro", "spacieux", "bel", "beau", "superbe", "lumineux",

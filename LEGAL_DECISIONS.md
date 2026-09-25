@@ -99,7 +99,7 @@ source. Pas de téléchargement, pas de copie, pas de re-service d'image depuis 
 ## ORA-180 — Adresses extraites des annonces et géocodées par un service tiers
 
 - **Décision** : autorisé, avec un périmètre minimal. Pour placer une annonce dans sa rue, seule
-  la chaîne d'adresse du bien (rue + numéro éventuel + « Lyon » + code postal déjà connu) est
+  la chaîne d'adresse du bien (rue + numéro éventuel + ville, Lyon ou Lille, + code postal déjà connu) est
   envoyée à la Géoplateforme de l'IGN (service public, gratuit, sans clé). Rien d'autre :
   ni description, ni URL, ni prix, ni identité.
 - **Particuliers** (annonces Vizzit agrégeant des annonces de particuliers) : l'adresse est déjà

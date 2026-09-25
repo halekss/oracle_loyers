@@ -632,11 +632,12 @@ def _ville_de_la_ligne(row, cp):
 def _position_adresse(row, cp, ville, geocodeur):
     """(lat, lon, precision, cp_geocode) d'une adresse du bien trouvée dans le texte, sinon None.
 
-    Lyon uniquement (le géocodeur est restreint à Lyon). Le CP du résultat doit
-    être cohérent avec celui déjà connu : un arrondissement fiable doit
-    correspondre exactement (rue homonyme d'un autre arrondissement = rejet).
+    Lyon et Lille uniquement (le géocodeur est restreint à la commune ; une
+    commune limitrophe est donc ignorée). Le CP du résultat doit être cohérent
+    avec celui déjà connu : un arrondissement fiable doit correspondre exactement
+    (rue homonyme d'un autre arrondissement = rejet).
     """
-    if ville != 'lyon':
+    if ville not in ('lyon', 'lille') or cp in CP_A_ZONE_LIMITROPHE:
         return None
     adresse, _raison = localiser_adresse(
         [row.get(c) for c in ('description_detail', 'description_raw', 'description')]
@@ -644,8 +645,9 @@ def _position_adresse(row, cp, ville, geocodeur):
     if not adresse:
         return None
     cp_connu = cp if cp in CP_FIABLES else None
-    res = geocodeur(adresse, cp_connu)
-    if not res or not str(res['cp']).startswith('690') or (cp_connu and res['cp'] != cp_connu):
+    res = geocodeur(adresse, cp_connu, ville)
+    prefixe = '690' if ville == 'lyon' else '59'
+    if not res or not str(res['cp']).startswith(prefixe) or (cp_connu and res['cp'] != cp_connu):
         return None
     return res['lat'], res['lon'], res['precision'], res['cp']
 
@@ -676,14 +678,17 @@ def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_S
         cp, url = row['code_postal'], row.get('url')
         # 1 bis. Adresse du bien extraite du texte (ORA-180) : rue/numéro géocodés.
         # Pas de jitter : le point est celui de l'API. Échec/rejet → règles suivantes.
-        pos = _position_adresse(row, cp, _ville_de_la_ligne(row, cp), geocodeur)
+        ville = _ville_de_la_ligne(row, cp)
+        pos = _position_adresse(row, cp, ville, geocodeur)
         if pos:
             lat, lon, precision, cp_geocode = pos
             lats.append(lat)
             lons.append(lon)
-            gps_reel.append(False)
+            # Lille : quartier déduit des coordonnées (branche a_gps_reel de trouver_quartier).
+            gps_reel.append(ville == 'lille')
             sources.append('adresse')
-            zones_texte.append(cp_geocode)  # quartier Lyon même si le CP de la ligne est ambigu
+            # Lyon : quartier via l'arrondissement géocodé, même si le CP de la ligne est ambigu.
+            zones_texte.append(cp_geocode if ville == 'lyon' else '')
             precisions.append(precision)
             continue
         precisions.append('')

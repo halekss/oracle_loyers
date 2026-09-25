@@ -12,7 +12,7 @@ SLUG_URL = "https://www.seloger.com/annonces/locations/appartement/lille-59/moul
 QUARTIERS_LYON_3 = {"Montchat", "Préfecture / Quais", "Part-Dieu / Villette"}
 
 
-def _sans_reseau(adresse, postcode=None):
+def _sans_reseau(adresse, postcode=None, ville='lyon'):
     return None
 
 
@@ -30,8 +30,8 @@ def _geocode(geocodeur=_sans_reseau, **champs):
 def _geocodeur(cp="69007", precision="numero", lat=45.731, lon=4.832):
     appels = []
 
-    def faux(adresse, postcode=None):
-        appels.append((adresse, postcode))
+    def faux(adresse, postcode=None, ville='lyon'):
+        appels.append((adresse, postcode, ville))
         return {"lat": lat, "lon": lon, "precision": precision, "cp": cp}
     faux.appels = appels
     return faux
@@ -46,7 +46,7 @@ class AdresseGeocodeeTest(unittest.TestCase):
         self.assertEqual(r["precision_localisation"], "numero")
         self.assertEqual((r["latitude"], r["longitude"]), (45.731, 4.832))
         self.assertTrue(r["sur_carte"])
-        self.assertEqual(g.appels, [("52 rue André Bollier", "69007")])
+        self.assertEqual(g.appels, [("52 rue André Bollier", "69007", "lyon")])
 
     def test_gps_prime_sur_l_adresse(self):
         g = _geocodeur()
@@ -79,11 +79,22 @@ class AdresseGeocodeeTest(unittest.TestCase):
         r = _geocode(_geocodeur(precision="rue"), description_detail="situé rue Félix Brun").iloc[0]
         self.assertEqual((r["source_localisation"], r["precision_localisation"]), ("adresse", "rue"))
 
-    def test_lille_non_geocode(self):
-        g = _geocodeur()
-        _geocode(g, code_postal="59000", ville="Lille", description_detail="au 3 rue Nationale")
-        self.assertEqual(g.appels, [])
+    def test_lille_geocode_quartier_deduit_des_coordonnees(self):
+        g = _geocodeur(cp="59000", lat=50.6395, lon=3.0625)  # Vieux-Lille
+        df = _geocode(g, code_postal="59000", ville="Lille", description_detail="au 3 rue de la Monnaie")
+        r = df.iloc[0]
+        self.assertEqual((r["source_localisation"], r["precision_localisation"]), ("adresse", "numero"))
+        self.assertEqual(g.appels, [("3 rue de la Monnaie", None, "lille")])
+        self.assertEqual(clean_immo.step_quartiers(df).iloc[0]["quartier"], "Vieux-Lille")
 
+    def test_lille_cp_hors_lille_rejete(self):
+        df = _geocode(_geocodeur(cp="69003"), code_postal="59000", ville="Lille", description_detail="au 3 rue Nationale")
+        self.assertEqual(df.iloc[0]["source_localisation"], "jitter")
+
+    def test_commune_limitrophe_non_geocodee(self):
+        g = _geocodeur(cp="59110")
+        _geocode(g, code_postal="59110", ville="La Madeleine", description_detail="au 3 rue Nationale")
+        self.assertEqual(g.appels, [])
 
 class OrdrePrioriteLocalisationTest(unittest.TestCase):
     def test_gps_prime_sur_le_texte_et_le_cp(self):

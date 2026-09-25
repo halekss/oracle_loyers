@@ -67,6 +67,14 @@ class GeocodageTest(unittest.TestCase):
         self.assertEqual(get.call_args.kwargs["params"]["postcode"], "69007")
         self.assertEqual(get.call_args.kwargs["params"]["citycode"], geocodage.CITYCODE_LYON)
 
+    def test_lille_utilise_son_code_insee_et_son_propre_cache(self):
+        get = mock.Mock(return_value=_reponse("street", 0.9, cp="59000"))
+        self._geocoder("rue Nationale", get=get, ville="lille")
+        params = get.call_args.kwargs["params"]
+        self.assertEqual((params["citycode"], params["q"]), ("59350", "rue Nationale Lille"))
+        self._geocoder("rue Nationale", get=get)  # même adresse côté Lyon : autre entrée de cache
+        self.assertEqual(get.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

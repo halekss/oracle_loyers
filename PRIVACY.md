@@ -50,7 +50,7 @@ Les annonces collectées par les scrapers (`scripts/scraper_*.py`) contiennent d
 
 ### Géocodage des adresses d'annonces (ORA-180)
 
-Quand la description d'une annonce Lyon mentionne l'adresse du bien (« 52 rue André Bollier »), `clean_immo.py` envoie **uniquement cette chaîne** (rue, numéro éventuel, « Lyon », et le code postal déjà connu) à l'API publique de géocodage de l'IGN (`data.geopf.fr/geocodage`, sans clé ni compte) pour placer l'annonce dans sa rue. Aucune autre donnée n'est transmise : ni URL, ni texte de la description, ni prix, ni identité du vendeur. Les adresses d'agence et les simples repères (« proche de la rue X ») sont écartés avant tout envoi. Le résultat est mis en cache localement dans `backend/data/geocodage_cache.json`, **exclu du dépôt** (`.gitignore`). Cela concerne des adresses de biens publiées par des tiers, pas des données des utilisateurs de l'application.
+Quand la description d'une annonce (Lyon ou Lille) mentionne l'adresse du bien (« 52 rue André Bollier »), `clean_immo.py` envoie **uniquement cette chaîne** (rue, numéro éventuel, nom de la ville, et le code postal déjà connu) à l'API publique de géocodage de l'IGN (`data.geopf.fr/geocodage`, sans clé ni compte) pour placer l'annonce dans sa rue. Aucune autre donnée n'est transmise : ni URL, ni texte de la description, ni prix, ni identité du vendeur. Les adresses d'agence et les simples repères (« proche de la rue X ») sont écartés avant tout envoi. Le résultat est mis en cache localement dans `backend/data/geocodage_cache.json`, **exclu du dépôt** (`.gitignore`). Cela concerne des adresses de biens publiées par des tiers, pas des données des utilisateurs de l'application.
 
 ---
 

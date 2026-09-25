@@ -14,7 +14,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 URL = "https://data.geopf.fr/geocodage/search"
-CITYCODE_LYON = "69123"
+CITYCODES = {"lyon": "69123", "lille": "59350"}  # codes INSEE des communes
+CITYCODE_LYON = CITYCODES["lyon"]
 SCORE_MIN = 0.7
 TIMEOUT_S = 5
 ESSAIS = 2
@@ -34,8 +35,8 @@ def _charger_cache(path):
     return _cache
 
 
-def _interroger(adresse, postcode):
-    params = {"q": f"{adresse} Lyon", "citycode": CITYCODE_LYON, "limit": 1}
+def _interroger(adresse, postcode, ville):
+    params = {"q": f"{adresse} {ville.capitalize()}", "citycode": CITYCODES[ville], "limit": 1}
     if postcode:
         params["postcode"] = postcode
     for essai in range(ESSAIS):
@@ -48,16 +49,16 @@ def _interroger(adresse, postcode):
     return None
 
 
-def geocoder(adresse, postcode=None, cache_path=CACHE_PATH):
-    """{'lat', 'lon', 'precision': 'numero'|'rue', 'cp'} ou None.
+def geocoder(adresse, postcode=None, ville="lyon", cache_path=CACHE_PATH):
+    """{'lat', 'lon', 'precision': 'numero'|'rue', 'cp'} ou None ('lyon' ou 'lille').
 
     `postcode` (arrondissement déjà connu) restreint la recherche ; la validation
     croisée du résultat reste à la charge de l'appelant.
     """
     cache = _charger_cache(cache_path)
-    cle = f"{adresse.lower()}|{postcode or ''}"
+    cle = f"{adresse.lower()}|{postcode or ''}" + ("" if ville == "lyon" else f"|{ville}")
     if cle not in cache:
-        features = _interroger(adresse, postcode)
+        features = _interroger(adresse, postcode, ville)
         if features is None:
             return None
         cache[cle] = None
