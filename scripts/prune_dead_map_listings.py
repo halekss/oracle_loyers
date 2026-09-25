@@ -64,7 +64,10 @@ GENERATE_MAP_SCRIPT = os.path.join(backend_dir, "scripts", "generate_map.py")
 # generate_map.py dépend de folium/pandas installés dans backend/.venv, pas
 # scripts/.venv (Selenium) : sys.executable pointerait vers le mauvais
 # interpréteur puisque ce script tourne sous scripts/.venv.
-BACKEND_PYTHON = os.path.join(backend_dir, ".venv", "bin", "python")
+_VENV_PYTHON = os.path.join(backend_dir, ".venv", "bin", "python")
+# Repli sur sys.executable si backend/.venv n'existe pas (runner CI : un seul
+# interpréteur avec toutes les dépendances installées).
+BACKEND_PYTHON = _VENV_PYTHON if os.path.exists(_VENV_PYTHON) else sys.executable
 
 
 def _write_csv_atomically(df, path):
