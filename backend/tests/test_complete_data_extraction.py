@@ -4,7 +4,10 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
-from complete_data_extraction import extract_coordinates_from_html, resolve_paths
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from complete_data_extraction import extract_coordinates_from_html, get_gps_from_url, resolve_paths
 
 
 class ExtractCoordinatesFromHtmlTest(unittest.TestCase):
@@ -89,6 +92,22 @@ class ResolvePathsTest(unittest.TestCase):
 
         self.assertTrue(input_file.endswith("annonces_lyon_vizzit.csv"))
         self.assertTrue(output_file.endswith("annonces_lyon_vizzit_geoloc_complete.csv"))
+
+
+class GetGpsFromUrlTest(unittest.TestCase):
+    HTML = "window.advert = { coordinates: { latitude: 50.63718, longitude: 3.07383 } }"
+
+    def _get(self, status, final_url):
+        response = SimpleNamespace(status_code=status, url=final_url, text=self.HTML)
+        with patch("complete_data_extraction.request_with_retry", return_value=response):
+            return get_gps_from_url("https://www.vizzit.fr/fr/property/appartement/lille/Axxx")
+
+    def test_reads_coordinates_even_when_vizzit_answers_http_410(self):
+        # Régression réelle : les fiches Vizzit en 410 contiennent leurs coordonnées.
+        self.assertEqual(self._get(410, "https://www.vizzit.fr/fr/property/appartement/lille/Axxx"), (50.63718, 3.07383))
+
+    def test_ignores_a_listing_redirected_to_another_site(self):
+        self.assertEqual(self._get(200, "https://www.leboncoin.fr:443/ad/locations/1"), (None, None))
 
 
 if __name__ == "__main__":
