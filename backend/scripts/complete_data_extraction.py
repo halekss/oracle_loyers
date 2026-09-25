@@ -1,9 +1,13 @@
 import argparse
+import json
 import pandas as pd
 import re
+import requests
 import time
 import os
+import uuid
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from tqdm import tqdm
 
 from http_retry import request_with_retry
@@ -86,10 +90,65 @@ def get_gps_from_url(url):
     except Exception:
         return None, None
 
-def process_row(args):
-    """Fonction exécutée par chaque thread"""
+# --- API carte de Vizzit -----------------------------------------------------
+# La page de résultats appelle cette API pour placer TOUTES les annonces de la recherche
+# (une requête, sans le plafond de 20 pages de la liste) — y compris les fiches qui
+# redirigent vers un autre site (leboncoin) et n'ont donc pas de coordonnées à lire.
+# Vérifié : identique au GPS des fiches (écart médian 0 m sur 373 annonces Lille).
+API_URL = "https://www.vizzit.fr/fr/AdvertListingInformations/GetCoordinatesAspirationalZoom"
+SCRAPING_CONFIG_PATH = os.path.join(script_dir, '..', '..', 'scripts', 'scraping_config.json')
+ANTIFORGERY_RE = re.compile(r'id="__AjaxAntiForgeryForm"[^>]*>\s*<input name="__RequestVerificationToken" type="hidden" value="([^"]+)"')
+
+
+def search_url_for_ville(ville, config_path=SCRAPING_CONFIG_PATH):
+    """URL de recherche Vizzit d'une ville (scraping_config.json), sans tranche de prix."""
+    with open(config_path, encoding='utf-8') as f:
+        return json.load(f)['villes'][ville]['vizzit']['base_url'].format(1)
+
+
+def advert_id(lien):
+    """Identifiant d'annonce Vizzit : dernier segment de l'URL de la fiche."""
+    return str(lien).rstrip('/').split('/')[-1]
+
+
+def coordinates_from_api_response(payload):
+    """{advertId: (lat, lon)} d'après la réponse JSON de l'API carte (points sans coordonnées ignorés)."""
+    return {
+        a['advertId']: (float(a['latitude']), float(a['longitude']))
+        for a in payload.get('advertsCoordinates', [])
+        if a.get('advertId') and a.get('latitude') is not None and a.get('longitude') is not None
+    }
+
+
+def fetch_api_coordinates(search_url):
+    """Positions de toutes les annonces d'une recherche Vizzit via l'API carte, ou {} en cas d'échec
+    (l'appelant retombe alors sur la lecture fiche par fiche). L'API exige le jeton anti-forgery de
+    la page de résultats ; `mapTokenId` peut être un UUID quelconque."""
+    try:
+        session = requests.Session()
+        session.headers.update(HEADERS)
+        page = session.get(search_url, timeout=20)
+        token = ANTIFORGERY_RE.search(page.text)
+        if page.status_code != 200 or not token:
+            return {}
+        query = re.search(r'searchQuery=([^&]+)', search_url).group(1)
+        response = session.post(
+            API_URL,
+            json={"searchQuery": query, "pageNumber": 1, "mapTokenId": str(uuid.uuid4()), "showNovelties": False},
+            headers={"Referer": search_url, "X-Requested-With": "XMLHttpRequest", "RequestVerificationToken": token.group(1)},
+            timeout=30,
+        )
+        if response.status_code != 200:
+            return {}
+        return coordinates_from_api_response(response.json())
+    except (requests.RequestException, ValueError, AttributeError, KeyError):
+        return {}
+
+
+def process_row(args, api_coordinates=None):
+    """Fonction exécutée par chaque thread : position de l'API carte si connue, sinon lecture de la fiche."""
     index, row = args
-    lat, lon = get_gps_from_url(row['Lien'])
+    lat, lon = (api_coordinates or {}).get(advert_id(row['Lien'])) or get_gps_from_url(row['Lien'])
     return index, lat, lon
 
 if __name__ == "__main__":
@@ -111,10 +170,14 @@ if __name__ == "__main__":
         # Liste des tâches (tuples index/row)
         tasks = list(df.iterrows())
 
-        print("⏳ Récupération des coordonnées sur chaque fiche (Multithread)...")
-        # On lance 10 navigateurs en parallèle
+        api_coordinates = fetch_api_coordinates(search_url_for_ville(args.ville))
+        print(f"🗺️  API carte Vizzit : {len(api_coordinates)} positions "
+              f"({'repli fiche par fiche pour les absentes' if api_coordinates else 'indisponible, lecture de chaque fiche'}).")
+
+        print("⏳ Récupération des coordonnées manquantes sur les fiches (Multithread)...")
+        # Les annonces absentes de l'API (ou toutes si l'API est indisponible) sont lues fiche par fiche.
         with ThreadPoolExecutor(max_workers=10) as executor:
-            results = list(tqdm(executor.map(process_row, tasks), total=len(tasks)))
+            results = list(tqdm(executor.map(partial(process_row, api_coordinates=api_coordinates), tasks), total=len(tasks)))
 
         # Intégration des résultats
         found_count = 0
