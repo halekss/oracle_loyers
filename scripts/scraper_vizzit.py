@@ -4,16 +4,13 @@ from selenium.webdriver.support import expected_conditions as EC
 import base64
 import re
 import time
-import random
 import os
 import sys
 
 from scraper_utils import (
     atomic_csv_writer,
     archive_stale_rows,
-    blank_short_descriptions,
-    enrich_descriptions,
-    find_first_image_url,
+    clean_description,
     get_chrome_driver,
     get_scraper_logger,
     load_existing_rows,
@@ -21,7 +18,6 @@ from scraper_utils import (
     pick_proxy,
     pick_user_agent,
     retry_with_backoff,
-    selenium_description_fetcher,
     should_continue_pagination,
     today_iso,
 )
@@ -69,6 +65,84 @@ IMAGE_SELECTORS = [
     "img[class*='carousel']",
     "img[class*='photo']",
 ]
+
+CSV_HEADER = ['Lieu', 'Prix', 'Details', 'Description', 'Lien', 'Image', 'DerniereVue']
+(LIEU_INDEX, PRIX_INDEX, DETAILS_INDEX, DESCRIPTION_INDEX,
+ LIEN_INDEX, IMAGE_INDEX, DERNIERE_VUE_INDEX) = range(len(CSV_HEADER))
+
+# La carte de la liste porte déjà tout ce qu'on lisait sur la fiche (constaté 2026-09 : description
+# complète, identique à celle de la fiche, pour 93 % des annonces Lille — y compris celles
+# redirigées vers leboncoin, dont la fiche n'a rien à lire) : plus de visite de fiche.
+CARD_DESC_SELECTOR = ".description-details"
+CARD_IMAGE_SELECTOR = "img.announce-card-img"
+VIZZIT_HOME = "https://www.vizzit.fr/"
+
+
+def force_euro_pricing(driver):
+    """Vizzit affiche les prix dans la devise du pays détecté par IP (CHF pour une IP suisse,
+    ~6 % de moins qu'en euros) : le cookie VisitorCountry=fr impose l'euro. Le cookie ne peut
+    être posé que sur le domaine déjà chargé."""
+    driver.get(VIZZIT_HOME)
+    driver.add_cookie({"name": "VisitorCountry", "value": "fr", "path": "/"})
+
+
+def est_en_euros(prix):
+    return "€" in (prix or "")
+
+
+def clean_card_text(text):
+    return " ".join((text or "").split())
+
+
+def full_size_photo(url):
+    """La carte affiche la miniature (`/miniPhotos/`) ; la même image en taille réelle est sous `/Photos/`."""
+    return (url or "").replace("/miniPhotos/", "/Photos/")
+
+
+def find_text_content(element, selector):
+    """Texte complet d'un élément, même tronqué/masqué à l'écran (`.text` de Selenium ne rend que le visible)."""
+    try:
+        return clean_card_text(element.find_element(By.CSS_SELECTOR, selector).get_attribute("textContent"))
+    except Exception:
+        return ""
+
+
+def lire_carte(bloc):
+    """Prix, lieu, détails, description et photo d'une carte de la liste."""
+    details_elems = []
+    for sel in DETAIL_SELECTORS:
+        details_elems = bloc.find_elements(By.CSS_SELECTOR, sel)
+        if details_elems:
+            break
+    image = ""
+    try:
+        img = bloc.find_element(By.CSS_SELECTOR, CARD_IMAGE_SELECTOR)
+        image = full_size_photo(img.get_attribute("src") or img.get_attribute("data-lazy-src"))
+    except Exception:
+        pass
+    return {
+        'lieu': find_text(bloc, LIEU_SELECTORS),
+        'prix': find_text(bloc, PRIX_SELECTORS),
+        'details': " - ".join(d.text.strip() for d in details_elems if d.text.strip()),
+        'description': clean_description(find_text_content(bloc, CARD_DESC_SELECTOR)),
+        'image': image,
+    }
+
+
+def mettre_a_jour_ligne(row, carte, today, derniere_vue_index=DERNIERE_VUE_INDEX):
+    """Rafraîchit une annonce déjà connue depuis sa carte : elle est toujours en ligne (ORA-134, TTL),
+    son prix est remis à jour (suivi des baisses/hausses ; corrige aussi les anciens prix en CHF), et
+    description / détails / photo sont complétés ou mis à jour. Un prix hors euro n'écrase rien."""
+    row[derniere_vue_index] = today
+    if est_en_euros(carte['prix']):
+        row[PRIX_INDEX] = carte['prix']
+    if carte['details']:
+        row[DETAILS_INDEX] = carte['details']
+    if carte['description']:
+        row[DESCRIPTION_INDEX] = carte['description']
+    if carte['image'] and not row[IMAGE_INDEX]:
+        row[IMAGE_INDEX] = carte['image']
+
 
 def find_text(element, selectors, default=""):
     for sel in selectors:
@@ -211,66 +285,33 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
 
         vus_avant_page = len(vus_ce_run)
         cards_vues += len(blocs)
-        annonces_a_visiter = []
+        compteur_page = 0
         for b in blocs:
             try:
                 lien = find_attr(b, LIEN_SELECTORS, "href") or decode_data_o_link(b)
                 if not lien:
                     continue
                 vus_recherche.add(lien)
+                vus_ce_run.add(lien)
+                carte = lire_carte(b)
 
                 if lien in rows_by_lien:
-                    # Déjà connue : pas de re-visite de sa page détail, on note juste
-                    # qu'elle est toujours présente sur le site (ORA-134, TTL).
-                    rows_by_lien[lien][derniere_vue_index] = today
-                    vus_ce_run.add(lien)
+                    # Déjà connue : la carte suffit à la rafraîchir (prix, description...), sans visiter la fiche.
+                    mettre_a_jour_ligne(rows_by_lien[lien], carte, today, derniere_vue_index)
                     continue
 
-                vus_ce_run.add(lien)
-                prix = find_text(b, PRIX_SELECTORS)
-                lieu = find_text(b, LIEU_SELECTORS)
-                details_elems = []
-                for sel in DETAIL_SELECTORS:
-                    details_elems = b.find_elements(By.CSS_SELECTOR, sel)
-                    if details_elems:
-                        break
-                details = " - ".join(d.text.strip() for d in details_elems if d.text.strip())
-                annonces_a_visiter.append({'lieu': lieu, 'prix': prix, 'details': details, 'lien': lien})
+                # Garde-fou devise : un prix hors euro fausserait le modèle (~6 % d'écart en CHF).
+                if not est_en_euros(carte['prix']):
+                    erreurs += 1
+                    logger.warning("Prix non affiché en euros (%r), annonce ignorée : %s", carte['prix'], lien)
+                    continue
+
+                rows_by_lien[lien] = [carte['lieu'], carte['prix'], carte['details'], carte['description'], lien, carte['image'], today]
+                liens_vus.add(lien)
+                compteur_page += 1
             except Exception as exc:
                 erreurs += 1
                 logger.warning("Erreur lors du parsing d'un bloc d'annonce : %s", exc)
-                continue
-
-        compteur_page = 0
-        for info in annonces_a_visiter:
-            try:
-                load_page(driver, info['lien'])
-                description = ""
-                # find_elements sans attente : driver.get() a déjà attendu le chargement ;
-                # l'ancien WebDriverWait(10 s) × sélecteurs coûtait ~20 s par annonce.
-                for sel in DESC_SELECTORS:
-                    desc_elems = driver.find_elements(By.CSS_SELECTOR, sel)
-                    if desc_elems:
-                        description = desc_elems[0].text.strip().replace('\n', ' ')
-                        break
-
-                image = find_first_image_url(driver, selectors=IMAGE_SELECTORS, base_url=driver.current_url)
-
-                rows_by_lien[info['lien']] = [
-                    info['lieu'], info['prix'], info['details'], description, info['lien'], image, today
-                ]
-                liens_vus.add(info['lien'])
-                compteur_page += 1
-                logger.info("Annonce récupérée : %s", info['lieu'])
-                time.sleep(random.uniform(1, 2))
-
-            except Exception as exc:
-                erreurs += 1
-                logger.warning("Erreur lors de la récupération d'une annonce : %s", exc)
-                try:
-                    load_page(driver, build_page_url(search_url, page_num))
-                except Exception as exc_recovery:
-                    logger.error("Impossible de revenir à la page de résultats %s : %s", page_num, exc_recovery)
                 continue
 
         logger.info("Page %s terminée : %s annonces sauvegardées.", page_num, compteur_page)
@@ -298,10 +339,7 @@ if __name__ == '__main__':
     total_nouveaux_run = 0
     total_cards_vues = 0
 
-    CSV_HEADER = ['Lieu', 'Prix', 'Details', 'Description', 'Lien', 'Image', 'DerniereVue']
-    LIEN_INDEX = CSV_HEADER.index('Lien')
-    DESCRIPTION_INDEX = CSV_HEADER.index('Description')
-    DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
+    force_euro_pricing(driver)
 
     existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
     rows_by_lien = {row[LIEN_INDEX]: row for row in existing_rows}
@@ -335,15 +373,8 @@ if __name__ == '__main__':
         total_cards_vues += cards_vues
         erreurs += band_erreurs
 
-    # Non revues pendant ce run -> fichier d'archive (historique des prix), avant enrichissement.
+    # Non revues pendant ce run -> fichier d'archive (historique des prix).
     archive_stale_rows(rows_by_lien, vus_ce_run, OUTPUT_PATH, CSV_HEADER, logger, all(runs_complets))
-    checkpoint()
-
-    # Stock existant : le scrape ne revisite pas les annonces connues, donc les descriptions
-    # vides ou parasites (« France Lille ») sont complétées ici, plafonné par run (cf. scraper_utils).
-    blank_short_descriptions(rows_by_lien.values(), DESCRIPTION_INDEX)
-    enrich_descriptions(rows_by_lien, LIEN_INDEX, DESCRIPTION_INDEX,
-                        selenium_description_fetcher(driver, DESC_SELECTORS), logger)
     checkpoint()
 
     driver.quit()

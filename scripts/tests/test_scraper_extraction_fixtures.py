@@ -19,6 +19,7 @@ production : ses fonctions réelles (find_bs4) sont testées directement, sans
 import os
 import sys
 import unittest
+import unittest.mock
 
 from bs4 import BeautifulSoup
 
@@ -282,6 +283,66 @@ class VizzitExtractionTest(unittest.TestCase):
         url = scraper_vizzit.apply_price_band(base_url, {})
 
         self.assertEqual(url, base_url)
+
+
+class VizzitCardTest(unittest.TestCase):
+    """La carte de la liste remplace la visite de la fiche : description, photo et prix en euros."""
+
+    def setUp(self):
+        self.card = load_fixture("vizzit_card_euro.html").select_one("div.announce-card")
+
+    def test_selectors_read_price_description_and_photo_from_the_card(self):
+        prix = bs4_first_text(self.card, scraper_vizzit.PRIX_SELECTORS)
+        description = " ".join(self.card.select_one(scraper_vizzit.CARD_DESC_SELECTOR).get_text().split())
+        photo = self.card.select_one(scraper_vizzit.CARD_IMAGE_SELECTOR)["src"]
+
+        self.assertTrue(scraper_vizzit.est_en_euros(prix))
+        self.assertTrue(description.startswith("Appartement T2 lumineux"))
+        self.assertGreater(len(description), 150)
+        self.assertIn("/miniPhotos/", photo)
+        self.assertIn("/Photos/", scraper_vizzit.full_size_photo(photo))
+        self.assertNotIn("miniPhotos", scraper_vizzit.full_size_photo(photo))
+
+    def test_est_en_euros_rejects_swiss_francs(self):
+        self.assertTrue(scraper_vizzit.est_en_euros("1 037 € /mois"))
+        self.assertFalse(scraper_vizzit.est_en_euros("978 CHF /mois"))
+        self.assertFalse(scraper_vizzit.est_en_euros(""))
+
+    def _row(self, prix="990 CHF/mois", description="", image=""):
+        return ["Lille (Nord)", prix, "65 m²", description, "https://www.vizzit.fr/x", image, "2026-09-01"]
+
+    def _carte(self, **kw):
+        return {"lieu": "Lille (Nord)", "prix": "1 037 €/mois", "details": "65 m² - 3 pièces",
+                "description": "Belle description complète de l'annonce.", "image": "https://img/Photos/1.jpg", **kw}
+
+    def test_known_row_gets_euro_price_description_and_photo_from_its_card(self):
+        row = self._row()
+        scraper_vizzit.mettre_a_jour_ligne(row, self._carte(), "2026-09-25")
+
+        self.assertEqual(row[scraper_vizzit.PRIX_INDEX], "1 037 €/mois")  # l'ancien prix CHF est corrigé
+        self.assertEqual(row[scraper_vizzit.DESCRIPTION_INDEX], "Belle description complète de l'annonce.")
+        self.assertEqual(row[scraper_vizzit.IMAGE_INDEX], "https://img/Photos/1.jpg")
+        self.assertEqual(row[scraper_vizzit.DERNIERE_VUE_INDEX], "2026-09-25")
+
+    def test_known_row_price_change_is_tracked(self):
+        row = self._row(prix="1 100 €/mois")
+        scraper_vizzit.mettre_a_jour_ligne(row, self._carte(prix="1 050 €/mois"), "2026-09-25")
+        self.assertEqual(row[scraper_vizzit.PRIX_INDEX], "1 050 €/mois")
+
+    def test_non_euro_price_never_overwrites_and_existing_image_is_kept(self):
+        row = self._row(prix="1 037 €/mois", image="https://img/old.jpg")
+        scraper_vizzit.mettre_a_jour_ligne(row, self._carte(prix="978 CHF /mois", description=""), "2026-09-25")
+
+        self.assertEqual(row[scraper_vizzit.PRIX_INDEX], "1 037 €/mois")
+        self.assertEqual(row[scraper_vizzit.IMAGE_INDEX], "https://img/old.jpg")
+
+    def test_force_euro_pricing_sets_the_visitor_country_cookie_on_the_vizzit_domain(self):
+        driver = unittest.mock.MagicMock()
+        scraper_vizzit.force_euro_pricing(driver)
+
+        driver.get.assert_called_once_with(scraper_vizzit.VIZZIT_HOME)
+        cookie = driver.add_cookie.call_args.args[0]
+        self.assertEqual((cookie["name"], cookie["value"]), ("VisitorCountry", "fr"))
 
 
 class ParuVenduExtractionTest(unittest.TestCase):
