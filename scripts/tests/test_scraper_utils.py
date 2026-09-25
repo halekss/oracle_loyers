@@ -135,6 +135,7 @@ class LoadSiteConfigTest(unittest.TestCase):
                     "slug": "lyon",
                     "century21": {"base_url": "https://example.test/lyon/page-{}/"},
                     "seloger": {"base_url": "https://example.test/seloger", "page_query_param": "page"},
+                    "vizzit": {"base_url": "https://example.test/vizzit", "price_bands": [{"max": 600}, {"min": 601}]},
                 }
             },
         }
@@ -158,6 +159,16 @@ class LoadSiteConfigTest(unittest.TestCase):
             config = load_site_config("seloger", config_path=path)
 
         self.assertEqual(config["page_query_param"], "page")
+
+    def test_price_bands_are_returned_when_configured_and_none_otherwise(self):
+        # Régression réelle : price_bands était ignoré -> Vizzit Lille plafonné à 478/726 annonces.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = self._write_config(tmp_dir)
+            with_bands = load_site_config("vizzit", config_path=path)
+            without_bands = load_site_config("seloger", config_path=path)
+
+        self.assertEqual(with_bands["price_bands"], [{"max": 600}, {"min": 601}])
+        self.assertIsNone(without_bands["price_bands"])
 
     def test_real_config_file_has_all_six_sites(self):
         config_path = os.path.join(

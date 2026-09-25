@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import json
 import os
 import random
 import sys
@@ -35,6 +36,9 @@ INPUT_RAW_CSV = os.path.join(data_dir, "base_de_donnees_immo_complet.csv")
 CAVALIERS_CSV = os.path.join(data_dir, "cavaliers_all.csv")
 OUTPUT_FINAL_CSV = os.path.join(data_dir, "master_immo_final.csv")
 ANNONCES_DB_PATH = os.path.join(data_dir, "annonces.db")
+# Historique cumulatif des annonces sorties du master (cf. step_archive_hors_master).
+ARCHIVE_CSV = os.path.join(data_dir, "master_archive.csv")
+SCRAPING_CONFIG_PATH = os.path.join(script_dir, '..', '..', 'scripts', 'scraping_config.json')
 
 # Paramètres globaux
 RADIUS_METERS = 500
@@ -366,7 +370,7 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
     previous_verif_recente = {}
     previous_df = None
     if os.path.exists(previous_csv_path):
-        previous_df = pd.read_csv(previous_csv_path)
+        previous_df = _sans_colonnes_dupliquees(pd.read_csv(previous_csv_path))
         if 'statut' in previous_df.columns and 'url' in previous_df.columns:
             previous_statut = dict(zip(previous_df['url'], previous_df['statut']))
         if 'derniere_verification_http' in previous_df.columns and 'url' in previous_df.columns:
@@ -437,6 +441,59 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
     counts = df['statut'].value_counts().to_dict()
     print(f"   ✅ Statuts : {counts}")
     return df
+
+
+def _sans_colonnes_dupliquees(df):
+    """Retire les colonnes `nom.1`, `nom.2`… que pandas crée à la lecture d'un CSV
+    dont l'en-tête répète `nom` (ex. `position_fiable`, ajoutée à chaque run par
+    step_quartiers alors que le master précédent la contenait déjà)."""
+    return df[[c for c in df.columns
+               if not (re.search(r'\.\d+$', c) and re.sub(r'\.\d+$', '', c) in df.columns)]]
+
+
+def load_sites_actifs(config_path=SCRAPING_CONFIG_PATH):
+    """Clés des sites actifs (`sites_actifs` de scraping_config.json, ex. {'vizzit', 'orpi'}),
+    ou None si la clé est absente (aucune restriction)."""
+    with open(config_path, encoding='utf-8') as f:
+        sites = json.load(f).get('sites_actifs')
+    return set(sites) if sites else None
+
+
+def step_archive_hors_master(df, archive_path=ARCHIVE_CSV, sites_actifs=None, aujourd_hui=None):
+    """Le master ne garde que les annonces scrapées au dernier run de leur (ville, site),
+    encore `active`, et d'un site actif. Toutes les autres sortent vers `master_archive.csv`.
+
+    L'archive est cumulative : une ligne par (url, prix, date_dernier_scan), avec
+    `archive_le` (date de sortie). Elle sert à suivre l'évolution des prix (anciennes +
+    nouvelles annonces). Une annonce revenue dans un scrape ultérieur reprend son
+    statut `active` et repart dans le master (l'historique reste dans l'archive).
+
+    Renvoie (master, sortantes). `sortantes` garde son `statut` (`inactive` conservé,
+    le reste devient `a_verifier`) pour que annonces.db cesse de les servir."""
+    print("\n📦 ETAPE 0 bis : Archivage des annonces hors dernier run...")
+    if sites_actifs is None:
+        sites_actifs = load_sites_actifs()
+    aujourd_hui = aujourd_hui or pd.Timestamp.now(tz='UTC').strftime('%Y-%m-%d')
+
+    en_master = (df['statut'] == 'active') & df['sur_carte'].astype(bool)
+    if sites_actifs:
+        cle_site = df['site'].astype(str).str.lower().str.replace(' ', '', regex=False)
+        en_master &= cle_site.isin(sites_actifs)
+
+    sortantes = df[~en_master].copy()
+    master = df[en_master].drop(columns=['position_fiable'], errors='ignore').reset_index(drop=True)
+    if len(sortantes):
+        sortantes['statut'] = sortantes['statut'].where(sortantes['statut'] == 'inactive', 'a_verifier')
+        sortantes['sur_carte'] = False
+        sortantes['archive_le'] = aujourd_hui
+        archive = _sans_colonnes_dupliquees(pd.read_csv(archive_path)) if os.path.exists(archive_path) else None
+        nouvelle = pd.concat([archive, _sans_colonnes_dupliquees(sortantes)], ignore_index=True, sort=False)
+        nouvelle = nouvelle.drop_duplicates(subset=['url', 'prix', 'date_dernier_scan'], keep='last')
+        tmp = archive_path + '.tmp'
+        nouvelle.to_csv(tmp, index=False)
+        os.replace(tmp, archive_path)
+    print(f"   ✅ Master : {len(master)} annonces ; {len(sortantes)} archivée(s) dans {os.path.basename(archive_path)}.")
+    return master, sortantes
 
 # =============================================================================
 # ETAPE 1 : GEOCODING & JITTER (geocoding_jitter.py)
@@ -1031,6 +1088,7 @@ def main():
 
     # 2. Exécution séquentielle en mémoire (orchestration pure, pas de logique métier ici)
     df = step_flag_expired(df)
+    df, df_sortantes = step_archive_hors_master(df)
     df = step_geocoding(df, CAVALIERS_CSV)
     df = step_quartiers(df)
     df = step_types(df)
@@ -1043,7 +1101,9 @@ def main():
     print("✨ TERMINÉ ! Le fichier master est prêt.")
 
     # 4. Synchronisation du store SQLite consommé par /api/annonces (ORA-112)
-    step_sync_annonces_store(df)
+    # Les annonces archivées sont synchronisées aussi (statut a_verifier/inactive) : sans ça,
+    # annonces.db continuerait de servir comme « active » une annonce sortie du master.
+    step_sync_annonces_store(pd.concat([df, df_sortantes], ignore_index=True, sort=False))
 
 if __name__ == "__main__":
     main()

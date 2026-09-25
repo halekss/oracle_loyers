@@ -139,6 +139,65 @@ def load_declared_villes(config_path=SCRAPING_CONFIG_PATH):
     return config['villes']
 
 
+def load_sites_actifs(config_path=SCRAPING_CONFIG_PATH):
+    """Clés des sites actifs (`sites_actifs` de scraping_config.json), ou None si absente
+    (= tous les sites). Utilisé comme valeur par défaut de `--sites` en CLI."""
+    with open(config_path, encoding='utf-8') as f:
+        sites = json.load(f).get('sites_actifs')
+    return set(sites) if sites else None
+
+
+CLES_DOUBLON = ['prix', 'surface', 'prix_m2', 'type', 'code_postal']
+DISTANCE_DOUBLON_M = 30
+LONGUEUR_MIN_SIGNATURE = 60
+
+
+def _signature_texte(row):
+    """Début du texte libre de l'annonce, normalisé (lettres/chiffres seuls), ou None s'il est
+    trop court pour identifier une annonce (les « Details » Vizzit — surface, pièces — sont
+    identiques d'un bien à l'autre de même clé : ils ne comptent pas)."""
+    for col in ('description_detail', 'description_raw'):
+        texte = re.sub(r'[^a-z0-9]', '', str(row.get(col) or '').lower())
+        if len(texte) >= LONGUEUR_MIN_SIGNATURE:
+            return texte[:80]
+    return None
+
+
+def _distance_m(lat1, lon1, lat2, lon2):
+    return (((lat1 - lat2) * 111_000) ** 2 + ((lon1 - lon2) * 111_000 * 0.63) ** 2) ** 0.5  # cos(50,6°) ≈ 0,63
+
+
+def _sont_doublons(a, b):
+    """Même prix/surface/type/CP (déjà vrai ici) ET une preuve d'identité : même début de
+    texte libre, même photo, ou positions GPS à moins de DISTANCE_DOUBLON_M m. Sans preuve
+    (ex. fiches leboncoin sans texte ni position) : deux annonces distinctes."""
+    sa, sb = _signature_texte(a), _signature_texte(b)
+    if sa and sa == sb:
+        return True
+    if a.get('image') and a.get('image') == b.get('image'):
+        return True
+    coords = [a.get('latitude'), a.get('longitude'), b.get('latitude'), b.get('longitude')]
+    if all(pd.notna(c) for c in coords):
+        return _distance_m(*[float(c) for c in coords]) <= DISTANCE_DOUBLON_M
+    return False
+
+
+def dedoublonner(df):
+    """Retire les vrais doublons (même clé prix/surface/prix_m2/type/CP + preuve d'identité,
+    cf. _sont_doublons), en gardant en premier les lignes géolocalisées. Remplace l'ancien
+    drop_duplicates sur la seule clé, qui écartait des annonces distinctes de même prix."""
+    df = df.sort_values(by=['latitude', 'longitude'], na_position='last')
+    gardees = []
+    par_cle = {}
+    for idx, row in zip(df.index, df.to_dict('records')):
+        cle = tuple(row.get(c) if pd.notna(row.get(c)) else None for c in CLES_DOUBLON)
+        if any(_sont_doublons(row, autre) for autre in par_cle.get(cle, [])):
+            continue
+        par_cle.setdefault(cle, []).append(row)
+        gardees.append(idx)
+    return df.loc[gardees]
+
+
 def resolve_default_cp(ville_config, ville_nom):
     """CP de repli pour une ville (cf. extract_postal_code). Fail-fast plutôt
     que de retomber silencieusement sur celui de Lyon ("69000") si
@@ -330,9 +389,9 @@ def run_fusion(ville_slug=None, sites=None):
             existing = existing[existing['ville'] != ville_nom]
             master_df = pd.concat([existing, master_df], ignore_index=True)
 
-        master_df = master_df.sort_values(by=['latitude', 'longitude'], na_position='last')
-        colonnes_cles = ['prix', 'surface', 'prix_m2', 'type', 'code_postal']
-        master_df = master_df.drop_duplicates(subset=colonnes_cles, keep='first')
+        avant = len(master_df)
+        master_df = dedoublonner(master_df)
+        print(f"   🧹 {avant - len(master_df)} vrai(s) doublon(s) retiré(s) (même clé + même texte, photo ou position).")
 
         master_df.index = master_df.index + 1
         master_df.reset_index(inplace=True)
@@ -352,7 +411,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Fusionne les CSV d'annonces scrapées en un fichier combiné.")
     parser.add_argument('--ville', default=None, help="Slug de la ville (cf. scraping_config.json). Par défaut : toutes les villes déclarées.")
-    parser.add_argument('--sites', default=None, help="Sites à fusionner, séparés par des virgules (ex: century21,orpi,vizzit). Par défaut : tous.")
+    parser.add_argument('--sites', default=None, help="Sites à fusionner, séparés par des virgules (ex: century21,orpi,vizzit). Par défaut : `sites_actifs` de scraping_config.json.")
     args = parser.parse_args()
 
-    run_fusion(args.ville, set(args.sites.split(',')) if args.sites else None)
+    run_fusion(args.ville, set(args.sites.split(',')) if args.sites else load_sites_actifs())

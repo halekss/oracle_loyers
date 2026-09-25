@@ -8,7 +8,7 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
-from scripts.clean_immo import step_flag_expired
+from scripts.clean_immo import step_archive_hors_master, step_flag_expired
 
 
 class StepFlagExpiredTest(unittest.TestCase):
@@ -232,3 +232,52 @@ class StepFlagExpiredTest(unittest.TestCase):
         self.assertFalse(result.loc["https://example.com/stale", "sur_carte"])
         self.assertTrue(result.loc["https://example.com/other-site", "sur_carte"])  # dernier scrape de SON site
         self.assertFalse(result.loc["https://example.com/gone", "sur_carte"])  # conservée, mais hors carte
+
+
+class StepArchiveHorsMasterTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.archive = os.path.join(self.tmp.name, "master_archive.csv")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _df(self):
+        return pd.DataFrame({
+            "url": ["v-ok", "o-gone", "s-live", "v-dead"],
+            "site": ["Vizzit", "Orpi", "SeLoger", "Vizzit"],
+            "prix": [700, 800, 900, 600],
+            "date_dernier_scan": ["2026-09-25", "2026-09-10", "2026-09-25", "2026-09-01"],
+            "statut": ["active", "a_verifier", "active", "inactive"],
+            "sur_carte": [True, False, True, False],
+            "position_fiable": [True, False, True, False],
+        })
+
+    def test_master_keeps_only_active_last_run_rows_of_active_sites(self):
+        master, sortantes = step_archive_hors_master(self._df(), self.archive, {"vizzit", "century21", "orpi"}, "2026-09-25")
+
+        self.assertEqual(list(master["url"]), ["v-ok"])
+        self.assertNotIn("position_fiable", master.columns)  # recalculée par step_quartiers
+        self.assertEqual(dict(zip(sortantes["url"], sortantes["statut"])),
+                         {"o-gone": "a_verifier", "s-live": "a_verifier", "v-dead": "inactive"})  # SeLoger : site non actif
+
+    def test_archive_is_cumulative_without_duplicates(self):
+        for _ in range(2):  # même run rejoué : pas de doublon
+            step_archive_hors_master(self._df(), self.archive, {"vizzit", "orpi"}, "2026-09-25")
+        archive = pd.read_csv(self.archive)
+
+        self.assertEqual(len(archive), 3)
+        self.assertTrue((archive["archive_le"] == "2026-09-25").all())
+
+    def test_same_listing_with_new_price_adds_a_history_row(self):
+        step_archive_hors_master(self._df(), self.archive, {"vizzit", "orpi"}, "2026-09-25")
+        df = self._df()
+        df.loc[df.url == "o-gone", ["prix", "date_dernier_scan"]] = [780, "2026-09-18"]
+        step_archive_hors_master(df, self.archive, {"vizzit", "orpi"}, "2026-10-02")
+
+        self.assertEqual(sorted(pd.read_csv(self.archive).query("url == 'o-gone'")["prix"]), [780, 800])
+
+    def test_without_sites_config_no_site_restriction(self):
+        master, _ = step_archive_hors_master(self._df(), self.archive, set(), "2026-09-25")
+
+        self.assertEqual(set(master["url"]), {"v-ok", "s-live"})

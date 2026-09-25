@@ -64,7 +64,7 @@ def load_site_config(site_key, config_path=CONFIG_PATH):
     pour un portail donné, afin que changer de ville ne nécessite pas de modifier le
     code Python des scrapers — seulement `scraping_config.json`.
 
-    Renvoie un dict {ville_nom, ville_slug, base_url, page_query_param}.
+    Renvoie un dict {ville_nom, ville_slug, base_url, page_query_param, price_bands}.
     `page_query_param` est None quand la pagination est déjà intégrée dans `base_url`
     (ex : Century21, Orpi, PAP, Vizzit utilisent un `{}` positionnel dans l'URL).
     """
@@ -80,6 +80,9 @@ def load_site_config(site_key, config_path=CONFIG_PATH):
         "ville_slug": ville_config["slug"],
         "base_url": site_config["base_url"],
         "page_query_param": site_config.get("page_query_param"),
+        # Tranches de prix (Vizzit) : sans cette clé, elles étaient ignorées en silence et
+        # la recherche restait plafonnée à 20 pages (478/726 annonces pour Lille).
+        "price_bands": site_config.get("price_bands"),
     }
 
 

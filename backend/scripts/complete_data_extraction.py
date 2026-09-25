@@ -75,7 +75,11 @@ def get_gps_from_url(url):
         # Timeout explicite + retry/backoff sur erreur transitoire (modèle http_retry)
         r = request_with_retry("GET", url, headers=HEADERS, timeout=10)
 
-        if r is None or r.status_code != 200:
+        # Le statut n'est PAS filtré : Vizzit répond souvent HTTP 410 sur des fiches
+        # pourtant complètes (coordonnées incluses) — l'ancien `!= 200` écartait ~85 %
+        # des positions (62/479 pour Lille). En revanche, une fiche qui redirige vers un
+        # autre site (leboncoin) n'a pas de coordonnées Vizzit : on ne parse que Vizzit.
+        if r is None or "vizzit.fr" not in str(r.url):
             return None, None
 
         return extract_coordinates_from_html(r.text)

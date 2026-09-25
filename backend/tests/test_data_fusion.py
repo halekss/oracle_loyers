@@ -412,5 +412,41 @@ class RunFusionPerVilleTest(unittest.TestCase):
         self.assertEqual(set(result["url"]), {"https://example.test/lyon1", "https://example.test/lille-new"})
 
 
+class DedoublonnerTest(unittest.TestCase):
+    TEXTE = "Bel appartement lumineux au 3e etage avec balcon plein sud proche metro et commerces"
+
+    def _df(self, *rows):
+        base = {"prix": 700, "surface": 40.0, "prix_m2": 17.5, "type": "T2", "code_postal": "59000",
+                "description_detail": "", "description_raw": "", "image": "", "latitude": None, "longitude": None}
+        return pd.DataFrame([{**base, **r} for r in rows])
+
+    def test_same_key_and_same_free_text_is_a_duplicate(self):
+        df = self._df({"url": "a", "description_detail": self.TEXTE}, {"url": "b", "description_detail": self.TEXTE.upper()})
+        self.assertEqual(len(data_fusion.dedoublonner(df)), 1)
+
+    def test_same_key_without_any_proof_keeps_both(self):
+        # Ex. fiches leboncoin sans texte ni position : rien ne prouve que ce soit le même bien.
+        df = self._df({"url": "a"}, {"url": "b"})
+        self.assertEqual(len(data_fusion.dedoublonner(df)), 2)
+
+    def test_short_details_text_is_not_a_proof(self):
+        df = self._df({"url": "a", "description_raw": "2 pieces 40 m2"}, {"url": "b", "description_raw": "2 pieces 40 m2"})
+        self.assertEqual(len(data_fusion.dedoublonner(df)), 2)
+
+    def test_close_gps_is_a_duplicate_far_gps_is_not(self):
+        proche = self._df({"url": "a", "latitude": 50.6300, "longitude": 3.0600}, {"url": "b", "latitude": 50.63005, "longitude": 3.06005})
+        loin = self._df({"url": "a", "latitude": 50.6300, "longitude": 3.0600}, {"url": "b", "latitude": 50.6400, "longitude": 3.0700})
+        self.assertEqual(len(data_fusion.dedoublonner(proche)), 1)
+        self.assertEqual(len(data_fusion.dedoublonner(loin)), 2)
+
+    def test_same_photo_is_a_duplicate(self):
+        df = self._df({"url": "a", "image": "https://img/x.jpg"}, {"url": "b", "image": "https://img/x.jpg"})
+        self.assertEqual(len(data_fusion.dedoublonner(df)), 1)
+
+    def test_different_price_is_never_a_duplicate(self):
+        df = self._df({"url": "a", "description_detail": self.TEXTE}, {"url": "b", "prix": 750, "description_detail": self.TEXTE})
+        self.assertEqual(len(data_fusion.dedoublonner(df)), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

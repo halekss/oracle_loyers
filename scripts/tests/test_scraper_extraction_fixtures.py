@@ -223,6 +223,14 @@ class VizzitExtractionTest(unittest.TestCase):
 
         self.assertEqual(scraper_vizzit.decode_data_o_link(element), "")
 
+    def test_parse_expected_count_reads_total_from_results_title(self):
+        # Garde-fou d'archivage : le nombre annoncé par le site fixe si un run est complet.
+        self.assertEqual(scraper_vizzit.parse_expected_count("726 appartements et maisons à louer à Lille (Nord)"), 726)
+        self.assertEqual(scraper_vizzit.parse_expected_count("1 204 appartements et maisons à louer"), 1204)
+        self.assertEqual(scraper_vizzit.parse_expected_count("0 appartement et maison à louer à Lille"), 0)
+        self.assertIsNone(scraper_vizzit.parse_expected_count("Vizzit"))
+        self.assertIsNone(scraper_vizzit.parse_expected_count(None))
+
     def test_build_page_url_uses_base_url_as_is_for_page_one(self):
         base_url = "https://www.vizzit.fr/fr/properties/{}?searchQuery=lg-fr-cn-fr-city_id-gr_3040"
 
