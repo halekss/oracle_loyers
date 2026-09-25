@@ -2,6 +2,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import base64
+import re
 import time
 import random
 import os
@@ -132,6 +133,17 @@ def apply_price_band(base_url, band):
         url += f"-mx_p-{band['max']}"
     return url
 
+def parse_expected_count(title):
+    """Nombre total d'annonces annoncé par le site, lu dans le titre de la page
+    de résultats ("726 appartements et maisons à louer à Lille"). None si absent.
+
+    Sert de garde-fou : une recherche n'est « complète » (donc autorisée à
+    archiver les annonces non revues) que si le run en a revu au moins autant.
+    Sans ça, une page vide ou bloquée en cours de route passait pour la fin des
+    résultats et envoyait en archive des annonces encore en ligne."""
+    m = re.match(r"\s*(\d[\d\s  ]*?)\s+(?:appartement|maison)", title or "")
+    return int(re.sub(r"\D", "", m.group(1))) if m else None
+
 @retry_with_backoff(max_retries=3, backoff_seconds=2)
 def load_page(driver, url):
     driver.get(url)
@@ -156,6 +168,8 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
     consecutive_empty_pages = 0
     page_num = 1
     continuer = True
+    attendu = None
+    vus_recherche = set()
 
     while continuer:
         logger.info("Analyse de la page %s", page_num)
@@ -166,6 +180,8 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
             break
 
         if page_num == 1:
+            attendu = parse_expected_count(driver.title)
+            logger.info("Le site annonce %s annonces pour cette recherche.", attendu)
             logger.info("En attente de la validation des cookies sur Vizzit...")
             card_found = False
             for sel in CARD_SELECTORS:
@@ -191,7 +207,6 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
 
         if not blocs:
             logger.warning("Fin des résultats à la page %s.", page_num)
-            etat["complet"] = page_num > 1
             break
 
         vus_avant_page = len(vus_ce_run)
@@ -202,6 +217,7 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
                 lien = find_attr(b, LIEN_SELECTORS, "href") or decode_data_o_link(b)
                 if not lien:
                     continue
+                vus_recherche.add(lien)
 
                 if lien in rows_by_lien:
                     # Déjà connue : pas de re-visite de sa page détail, on note juste
@@ -262,9 +278,14 @@ def scrape_search(driver, wait, search_url, rows_by_lien, liens_vus, today, dern
         checkpoint()
 
         continuer, consecutive_empty_pages = should_continue_pagination(len(vus_ce_run) - vus_avant_page, consecutive_empty_pages)
-        if not continuer:
-            etat["complet"] = True
         page_num += 1
+
+    # Complète = autant d'annonces revues que le site en annonce (et pas juste « la
+    # pagination s'est arrêtée ») ; sinon aucune archive (cf. parse_expected_count).
+    etat["complet"] = attendu is not None and len(vus_recherche) >= attendu
+    if not etat["complet"]:
+        logger.error("Recherche incomplète : %s annonces revues sur %s annoncées par le site. "
+                     "Aucune annonce ne sera archivée pour ce run.", len(vus_recherche), attendu)
 
     return nouveaux, cards_vues, erreurs
 
