@@ -274,6 +274,15 @@ def run_fusion(ville_slug=None, sites=None):
             v_df['prix'] = df_v['Prix'].apply(clean_price_integer)
 
             v_df['description_raw'] = df_v['Details']
+            # ORA-161/ORA-180 : le fichier GPS n'a pas la page détail ; on la reprend du
+            # CSV de scraping (même `Lien`). Absent → '' comme avant.
+            v_df['description_detail'] = ''
+            vizzit_detail_file = os.path.join(data_dir, f'annonces_{slug}_vizzit.csv')
+            if os.path.exists(vizzit_detail_file):
+                detail = pd.read_csv(vizzit_detail_file)
+                if 'Description' in detail.columns:
+                    par_url = detail.drop_duplicates('Lien').set_index('Lien')['Description']
+                    v_df['description_detail'] = df_v['Lien'].map(par_url).fillna('')
             v_df['type'] = df_v['Details'].apply(extract_type)
             v_df['surface'] = df_v['Details'].apply(clean_surface)
             v_df['code_postal'] = df_v['Lieu'].apply(lambda t: extract_postal_code(t, default_cp))

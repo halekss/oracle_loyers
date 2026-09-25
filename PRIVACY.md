@@ -48,6 +48,10 @@ Ce document liste, pour chaque type de donnée à caractère personnel traitée 
 
 Les annonces collectées par les scrapers (`scripts/scraper_*.py`) contiennent des données publiques publiées par des tiers (agences, particuliers) sur des sites d'annonces — ce ne sont pas des données des *utilisateurs de cette application*. Leur collecte est encadrée séparément par la conformité aux CGU/robots.txt des sites sources (voir les tickets dédiés ORA-67 et ORA-93), qui est un sujet distinct de la présente politique de rétention des données utilisateur.
 
+### Géocodage des adresses d'annonces (ORA-180)
+
+Quand la description d'une annonce Lyon mentionne l'adresse du bien (« 52 rue André Bollier »), `clean_immo.py` envoie **uniquement cette chaîne** (rue, numéro éventuel, « Lyon », et le code postal déjà connu) à l'API publique de géocodage de l'IGN (`data.geopf.fr/geocodage`, sans clé ni compte) pour placer l'annonce dans sa rue. Aucune autre donnée n'est transmise : ni URL, ni texte de la description, ni prix, ni identité du vendeur. Les adresses d'agence et les simples repères (« proche de la rue X ») sont écartés avant tout envoi. Le résultat est mis en cache localement dans `backend/data/geocodage_cache.json`, **exclu du dépôt** (`.gitignore`). Cela concerne des adresses de biens publiées par des tiers, pas des données des utilisateurs de l'application.
+
 ---
 
 *Dernière mise à jour : voir l'historique Git de ce fichier. Toute évolution de la collecte de données (nouvelle fonctionnalité, réactivation d'une persistance de conversation, ajout d'un outil d'analytics...) doit s'accompagner d'une mise à jour de ce document avant déploiement.*

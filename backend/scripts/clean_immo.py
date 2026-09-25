@@ -26,6 +26,8 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 from services import annonces_store  # noqa: E402 (après le sys.path.insert nécessaire)
+from services.adresse_texte import localiser_adresse  # noqa: E402
+from services.geocodage import geocoder  # noqa: E402
 from services.localisation_texte import localiser_par_texte  # noqa: E402
 
 # Fichiers d'entrée/sortie
@@ -627,14 +629,35 @@ def _ville_de_la_ligne(row, cp):
     return {'59': 'lille', '69': 'lyon'}.get(cp[:2])
 
 
-def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_SEED):
+def _position_adresse(row, cp, ville, geocodeur):
+    """(lat, lon, precision, cp_geocode) d'une adresse du bien trouvée dans le texte, sinon None.
+
+    Lyon uniquement (le géocodeur est restreint à Lyon). Le CP du résultat doit
+    être cohérent avec celui déjà connu : un arrondissement fiable doit
+    correspondre exactement (rue homonyme d'un autre arrondissement = rejet).
+    """
+    if ville != 'lyon':
+        return None
+    adresse, _raison = localiser_adresse(
+        [row.get(c) for c in ('description_detail', 'description_raw', 'description')]
+    )
+    if not adresse:
+        return None
+    cp_connu = cp if cp in CP_FIABLES else None
+    res = geocodeur(adresse, cp_connu)
+    if not res or not str(res['cp']).startswith('690') or (cp_connu and res['cp'] != cp_connu):
+        return None
+    return res['lat'], res['lon'], res['precision'], res['cp']
+
+
+def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_SEED, geocodeur=geocoder):
     print("\n📍 ETAPE 1 : Géocodage & Jitter...")
     random.seed(seed)
     polygons_map = build_shapes_from_cavaliers(cavaliers_csv_path)
 
     df['code_postal'] = df['code_postal'].fillna(69000).apply(clean_zipcode)
 
-    lats, lons, gps_reel, sources, zones_texte = [], [], [], [], []
+    lats, lons, gps_reel, sources, zones_texte, precisions = [], [], [], [], [], []
     for _, row in df.iterrows():
         # Priorité stricte, la première règle qui s'applique gagne :
         # 1. GPS scrapé (Vizzit) — jamais écrasé
@@ -645,11 +668,25 @@ def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_S
                 gps_reel.append(True)
                 sources.append('gps')
                 zones_texte.append('')
+                precisions.append('')
                 continue
             except (TypeError, ValueError):
                 pass  # conversion impossible : on génère
 
         cp, url = row['code_postal'], row.get('url')
+        # 1 bis. Adresse du bien extraite du texte (ORA-180) : rue/numéro géocodés.
+        # Pas de jitter : le point est celui de l'API. Échec/rejet → règles suivantes.
+        pos = _position_adresse(row, cp, _ville_de_la_ligne(row, cp), geocodeur)
+        if pos:
+            lat, lon, precision, cp_geocode = pos
+            lats.append(lat)
+            lons.append(lon)
+            gps_reel.append(False)
+            sources.append('adresse')
+            zones_texte.append(cp_geocode)  # quartier Lyon même si le CP de la ligne est ambigu
+            precisions.append(precision)
+            continue
+        precisions.append('')
         # 2. CP fiable, ou slug de quartier d'URL SeLoger (même niveau)
         source = _source_cp_ou_url(cp, url)
         zone_texte = ''
@@ -680,6 +717,8 @@ def step_geocoding(df, cavaliers_csv_path=CAVALIERS_CSV, seed=GEOCODING_JITTER_S
     df['latitude'] = lats
     df['longitude'] = lons
     df['source_localisation'] = sources
+    # 'numero' (point exact) ou 'rue' (centre de la rue) pour source 'adresse', sinon vide.
+    df['precision_localisation'] = precisions
     # Colonne de travail (comme a_gps_reel) : quartier/arrondissement décidé par
     # le texte, consommé par trouver_quartier() puis retirée par step_quartiers().
     df['zone_texte'] = zones_texte

@@ -20,6 +20,9 @@ backend/models/*.joblib
 # de l'API (init_db), pas une donnée source à versionner.
 backend/data/*.db
 
+# Cache du géocodage d'adresses (ORA-180) : adresses de biens, régénéré à la demande.
+backend/data/geocodage_cache.json
+
 # Node / React (Frontend)
 node_modules/
 frontend/dist/
