@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import ResultCard from './components/ResultCard';
 import PriceHistory from './components/PriceHistory';
-import MapComponent, { ToggleItem } from './components/MapComponent';
+import MapComponent from './components/MapComponent';
+import CalquesView from './components/CalquesView';
 import ChatOracle from './components/ChatOracle';
 import AnnoncesList from './components/AnnoncesList';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -19,8 +20,7 @@ import { computeBoundsForQuartiers } from './services/mapBounds';
 import { computeHomeStats } from './services/homeStats';
 import { computeQuartierOptions } from './services/quartierStats';
 import { computeLatestDataDate } from './services/latestDataDate';
-import { layersByGroup, defaultLayerVisibility } from './services/mapLayers';
-import { loadLayerVisibility, saveLayerVisibility } from './services/mapLayersStorage';
+import { useLayerVisibility } from './hooks/useLayerVisibility';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
 // l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
@@ -114,16 +114,8 @@ function App() {
   // ORA-178 : visibilité des calques — remontée depuis MapComponent (qui
   // devient un composant contrôlé) pour qu'App en soit l'unique source de
   // vérité, partagée par la vue "Calques" du rail ET le panneau flottant
-  // mobile. Persistée en localStorage (mapLayersStorage.js), initialisée
-  // depuis `defaultVisible` (mapLayers.config.json) tant que rien n'a encore
-  // été sauvegardé.
-  const [layerVisibility, setLayerVisibility] = useState(() => loadLayerVisibility(defaultLayerVisibility()));
-
-  useEffect(() => {
-    saveLayerVisibility(layerVisibility);
-  }, [layerVisibility]);
-
-  const toggleLayer = (key) => setLayerVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
+  // mobile (hook dédié, testable indépendamment : useLayerVisibility.test.js).
+  const { layers: layerVisibility, toggleLayer, resetLayers } = useLayerVisibility();
   // Sélecteur de ville (ORA-71 POC) : ne change que la carte affichée et le
   // bornage des recherches quartier/historique — les CSV/codes postaux
   // Lyon/Lille restant jamais ambigus entre les deux villes.
@@ -492,31 +484,22 @@ function App() {
     );
   }
 
-  // ORA-178 : vue "Calques" — App porte désormais `layerVisibility`
-  // (état remonté, unique source de vérité) et l'applique directement, sans
-  // passer par une ref sur MapComponent (composant contrôlé).
+  // ORA-178 : vue "Calques" (maquette vue-calques.png) — Fonds de carte +
+  // lecture détaillée des 4 cavaliers autour du quartier scanné. Réutilise
+  // les mêmes données que le bloc "Les 4 Cavaliers" de la vue Scan
+  // (`result.cavaliersDetail`/`result.facteurs`), jamais recalculées ici.
   function renderCalquesView() {
     return (
-      <div className="p-4 md:p-5 space-y-4">
-        <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Transports</h3>
-          {layersByGroup('transports').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layerVisibility[layer.key]} onToggle={() => toggleLayer(layer.key)} />
-          ))}
-        </div>
-        <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Les 4 Cavaliers</h3>
-          {layersByGroup('contexte').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layerVisibility[layer.key]} onToggle={() => toggleLayer(layer.key)} />
-          ))}
-        </div>
-        <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Offres Immobilières</h3>
-          {layersByGroup('immobilier').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layerVisibility[layer.key]} onToggle={() => toggleLayer(layer.key)} />
-          ))}
-        </div>
-      </div>
+      <CalquesView
+        layers={layerVisibility}
+        onToggleLayer={toggleLayer}
+        cavaliersDetail={result?.cavaliersDetail}
+        facteurs={result?.facteurs}
+        quartier={result?.quartier}
+        zonesCount={homeStats.districts.length}
+        ville={ville}
+        onGoToRecherche={() => setActiveView('recherche')}
+      />
     );
   }
 
@@ -574,8 +557,29 @@ function App() {
         return { overline: breadcrumb, title: 'Scan du quartier' };
       case 'estimation':
         return { overline: breadcrumb, title: 'Estimation personnalisée' };
-      case 'calques':
-        return { title: 'Calques & 4 cavaliers' };
+      case 'calques': {
+        // ORA-178 : sur-titre "QUARTIER · TYPE · ARRONDISSEMENT" (maquette
+        // vue-calques.png) — l'arrondissement vient de `quartierOptions`
+        // (déjà calculé, palette de recherche), jamais recalculé ici.
+        const arrondissement = quartierOptions.find((o) => o.quartier === result?.quartier)?.arrondissement;
+        const calquesBreadcrumb = result?.quartier
+          ? [result.quartier, result.type && result.type !== 'Tout' ? result.type : null, arrondissement]
+              .filter(Boolean).join(' · ').toUpperCase()
+          : undefined;
+        return {
+          overline: calquesBreadcrumb,
+          title: 'Calques & 4 cavaliers',
+          actions: (
+            <button
+              type="button"
+              onClick={resetLayers}
+              className="shrink-0 min-h-[32px] px-2 text-[10px] uppercase tracking-widest font-bold text-violet-400 hover:text-violet-300"
+            >
+              Réinitialiser
+            </button>
+          ),
+        };
+      }
       case 'annonces':
         return { title: 'Annonces' };
       case 'fiche': {
@@ -594,7 +598,7 @@ function App() {
     }
   }
 
-  const { overline: sheetOverline, title: sheetTitle } = panelSheetHeader();
+  const { overline: sheetOverline, title: sheetTitle, actions: sheetActions } = panelSheetHeader();
 
   return (
     <div className="flex flex-col h-screen w-screen bg-ink-950 text-ink overflow-hidden font-sans selection:bg-accent/30">
@@ -657,6 +661,7 @@ function App() {
               id={PANEL_SHEET_ID}
               overline={activeView === 'immotep' ? undefined : sheetOverline}
               title={activeView === 'immotep' ? undefined : sheetTitle}
+              actions={activeView === 'immotep' ? undefined : sheetActions}
             >
               {/* ORA-175/178 : Immotep reste monté en permanence (juste
                   masqué) pour ne jamais perdre l'historique de conversation
