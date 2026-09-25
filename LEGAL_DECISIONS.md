@@ -96,6 +96,24 @@ source. Pas de téléchargement, pas de copie, pas de re-service d'image depuis 
 
 ---
 
+## ORA-180 — Adresses extraites des annonces et géocodées par un service tiers
+
+- **Décision** : autorisé, avec un périmètre minimal. Pour placer une annonce dans sa rue, seule
+  la chaîne d'adresse du bien (rue + numéro éventuel + ville, Lyon ou Lille, + code postal déjà connu) est
+  envoyée à la Géoplateforme de l'IGN (service public, gratuit, sans clé). Rien d'autre :
+  ni description, ni URL, ni prix, ni identité.
+- **Particuliers** (annonces Vizzit agrégeant des annonces de particuliers) : l'adresse est déjà
+  publique dans l'annonce ; elle n'est ni republiée telle quelle ni associée à une personne. La
+  position affichée est celle d'un point de carte, avec la précision `numero` ou `rue`.
+- **Garde-fous** : adresses d'agence et repères jamais géocodés ; code postal du résultat
+  contrôlé contre celui déjà connu ; cache local hors dépôt (`backend/data/geocodage_cache.json`) ;
+  échec réseau non bloquant (repli sur le code postal).
+- **Risque résiduel assumé** : un point au numéro peut permettre de retrouver l'immeuble d'un
+  particulier. À réévaluer avant toute mise en production publique ; en cas de doute, ne
+  conserver que la précision `rue`.
+
+---
+
 *Ce document reflète l'état des décisions à la date indiquée dans l'historique Git de ce fichier.
 Toute nouvelle question légale/éthique relevant de l'épic ORA-80 (ou d'un autre sujet légal du
 projet) doit être ajoutée ici plutôt que dispersée dans les tickets individuels, pour garder une

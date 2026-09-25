@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-09-24T22:37:02.542480+00:00",
-  "data_snapshot_sha256": "b0c2ff5bd436d5d105f7add4e2e574fb0fb4d879078ef81b0293cf30624f1cce",
-  "data_snapshot_file": "master_immo_final_b0c2ff5bd436.csv",
+  "trained_at": "2026-09-25T08:51:14.647781+00:00",
+  "data_snapshot_sha256": "96ffe9003e07626213ae0f74438f40369c16413a1395c19068affaec7921e571",
+  "data_snapshot_file": "master_immo_final_96ffe9003e07.csv",
   "metrics": {
-    "mae": 164.0933457510812,
-    "r2": 0.772979572140976
+    "mae": 163.91884765625,
+    "r2": 0.77676256268029
   },
-  "model_version": "59dce959a417",
+  "model_version": "306f3acd42bb",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
