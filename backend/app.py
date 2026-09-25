@@ -14,6 +14,7 @@ from services.chat_service import ChatService
 from services.predictor import build_feature_row, estimate_confidence, is_physically_implausible_price
 from services.annonce_detail import enrich_annonce_detail
 from services.cavaliers_factors import detail_cavaliers, summarize_cavaliers
+from services.cavaliers_radius import CavaliersRadiusService
 from services.price_history import compute_price_history
 from services.quartier_search import resolve_quartier_filter
 from services.pdf_report import render_estimation_pdf
@@ -23,6 +24,7 @@ from schemas import (
     QuartierStatsRequestSchema,
     PredictRequestSchema,
     PdfReportRequestSchema,
+    CavaliersRequestSchema,
     ValidationError,
 )
 import joblib
@@ -212,6 +214,14 @@ except Exception as exc:
         type(exc).__name__, exc,
     )
     cavaliers_df = None
+
+# GET /api/cavaliers : calcul en direct par rayon choisi
+# (300/500/1000m), à partir des CSV cavaliers_<ville>.csv bruts — chargés une
+# seule fois ici, pas à chaque requête (services/cavaliers_radius.py).
+cavaliers_radius_service = CavaliersRadiusService(
+    os.path.join(BASE_DIR, 'data', 'cavaliers_lyon.csv'),
+    os.path.join(BASE_DIR, 'data', 'cavaliers_lille.csv'),
+)
 
 logger.info("Initialisation d'Immotep (Service Chat)...")
 chat_service = ChatService()
@@ -643,6 +653,73 @@ def get_quartier_stats():
             type(e).__name__, e, exc_info=True,
         )
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/cavaliers', methods=['GET'])
+def get_cavaliers():
+    """
+    Détail des 4 Cavaliers autour d'un point, pour un rayon choisi.
+    Calcule en direct (haversine) depuis cavaliers_lyon.csv/cavaliers_lille.csv
+    — ne fait PAS appel aux colonnes précalculées à 500m de
+    master_immo_final.csv (celles-ci restent réservées au modèle et à
+    /api/quartier-stats). Vue "Calques" du rail (sélecteur de rayon).
+    ---
+    tags:
+      - Cavaliers
+    parameters:
+      - name: lat
+        in: query
+        type: number
+        required: true
+        example: 45.750
+      - name: lng
+        in: query
+        type: number
+        required: true
+        example: 4.832
+      - name: ville
+        in: query
+        type: string
+        required: true
+        example: lyon
+      - name: rayon_m
+        in: query
+        type: integer
+        required: false
+        default: 500
+        description: "300, 500 ou 1000 uniquement"
+    responses:
+      200:
+        description: >
+          cavaliers_detail (même forme que /api/quartier-stats) et facteurs
+          (phrases), calculés pour le rayon demandé.
+      400:
+        description: Paramètres manquants ou invalides (lat/lng/ville requis, rayon_m doit être 300/500/1000)
+      500:
+        description: Erreur lors du calcul
+    """
+    try:
+        payload = CavaliersRequestSchema(**request.args.to_dict())
+    except (ValidationError, TypeError):
+        return jsonify({
+            "error": "Paramètres invalides : lat, lng et ville sont requis ; rayon_m doit être 300, 500 ou 1000",
+        }), 400
+
+    try:
+        result = cavaliers_radius_service.compute(payload.lat, payload.lng, payload.ville, payload.rayon_m)
+    except Exception as exc:
+        logger.error(
+            "Erreur endpoint /api/cavaliers : %s - %s",
+            type(exc).__name__, exc, exc_info=True,
+        )
+        return jsonify({"error": "Erreur lors du calcul des cavaliers"}), 500
+
+    return jsonify({
+        "ville": payload.ville,
+        "rayon_m": payload.rayon_m,
+        **result,
+    })
+
 
 @app.route('/api/quartier-historique', methods=['POST'])
 def get_quartier_historique():

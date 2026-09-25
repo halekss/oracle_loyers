@@ -16,6 +16,7 @@ __all__ = [
     "QuartierStatsRequestSchema",
     "PredictRequestSchema",
     "PdfReportRequestSchema",
+    "CavaliersRequestSchema",
     "ValidationError",
 ]
 
@@ -46,6 +47,32 @@ class QuartierStatsRequestSchema(BaseModel):
     def quartier_must_not_be_blank(cls, value):
         if not value or not value.strip():
             raise ValueError("quartier vide")
+        return value
+
+
+class CavaliersRequestSchema(BaseModel):
+    # GET /api/cavaliers — query string (request.args), toujours des chaînes
+    # : pydantic les convertit en float/int (mode non strict par défaut).
+    lat: float
+    lng: float
+    ville: str
+    # Seul rayon précalculé actuellement côté données : 500m — 300/1000
+    # existent uniquement via le calcul en direct de cavaliers_radius.py.
+    rayon_m: int = 500
+
+    @field_validator("ville")
+    @classmethod
+    def ville_must_not_be_blank(cls, value):
+        if not value or not value.strip():
+            raise ValueError("ville vide")
+        return value
+
+    @field_validator("rayon_m")
+    @classmethod
+    def rayon_must_be_allowed(cls, value):
+        from services.cavaliers_radius import ALLOWED_RADII_M
+        if value not in ALLOWED_RADII_M:
+            raise ValueError(f"rayon_m doit être l'un de {ALLOWED_RADII_M}")
         return value
 
 

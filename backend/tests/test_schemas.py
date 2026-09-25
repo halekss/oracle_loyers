@@ -5,6 +5,7 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from schemas import (
+    CavaliersRequestSchema,
     ChatRequestSchema,
     PredictRequestSchema,
     QuartierStatsRequestSchema,
@@ -79,6 +80,34 @@ class PredictRequestSchemaTest(unittest.TestCase):
     def test_rejects_quartier_shaped_as_a_list(self):
         with self.assertRaises(ValidationError):
             PredictRequestSchema(quartier=["Gerland"], type_local="T2", surface=45)
+
+
+class CavaliersRequestSchemaTest(unittest.TestCase):
+    def test_accepts_a_valid_payload(self):
+        payload = CavaliersRequestSchema(lat="45.75", lng="4.83", ville="lyon", rayon_m="300")
+        self.assertEqual(payload.lat, 45.75)
+        self.assertEqual(payload.lng, 4.83)
+        self.assertEqual(payload.rayon_m, 300)
+
+    def test_rayon_m_defaults_to_500(self):
+        payload = CavaliersRequestSchema(lat=45.75, lng=4.83, ville="lyon")
+        self.assertEqual(payload.rayon_m, 500)
+
+    def test_rejects_a_rayon_m_outside_300_500_1000(self):
+        with self.assertRaises(ValidationError):
+            CavaliersRequestSchema(lat=45.75, lng=4.83, ville="lyon", rayon_m=400)
+
+    def test_rejects_missing_lat(self):
+        with self.assertRaises(ValidationError):
+            CavaliersRequestSchema(lng=4.83, ville="lyon")
+
+    def test_rejects_missing_ville(self):
+        with self.assertRaises(ValidationError):
+            CavaliersRequestSchema(lat=45.75, lng=4.83)
+
+    def test_rejects_blank_ville(self):
+        with self.assertRaises(ValidationError):
+            CavaliersRequestSchema(lat=45.75, lng=4.83, ville="   ")
 
 
 if __name__ == "__main__":
