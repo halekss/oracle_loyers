@@ -577,7 +577,7 @@ function App() {
             <button
               type="button"
               onClick={resetLayers}
-              className="shrink-0 min-h-[32px] px-2 text-[10px] uppercase tracking-widest font-bold text-violet-400 hover:text-violet-300"
+              className="shrink-0 min-h-[44px] px-2 flex items-center text-[10px] uppercase tracking-widest font-bold text-violet-400 hover:text-violet-300"
             >
               Réinitialiser
             </button>
