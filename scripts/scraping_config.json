@@ -1,5 +1,6 @@
 {
   "ville_active": "lille",
+  "sites_actifs": ["vizzit", "century21", "orpi"],
   "details": {
     "max_per_run": 100,
     "delay_min_s": 2.0,

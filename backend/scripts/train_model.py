@@ -56,12 +56,9 @@ def train(ville_slug):
         print(f"❌ Erreur : Fichier introuvable {data_path}")
         exit()
 
-    # ORA-134 bis : les annonces marquées `statut='inactive'` (confirmées mortes
-    # côté site source) restent dans master_immo_final.csv et donc dans ce
-    # dataset d'entraînement — décision produit assumée : leur prix historique
-    # reste statistiquement valable pour le modèle même si le lien source a
-    # expiré. Seuls les endpoints d'affichage utilisateur (/api/listings,
-    # generate_map.py, /api/annonces) filtrent les inactive.
+    # Le master ne contient que les annonces du dernier run (les autres sont dans
+    # master_archive.csv, cf. clean_immo.step_archive_hors_master) : le modèle
+    # s'entraîne donc sur le marché courant. Entraîner aussi sur l'archive : ORA-181.
     df_all = pd.read_csv(data_path)
     df = df_all[df_all['ville'] == ville_nom]
     if df.empty:
