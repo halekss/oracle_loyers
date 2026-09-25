@@ -129,4 +129,48 @@ describe('CalquesView', () => {
     expect(screen.queryByText(/parfait pour un verre/i)).not.toBeInTheDocument(); // Vice replié par défaut
     expect(screen.getByText('Une salle de sport à 54m.')).toBeInTheDocument(); // Gentrification dépliée
   });
+
+  describe('sélecteur de rayon (300 m/500 m/1 km)', () => {
+    it('highlights the currently selected radius', () => {
+      renderView({ cavaliersDetail, facteurs, radiusM: 500 });
+
+      expect(screen.getByRole('button', { name: '500 m' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: '300 m' })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('button', { name: '1 km' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('calls onChangeRadiusM with 300 when the 300 m option is clicked', async () => {
+      const user = userEvent.setup();
+      const onChangeRadiusM = vi.fn();
+      renderView({ cavaliersDetail, facteurs, radiusM: 500, onChangeRadiusM });
+
+      await user.click(screen.getByRole('button', { name: '300 m' }));
+
+      expect(onChangeRadiusM).toHaveBeenCalledWith(300);
+    });
+
+    it('calls onChangeRadiusM with 1000 when the 1 km option is clicked', async () => {
+      const user = userEvent.setup();
+      const onChangeRadiusM = vi.fn();
+      renderView({ cavaliersDetail, facteurs, radiusM: 500, onChangeRadiusM });
+
+      await user.click(screen.getByRole('button', { name: '1 km' }));
+
+      expect(onChangeRadiusM).toHaveBeenCalledWith(1000);
+    });
+  });
+
+  describe('changement de rayon en cours (isLoadingCavaliers)', () => {
+    it('shows a skeleton on the cavalier rows while a new radius is loading', () => {
+      renderView({ cavaliersDetail, facteurs, isLoadingCavaliers: true });
+
+      expect(screen.getAllByTestId('cavalier-meta-skeleton').length).toBeGreaterThan(0);
+    });
+
+    it('does not show any skeleton once loading is done', () => {
+      renderView({ cavaliersDetail, facteurs, isLoadingCavaliers: false });
+
+      expect(screen.queryByTestId('cavalier-meta-skeleton')).not.toBeInTheDocument();
+    });
+  });
 });

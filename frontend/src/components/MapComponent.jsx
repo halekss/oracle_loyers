@@ -84,7 +84,7 @@ function MapComponent({
   layers,
   onToggleLayer,
   onAnnonceClick,
-  radiusCircle,
+  focus,
 }) {
   const [mapUrl, setMapUrl] = useState(
     () => `/data/map_pings_${ville}_calques.html?t=${Date.now()}`,
@@ -239,39 +239,40 @@ function MapComponent({
     }
   };
 
-  // Vue "Calques" du rail (ORA-178) : cercle pointillé violet du rayon des
-  // cavaliers autour du quartier scanné — nouveau type de message
-  // (MAP_CONTRACT.md), un seul cercle affiché à la fois côté carte.
-  const sendRadiusCircle = () => {
+  // Vue "Calques" du rail, sélecteur de rayon (MAP_CONTRACT.md, SET_FOCUS/
+  // CLEAR_FOCUS) : cercle pointillé violet du rayon choisi autour du
+  // quartier scanné, ET opacité réduite des pings de cavaliers hors de ce
+  // rayon — tout est géré côté carte (build_bridge_message_script), ce
+  // composant se contente d'envoyer `focus`.
+  const sendFocus = () => {
     if (!iframeRef.current?.contentWindow) return;
-    if (radiusCircle) {
+    if (focus) {
       iframeRef.current.contentWindow.postMessage(
         {
-          type: "SHOW_RADIUS_CIRCLE",
-          lat: radiusCircle.lat,
-          lng: radiusCircle.lng,
-          radius: radiusCircle.radius,
-          color: "#A78BFA",
+          type: "SET_FOCUS",
+          lat: focus.lat,
+          lng: focus.lng,
+          radius_m: focus.radiusM,
         },
         window.location.origin,
       );
     } else {
       iframeRef.current.contentWindow.postMessage(
-        { type: "HIDE_RADIUS_CIRCLE" },
+        { type: "CLEAR_FOCUS" },
         window.location.origin,
       );
     }
   };
 
   useEffect(() => {
-    sendRadiusCircle();
+    sendFocus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [radiusCircle?.lat, radiusCircle?.lng, radiusCircle?.radius]);
+  }, [focus?.lat, focus?.lng, focus?.radiusM]);
 
   const handleIframeLoad = () => {
     sendTileUrl();
     Object.keys(layers).forEach((key) => sendLayerCommand(key, layers[key]));
-    sendRadiusCircle();
+    sendFocus();
   };
 
   return (
@@ -310,8 +311,8 @@ function MapComponent({
                 </li>
               ))}
             </ul>
-            {radiusCircle && (
-              <p className="text-[10px] text-slate-500 mt-1.5">Rayon {radiusCircle.radius} m</p>
+            {focus && (
+              <p className="text-[10px] text-slate-500 mt-1.5">Rayon {focus.radiusM} m</p>
             )}
           </div>
         );

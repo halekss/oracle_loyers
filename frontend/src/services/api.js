@@ -203,6 +203,22 @@ export const api = {
     }
   },
 
+  // Détail des 4 Cavaliers pour un rayon choisi — GET /api/cavaliers.
+  // Calculé en direct (haversine), contrairement à cavaliersDetail/facteurs
+  // de getQuartierStats (toujours fixés à 500m) — vue "Calques", sélecteur
+  // de rayon (hooks/useCavaliersRadius.js).
+  getCavaliers: async (lat, lng, ville, rayonM) => {
+    try {
+      const params = new URLSearchParams({ lat, lng, ville, rayon_m: rayonM });
+      const response = await fetchWithClassification(`${API_URL}/cavaliers?${params.toString()}`);
+
+      return await response.json();
+    } catch (error) {
+      console.error("❌ Erreur Cavaliers:", error);
+      throw error;
+    }
+  },
+
   // Prédiction ML (XGBoost) — /api/predict
   predict: async ({ surface, quartier, type_local, type = undefined }) => {
     try {

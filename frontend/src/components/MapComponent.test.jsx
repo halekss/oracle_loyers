@@ -417,34 +417,52 @@ describe('MapComponent', () => {
     });
   });
 
-  describe('cercle de rayon des cavaliers (vue "Calques", ORA-178)', () => {
-    it('sends SHOW_RADIUS_CIRCLE when a radiusCircle prop is provided', () => {
+  describe('focus rayon des cavaliers (vue "Calques", sélecteur de rayon)', () => {
+    it('sends SET_FOCUS when a focus prop is provided', () => {
       const { rerender } = render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
       const iframe = screen.getByTitle('Carte Oracle');
       const postMessage = vi.fn();
       Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
 
       rerender(
-        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} radiusCircle={{ lat: 45.75, lng: 4.83, radius: 500 }} />,
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 500 }} />,
       );
 
       expect(postMessage).toHaveBeenCalledWith(
-        { type: 'SHOW_RADIUS_CIRCLE', lat: 45.75, lng: 4.83, radius: 500, color: '#A78BFA' },
+        { type: 'SET_FOCUS', lat: 45.75, lng: 4.83, radius_m: 500 },
         window.location.origin,
       );
     });
 
-    it('sends HIDE_RADIUS_CIRCLE when radiusCircle goes back to null', () => {
+    it('sends a new SET_FOCUS when only the radius changes', () => {
       const { rerender } = render(
-        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} radiusCircle={{ lat: 45.75, lng: 4.83, radius: 500 }} />,
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 500 }} />,
       );
       const iframe = screen.getByTitle('Carte Oracle');
       const postMessage = vi.fn();
       Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
 
-      rerender(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} radiusCircle={null} />);
+      rerender(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 300 }} />,
+      );
 
-      expect(postMessage).toHaveBeenCalledWith({ type: 'HIDE_RADIUS_CIRCLE' }, window.location.origin);
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'SET_FOCUS', lat: 45.75, lng: 4.83, radius_m: 300 },
+        window.location.origin,
+      );
+    });
+
+    it('sends CLEAR_FOCUS when focus goes back to null', () => {
+      const { rerender } = render(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 500 }} />,
+      );
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
+      rerender(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={null} />);
+
+      expect(postMessage).toHaveBeenCalledWith({ type: 'CLEAR_FOCUS' }, window.location.origin);
     });
   });
 
@@ -460,10 +478,10 @@ describe('MapComponent', () => {
       expect(screen.queryByText('Superstition')).not.toBeInTheDocument();
     });
 
-    it('shows the radius alongside the legend when a radiusCircle is provided', () => {
+    it('shows the radius alongside the legend when a focus is provided', () => {
       const layers = { ...defaultLayerVisibility(), Vice: true };
       render(
-        <MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} radiusCircle={{ lat: 45.75, lng: 4.83, radius: 500 }} />,
+        <MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 500 }} />,
       );
 
       expect(screen.getByText(/500 m/)).toBeInTheDocument();

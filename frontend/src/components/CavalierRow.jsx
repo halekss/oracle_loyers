@@ -24,10 +24,10 @@ function Chevron({ open }) {
 // nom + interrupteur seuls, pas de méta ni de chevron) — l'interrupteur
 // reste utilisable même dans cet état (ORA-178, état vide de la vue Calques).
 export default function CavalierRow({
-  categorie, color, shape, detail, phrase,
+  categorie, color, shape, detail, phrase, isLoading,
   isVisible, onToggleVisibility, isExpanded, onToggleExpand,
 }) {
-  const meta = detail ? cavalierMeta(detail) : null;
+  const meta = !isLoading && detail ? cavalierMeta(detail) : null;
   const metaText = meta
     ? (meta.count > 0
       ? `${meta.count} lieu${meta.count > 1 ? 'x' : ''}${meta.distM != null ? ` · dès ${meta.distM} m` : ''}`
@@ -49,7 +49,14 @@ export default function CavalierRow({
           >
             <CavalierShapeIcon shape={shape} color={color} />
             <span className="font-bold text-sm truncate" style={{ color }}>{categorie}</span>
-            {metaText && (
+            {isLoading ? (
+              <span
+                data-testid="cavalier-meta-skeleton"
+                aria-hidden="true"
+                className="ml-auto shrink-0 w-16 h-3 rounded animate-pulse"
+                style={{ background: '#232B45' }}
+              />
+            ) : metaText && (
               <span className="text-[11px] ml-auto shrink-0 whitespace-nowrap" style={{ color: '#8B93A7' }}>
                 {metaText}
               </span>
@@ -65,7 +72,7 @@ export default function CavalierRow({
         <LayerSwitch checked={isVisible} onChange={onToggleVisibility} label={categorie} />
       </div>
 
-      {detail && isExpanded && (
+      {detail && isExpanded && !isLoading && (
         <div id={contentId} className="pb-3 pl-1">
           {detail.items.length > 0 && (
             <div className="space-y-1 mb-2">

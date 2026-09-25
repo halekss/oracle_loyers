@@ -120,4 +120,37 @@ describe('CavalierRow', () => {
 
     expect(onToggleVisibility).toHaveBeenCalledTimes(1);
   });
+
+  describe('changement de rayon en cours (isLoading)', () => {
+    it('shows a skeleton placeholder instead of the meta text while loading', () => {
+      render(<CavalierRow {...baseProps} detail={viceDetail} isLoading />);
+
+      expect(screen.queryByText('19 lieux · dès 46 m')).not.toBeInTheDocument();
+      expect(screen.getByTestId('cavalier-meta-skeleton')).toBeInTheDocument();
+    });
+
+    it('still shows the name, shape and switch while loading (only the meta is a skeleton)', () => {
+      render(<CavalierRow {...baseProps} detail={viceDetail} isLoading />);
+
+      expect(screen.getByText('Vice')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: /vice/i })).toBeInTheDocument();
+    });
+
+    it('does not show stale expanded detail while loading', () => {
+      render(<CavalierRow {...baseProps} detail={viceDetail} phrase="12 bars." isExpanded isLoading />);
+
+      expect(screen.queryByText('Bar')).not.toBeInTheDocument();
+      expect(screen.queryByText('12 bars.')).not.toBeInTheDocument();
+    });
+
+    it('shows the real meta again once isLoading turns back to false', () => {
+      const { rerender } = render(<CavalierRow {...baseProps} detail={viceDetail} isLoading />);
+      expect(screen.getByTestId('cavalier-meta-skeleton')).toBeInTheDocument();
+
+      rerender(<CavalierRow {...baseProps} detail={viceDetail} isLoading={false} />);
+
+      expect(screen.queryByTestId('cavalier-meta-skeleton')).not.toBeInTheDocument();
+      expect(screen.getByText('19 lieux · dès 46 m')).toBeInTheDocument();
+    });
+  });
 });

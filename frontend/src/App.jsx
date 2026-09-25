@@ -21,6 +21,7 @@ import { computeHomeStats } from './services/homeStats';
 import { computeQuartierOptions } from './services/quartierStats';
 import { computeLatestDataDate } from './services/latestDataDate';
 import { useLayerVisibility } from './hooks/useLayerVisibility';
+import { useCavaliersRadius } from './hooks/useCavaliersRadius';
 import { CAVALIERS_RADIUS_M } from './services/cavaliersDisplay';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
@@ -117,6 +118,10 @@ function App() {
   // vérité, partagée par la vue "Calques" du rail ET le panneau flottant
   // mobile (hook dédié, testable indépendamment : useLayerVisibility.test.js).
   const { layers: layerVisibility, toggleLayer, resetLayers } = useLayerVisibility();
+  // Vue "Calques", sélecteur de rayon (300 m/500 m/1 km) : remis à 500 m à
+  // chaque nouveau scan (cf. handleScan) pour repartir du rayon par défaut
+  // plutôt que d'hériter du dernier rayon consulté sur un autre quartier.
+  const [cavaliersRadiusM, setCavaliersRadiusM] = useState(CAVALIERS_RADIUS_M);
   // Sélecteur de ville (ORA-71 POC) : ne change que la carte affichée et le
   // bornage des recherches quartier/historique — les CSV/codes postaux
   // Lyon/Lille restant jamais ambigus entre les deux villes.
@@ -141,6 +146,18 @@ function App() {
   // de `activeView` : la fiche reste en cache tant qu'une autre annonce n'a
   // pas été sélectionnée, même après avoir changé de vue.
   const ficheDetail = useAnnonceDetail(selectedAnnonceId);
+  // Vue "Calques" : détail des 4 cavaliers pour `cavaliersRadiusM` — reprend
+  // result.cavaliersDetail/facteurs (500 m, déjà fournis par le scan) sans
+  // appel réseau, sauf si un autre rayon a été choisi (GET /api/cavaliers,
+  // mis en cache par (quartier, rayon) — hooks/useCavaliersRadius.js).
+  const cavaliersRadius = useCavaliersRadius({
+    quartier: result?.quartier,
+    center: result?.center,
+    ville,
+    radiusM: cavaliersRadiusM,
+    defaultDetail: result?.cavaliersDetail,
+    defaultFacteurs: result?.facteurs,
+  });
 
   // ORA-105 : chargé une fois, sert à résoudre les coordonnées des quartiers
   // des annonces affichées (AnnoncesList n'a pas de latitude/longitude), et
@@ -267,6 +284,9 @@ function App() {
     setResult(null);
     setPriceHistory(null);
     setAmbiguousQuartier(null);
+    // Nouveau scan : repart du rayon par défaut plutôt que d'hériter du
+    // dernier rayon consulté sur un autre quartier (vue "Calques").
+    setCavaliersRadiusM(CAVALIERS_RADIUS_M);
     // ORA-179 : lancer un scan bascule immédiatement sur la vue "Scan" du
     // rail (desktop), ou "Estimation" si une surface a été saisie — connu
     // synchroniquement, pas besoin d'attendre la réponse du serveur. Sans
@@ -489,16 +509,20 @@ function App() {
   }
 
   // ORA-178 : vue "Calques" (maquette vue-calques.png) — Fonds de carte +
-  // lecture détaillée des 4 cavaliers autour du quartier scanné. Réutilise
-  // les mêmes données que le bloc "Les 4 Cavaliers" de la vue Scan
-  // (`result.cavaliersDetail`/`result.facteurs`), jamais recalculées ici.
+  // lecture détaillée des 4 cavaliers autour du quartier scanné. Au rayon
+  // 500 m, réutilise les mêmes données que le bloc "Les 4 Cavaliers" de la
+  // vue Scan (`result.cavaliersDetail`/`result.facteurs`) ; pour 300 m/1 km,
+  // useCavaliersRadius appelle GET /api/cavaliers (cf. plus haut).
   function renderCalquesView() {
     return (
       <CalquesView
         layers={layerVisibility}
         onToggleLayer={toggleLayer}
-        cavaliersDetail={result?.cavaliersDetail}
-        facteurs={result?.facteurs}
+        cavaliersDetail={cavaliersRadius.cavaliersDetail}
+        facteurs={cavaliersRadius.facteurs}
+        isLoadingCavaliers={cavaliersRadius.isLoading}
+        radiusM={cavaliersRadiusM}
+        onChangeRadiusM={setCavaliersRadiusM}
         quartier={result?.quartier}
         zonesCount={homeStats.districts.length}
         ville={ville}
@@ -643,9 +667,9 @@ function App() {
                 layers={layerVisibility}
                 onToggleLayer={toggleLayer}
                 onAnnonceClick={handleSelectAnnonce}
-                radiusCircle={
+                focus={
                   activeView === 'calques' && result?.center
-                    ? { lat: result.center.lat, lng: result.center.lng, radius: CAVALIERS_RADIUS_M }
+                    ? { lat: result.center.lat, lng: result.center.lng, radiusM: cavaliersRadiusM }
                     : null
                 }
               />

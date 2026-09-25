@@ -39,36 +39,37 @@ function DashedLine() {
   );
 }
 
-// Rayon des cavaliers : le backend n'a de colonnes précalculées qu'à 500 m
-// (services/cavaliers_factors.py) — 300 m/1 km restent en `aria-disabled`
-// tant que le pipeline de données n'est pas étendu à d'autres rayons.
+// Rayon des cavaliers : calculé en direct (GET /api/cavaliers,
+// services/cavaliers_radius.py) pour 300/500/1000m — les 3 options sont
+// actives.
 const RADIUS_OPTIONS = [
-  { label: '300 m', enabled: false },
-  { label: '500 m', enabled: true },
-  { label: '1 km', enabled: false },
+  { label: '300 m', value: 300 },
+  { label: '500 m', value: 500 },
+  { label: '1 km', value: 1000 },
 ];
 
-function RadiusSelector() {
+function RadiusSelector({ radiusM, onChange }) {
   return (
     <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Rayon des cavaliers">
-      {RADIUS_OPTIONS.map((option) => (
-        <button
-          key={option.label}
-          type="button"
-          aria-disabled={!option.enabled}
-          aria-pressed={option.enabled}
-          title={option.enabled ? undefined : 'Bientôt'}
-          tabIndex={0}
-          className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]"
-          style={{
-            background: option.enabled ? '#7C3AED' : 'transparent',
-            color: option.enabled ? '#F1F5F9' : '#4B5266',
-            cursor: option.enabled ? 'pointer' : 'not-allowed',
-          }}
-        >
-          {option.label}
-        </button>
-      ))}
+      {RADIUS_OPTIONS.map((option) => {
+        const isActive = option.value === radiusM;
+        return (
+          <button
+            key={option.label}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onChange(option.value)}
+            className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]"
+            style={{
+              background: isActive ? '#7C3AED' : 'transparent',
+              color: isActive ? '#F1F5F9' : '#8B93A7',
+              cursor: 'pointer',
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -107,7 +108,8 @@ function AnnonceColorSegment() {
 // scanné — mêmes données que le bloc "Les 4 Cavaliers" de la vue Scan
 // (`cavaliersDetail`/`facteurs`, /api/quartier-stats), jamais recalculées ici.
 export default function CalquesView({
-  layers, onToggleLayer, cavaliersDetail, facteurs, quartier, zonesCount, ville, onGoToRecherche,
+  layers, onToggleLayer, cavaliersDetail, facteurs, isLoadingCavaliers,
+  radiusM, onChangeRadiusM, quartier, zonesCount, ville, onGoToRecherche,
 }) {
   const [expandedCategory, setExpandedCategory] = useState(() => defaultExpandedCategory(cavaliersDetail));
 
@@ -160,7 +162,7 @@ export default function CalquesView({
           <h3 className="text-[10px] uppercase tracking-widest font-bold" style={{ color: '#8B93A7' }}>
             Cavaliers{quartier ? ` · ${quartier}` : ''}
           </h3>
-          <RadiusSelector />
+          <RadiusSelector radiusM={radiusM} onChange={onChangeRadiusM} />
         </div>
 
         {!hasCavaliersDetail && (
@@ -193,6 +195,7 @@ export default function CalquesView({
                 shape={style.shape}
                 detail={detail}
                 phrase={phrase}
+                isLoading={isLoadingCavaliers}
                 isVisible={Boolean(layers[style.categorie])}
                 onToggleVisibility={() => onToggleLayer(style.categorie)}
                 isExpanded={expandedCategory === style.categorie}
