@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-09-25T08:51:14.647781+00:00",
-  "data_snapshot_sha256": "96ffe9003e07626213ae0f74438f40369c16413a1395c19068affaec7921e571",
-  "data_snapshot_file": "master_immo_final_96ffe9003e07.csv",
+  "trained_at": "2026-09-25T18:20:12.759230+00:00",
+  "data_snapshot_sha256": "7a063d58559e800a8bd2cc4fa7665df7e7ca36bfc9d23228fd3e75a598dbf4e0",
+  "data_snapshot_file": "master_immo_final_7a063d58559e.csv",
   "metrics": {
-    "mae": 163.91884765625,
-    "r2": 0.77676256268029
+    "mae": 155.52900881187938,
+    "r2": 0.803157960226243
   },
-  "model_version": "306f3acd42bb",
+  "model_version": "ade6872e1873",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
@@ -14,5 +14,6 @@
     "subsample": 0.7,
     "colsample_bytree": 0.6,
     "random_state": 42
-  }
+  },
+  "rolled_back_at": "2026-09-25T18:31:17.625668+00:00"
 }
