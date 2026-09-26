@@ -50,6 +50,18 @@ describe('useLayerVisibility', () => {
     expect(result.current.layers).toEqual(defaultLayerVisibility());
   });
 
+  it('setLayersVisible sets several keys at once, without touching the others', () => {
+    const { result } = renderHook(() => useLayerVisibility());
+
+    act(() => result.current.setLayersVisible(['Studio', 'T2', 'T3', 'T4'], false));
+
+    expect(result.current.layers.Studio).toBe(false);
+    expect(result.current.layers.T2).toBe(false);
+    expect(result.current.layers.T3).toBe(false);
+    expect(result.current.layers.T4).toBe(false);
+    expect(result.current.layers.Vice).toBe(defaultLayerVisibility().Vice);
+  });
+
   it('does not throw when localStorage is unavailable', () => {
     const originalGet = Storage.prototype.getItem;
     const originalSet = Storage.prototype.setItem;

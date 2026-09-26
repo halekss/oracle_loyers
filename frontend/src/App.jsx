@@ -22,6 +22,7 @@ import { computeQuartierOptions } from './services/quartierStats';
 import { computeLatestDataDate } from './services/latestDataDate';
 import { useLayerVisibility } from './hooks/useLayerVisibility';
 import { useCavaliersRadius } from './hooks/useCavaliersRadius';
+import { useLayerCounts } from './hooks/useLayerCounts';
 import { CAVALIERS_RADIUS_M } from './services/cavaliersDisplay';
 import { loadCavaliersRadiusM, saveCavaliersRadiusM } from './services/cavaliersRadiusStorage';
 
@@ -118,7 +119,7 @@ function App() {
   // devient un composant contrôlé) pour qu'App en soit l'unique source de
   // vérité, partagée par la vue "Calques" du rail ET le panneau flottant
   // mobile (hook dédié, testable indépendamment : useLayerVisibility.test.js).
-  const { layers: layerVisibility, toggleLayer, resetLayers } = useLayerVisibility();
+  const { layers: layerVisibility, toggleLayer, resetLayers, setLayersVisible } = useLayerVisibility();
   // Vue "Calques", sélecteur de rayon (Aucun/300 m/500 m/1 km) : remis à
   // 500 m à chaque nouveau scan (cf. handleScan) pour repartir du rayon par
   // défaut plutôt que d'hériter du dernier rayon consulté sur un autre
@@ -145,6 +146,10 @@ function App() {
   const quartierOptions = useMemo(() => computeQuartierOptions(listings, ville), [listings, ville]);
   // ORA-171 : badge "Données au" de la topbar, repris sur toutes les vues.
   const latestDataDate = useMemo(() => computeLatestDataDate(listings, ville), [listings, ville]);
+  // ORA-183 (v3) : compteurs par calque (bloc "Annonces" de la vue Calques),
+  // même hook que le panneau flottant mobile (MapComponent) — un seul fetch
+  // par composant qui en a besoin, jamais recalculé depuis `listings`.
+  const layerCounts = useLayerCounts(ville);
   // ORA-178 : "Estimation personnalisée" (maquette 03) — vraie prédiction
   // modèle disponible, cf. ResultCard.jsx (même condition).
   const hasModelEstimate = Boolean(result?.surface) && Boolean(result?.confiance);
@@ -525,6 +530,8 @@ function App() {
       <CalquesView
         layers={layerVisibility}
         onToggleLayer={toggleLayer}
+        onSetLayersVisible={setLayersVisible}
+        layerCounts={layerCounts}
         cavaliersDetail={cavaliersRadius.cavaliersDetail}
         facteurs={cavaliersRadius.facteurs}
         isLoadingCavaliers={cavaliersRadius.isLoading}

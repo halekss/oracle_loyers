@@ -54,6 +54,66 @@ function renderView(props = {}) {
   );
 }
 
+describe('CalquesView — bloc "Annonces"', () => {
+  it('shows a row per immo type with its label, count and switch', () => {
+    renderView({ layerCounts: { Studio: 120, T2: 300, T3: 90, T4: 40 } });
+
+    expect(screen.getByText('Annonces')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Studio / T1' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Apparts T2' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Apparts T3' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Grands (T4+)' })).toBeInTheDocument();
+    expect(screen.getByText('300')).toBeInTheDocument();
+  });
+
+  it('calls onToggleLayer with the immo layer key when its switch is clicked', async () => {
+    const user = userEvent.setup();
+    const onToggleLayer = vi.fn();
+    renderView({ onToggleLayer });
+
+    await user.click(screen.getByRole('switch', { name: 'Apparts T2' }));
+
+    expect(onToggleLayer).toHaveBeenCalledWith('T2');
+  });
+
+  it('"Tout afficher" shows all 4 immo layers when at least one is hidden', async () => {
+    const user = userEvent.setup();
+    const onSetLayersVisible = vi.fn();
+    renderView({
+      layers: { ...defaultLayerVisibility(), Studio: true, T2: false, T3: true, T4: true },
+      onSetLayersVisible,
+    });
+
+    await user.click(screen.getByRole('button', { name: /tout afficher/i }));
+
+    expect(onSetLayersVisible).toHaveBeenCalledWith(['Studio', 'T2', 'T3', 'T4'], true);
+  });
+
+  it('"Tout masquer" hides all 4 immo layers when they are all visible', async () => {
+    const user = userEvent.setup();
+    const onSetLayersVisible = vi.fn();
+    renderView({
+      layers: { ...defaultLayerVisibility(), Studio: true, T2: true, T3: true, T4: true },
+      onSetLayersVisible,
+    });
+
+    await user.click(screen.getByRole('button', { name: /tout masquer/i }));
+
+    expect(onSetLayersVisible).toHaveBeenCalledWith(['Studio', 'T2', 'T3', 'T4'], false);
+  });
+
+  it('keeps every immo swatch green (#22C55E) — no per-type color', () => {
+    renderView({});
+
+    const swatches = ['Studio / T1', 'Apparts T2', 'Apparts T3', 'Grands (T4+)'].map((label) =>
+      screen.getByRole('switch', { name: label }).closest('div').querySelector('[aria-hidden="true"]'),
+    );
+    swatches.forEach((swatch) => {
+      expect(swatch).toHaveStyle({ background: 'rgb(34, 197, 94)' });
+    });
+  });
+});
+
 describe('CalquesView', () => {
   it('shows the empty state and lets the user jump to Recherche when nothing has been scanned', async () => {
     const user = userEvent.setup();

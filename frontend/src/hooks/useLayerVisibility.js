@@ -21,5 +21,18 @@ export function useLayerVisibility() {
     setLayers(defaultLayerVisibility());
   }, []);
 
-  return { layers, toggleLayer, resetLayers };
+  // Raccourci "Tout afficher/masquer" (bloc Annonces, vue Calques) : fixe
+  // plusieurs clés à la même valeur en un seul setState, sans toucher aux
+  // autres calques.
+  const setLayersVisible = useCallback((keys, value) => {
+    setLayers((prev) => {
+      const next = { ...prev };
+      keys.forEach((key) => {
+        next[key] = value;
+      });
+      return next;
+    });
+  }, []);
+
+  return { layers, toggleLayer, resetLayers, setLayersVisible };
 }

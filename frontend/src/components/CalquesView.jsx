@@ -12,7 +12,15 @@ const LYON_LINE_CODES = { Metro: 'A B C D', Funicular: 'F1 F2' };
 
 const quartiersLayer = mapLayersConfig.find((layer) => layer.key === 'Quartiers');
 
-function FondDeCarteRow({ swatch, label, meta, checked, onToggle }) {
+// Bloc "Annonces" (ORA-183, v3) : Studio/T1, T2, T3, T4+ — mêmes 4 calques
+// que l'ancien panneau flottant mobile ("Offres Immobilières"), disparus du
+// rail desktop lors de la création de la vue Calques. Choix de DA :
+// `uiColor` reste #22C55E pour les 4 (mapLayers.config.json) — jamais de
+// couleur par type, seuls les interrupteurs distinguent les types affichés.
+const IMMO_KEYS = ['Studio', 'T2', 'T3', 'T4'];
+const immoLayerByKey = Object.fromEntries(mapLayersConfig.map((layer) => [layer.key, layer]));
+
+function LayerRow({ swatch, label, meta, checked, onToggle }) {
   return (
     <div className="flex items-center gap-2 min-h-[38px] py-1.5 border-b" style={{ borderColor: '#1C2440' }}>
       <div className="flex-1 flex items-center gap-2 min-w-0">
@@ -119,7 +127,7 @@ function AnnonceColorSegment() {
 // scanné — mêmes données que le bloc "Les 4 Cavaliers" de la vue Scan
 // (`cavaliersDetail`/`facteurs`, /api/quartier-stats), jamais recalculées ici.
 export default function CalquesView({
-  layers, onToggleLayer, cavaliersDetail, facteurs, isLoadingCavaliers,
+  layers, onToggleLayer, onSetLayersVisible, layerCounts, cavaliersDetail, facteurs, isLoadingCavaliers,
   radiusM, onChangeRadiusM, quartier, zonesCount, ville, onGoToRecherche,
 }) {
   const [expandedCategory, setExpandedCategory] = useState(() => defaultExpandedCategory(cavaliersDetail));
@@ -133,6 +141,7 @@ export default function CalquesView({
 
   const hasCavaliersDetail = Boolean(cavaliersDetail && cavaliersDetail.length > 0);
   const lineCodes = ville === 'lyon' ? LYON_LINE_CODES : {};
+  const allImmoVisible = IMMO_KEYS.every((key) => layers[key]);
 
   return (
     <div className="p-4 md:p-5 space-y-5">
@@ -141,21 +150,21 @@ export default function CalquesView({
           Fonds de carte
         </h3>
         <div className="rounded-[14px] border overflow-hidden px-3" style={{ background: '#0F1630', borderColor: '#232B45' }}>
-          <FondDeCarteRow
+          <LayerRow
             swatch={<Dot color="#EF4444" />}
             label="Métro & stations"
             meta={lineCodes.Metro}
             checked={Boolean(layers.Metro)}
             onToggle={() => onToggleLayer('Metro')}
           />
-          <FondDeCarteRow
+          <LayerRow
             swatch={<DashedLine />}
             label="Funiculaires"
             meta={lineCodes.Funicular}
             checked={Boolean(layers.Funicular)}
             onToggle={() => onToggleLayer('Funicular')}
           />
-          <FondDeCarteRow
+          <LayerRow
             swatch={<Dot color={quartiersLayer?.uiColor || '#a78bfa'} />}
             label="€/m² par arrondissement"
             meta={zonesCount != null ? `${zonesCount} zones` : undefined}
@@ -165,6 +174,34 @@ export default function CalquesView({
           <div className="flex items-center min-h-[38px] py-2">
             <AnnonceColorSegment />
           </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[10px] uppercase tracking-widest font-bold" style={{ color: '#8B93A7' }}>
+            Annonces
+          </h3>
+          <button
+            type="button"
+            onClick={() => onSetLayersVisible(IMMO_KEYS, !allImmoVisible)}
+            className="min-h-[32px] px-2 text-[10px] font-bold uppercase tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA] rounded-md"
+            style={{ color: '#8B93A7' }}
+          >
+            {allImmoVisible ? 'Tout masquer' : 'Tout afficher'}
+          </button>
+        </div>
+        <div className="rounded-[14px] border overflow-hidden px-3 mb-5" style={{ background: '#0F1630', borderColor: '#232B45' }}>
+          {IMMO_KEYS.map((key) => (
+            <LayerRow
+              key={key}
+              swatch={<Dot color={immoLayerByKey[key]?.uiColor || '#22c55e'} />}
+              label={immoLayerByKey[key]?.label || key}
+              meta={layerCounts?.[key] != null ? String(layerCounts[key]) : undefined}
+              checked={Boolean(layers[key])}
+              onToggle={() => onToggleLayer(key)}
+            />
+          ))}
         </div>
       </div>
 

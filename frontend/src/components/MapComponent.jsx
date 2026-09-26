@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { api, getApiBaseUrl } from "../services/api";
 import { layersByGroup } from "../services/mapLayers";
+import { useLayerCounts } from "../hooks/useLayerCounts";
 import MapLegend from "./MapLegend";
 
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
@@ -101,24 +102,9 @@ function MapComponent({
     setMapUrl(`/data/map_pings_${ville}_calques.html?t=${Date.now()}`);
   }, [ville]);
 
-  // ORA-172 : compteurs du panneau de calques (Vice 526, T2 300...), écrits
-  // par generate_map.py dans map_metadata_<ville>.json à chaque génération —
-  // fichier statique servi par Vite/nginx, pas un appel /api/.
-  const [layerCounts, setLayerCounts] = useState({});
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/data/map_metadata_${ville}.json?t=${Date.now()}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelled) setLayerCounts(data?.layer_counts || {});
-      })
-      .catch(() => {
-        if (!cancelled) setLayerCounts({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [ville]);
+  // ORA-172 : compteurs du panneau de calques (Vice 526, T2 300...) — hook
+  // partagé avec le bloc "Annonces" de la vue Calques (hooks/useLayerCounts.js).
+  const layerCounts = useLayerCounts(ville);
 
   // ORA-116 : sur mobile (onglet "Carte"), le panneau de calques et le chat
   // ouvert se chevauchent entièrement (panneau ~256x444px, chat quasi plein
