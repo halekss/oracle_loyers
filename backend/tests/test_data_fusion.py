@@ -297,7 +297,6 @@ class RunFusionDescriptionDetailTest(unittest.TestCase):
 
         self.assertEqual(result.loc[0, "description_detail"], "A louer à Lyon 3ème, quartier Montchat : rue Cyrano.")
         self.assertNotIn("Montchat", str(result.loc[0, "description"]))
-
     def test_csv_without_description_column_gives_an_empty_detail(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             self._write_century21_csv(
@@ -312,6 +311,31 @@ class RunFusionDescriptionDetailTest(unittest.TestCase):
 
         self.assertIn("description_detail", result.columns)
         self.assertTrue(result["description_detail"].isna().all())
+
+
+class RunFusionVizzitImageTest(unittest.TestCase):
+    """Le fichier GPS Vizzit (complete_data_extraction.py) n'a pas de colonne `Image` :
+    la photo est reprise du CSV de scraping (même `Lien`), comme la description."""
+
+    def test_takes_the_photo_from_the_scraping_csv(self):
+        lien = "https://www.vizzit.fr/fr/property/appartement/lyon-3eme/Aabc"
+        photo = "https://lb1.vizzit.com/1a/Aabc/Photos/Aabc_1.jpg"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pd.DataFrame(
+                [["Lyon 3ème (Rhône)", "900 €/mois", "45 m² - 2 pièces", lien, "2026-09-25", 45.76, 4.85]],
+                columns=["Lieu", "Prix", "Details", "Lien", "DerniereVue", "Lat", "Lon"],
+            ).to_csv(os.path.join(tmp_dir, "annonces_lyon_vizzit_geoloc_complete.csv"), index=False)
+            pd.DataFrame(
+                [["Lyon 3ème (Rhône)", "900 €/mois", "45 m² - 2 pièces", "Bel appartement.", lien, photo, "2026-09-25"]],
+                columns=["Lieu", "Prix", "Details", "Description", "Lien", "Image", "DerniereVue"],
+            ).to_csv(os.path.join(tmp_dir, "annonces_lyon_vizzit.csv"), index=False)
+
+            with patch.object(data_fusion, "data_dir", tmp_dir):
+                run_fusion()
+                result = pd.read_csv(os.path.join(tmp_dir, "base_de_donnees_immo_complet.csv"))
+
+        self.assertEqual(result.loc[result["site"] == "Vizzit", "image"].tolist(), [photo])
+
 
 
 class RunFusionSelogerLieuTest(unittest.TestCase):
