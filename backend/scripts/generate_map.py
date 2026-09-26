@@ -303,53 +303,21 @@ def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_ur
     """
 
 
-# --- ORA-166 : légende, échelle ---
+# --- ORA-166 : échelle métrique ---
+# ORA-183 (v3) : l'ancienne légende Folium (build_legend_html, groupes
+# Annonces/Métro/Cavaliers & quartiers) est supprimée — elle se superposait à
+# la légende React (MapComponent) et cachait l'échelle. Une seule légende
+# désormais, entièrement côté React, qui ne liste que les calques actifs.
 
 
-def build_legend_html(layers_config):
-    """Légende en coin de carte (ORA-166) : groupes Annonces / Métro /
-    Cavaliers / Quartiers issus de la config partagée des calques. Chaque
-    ligne porte `data-layer` (nom Folium du calque) : un script grise la ligne quand le
-    calque est masqué depuis le panneau de contrôle."""
-    groups = [
-        ('immobilier', 'Annonces'), ('transports', 'Métro'), ('contexte', 'Cavaliers & quartiers'),
-    ]
-    sections = []
-    for group_key, title in groups:
-        rows = ''.join(
-            f"<li data-layer='{html.escape(layer['name'], quote=True)}'>"
-            f"<span class='oracle-legend-swatch' style='background:{layer['uiColor']};'></span>"
-            f"{html.escape(layer['label'])}</li>"
-            for layer in layers_config if layer['group'] == group_key
-        )
-        sections.append(f"<div class='oracle-legend-title'>{title}</div><ul>{rows}</ul>")
-    return (
-        "<div class='oracle-legend' role='region' aria-label='Légende de la carte'>"
-        f"{''.join(sections)}"
-        "</div>"
-    )
+def build_scale_script(map_var):
+    """Injecte l'échelle métrique Leaflet (ORA-166) en bas à gauche.
 
-
-def build_legend_and_scale_script(map_var, legend_html):
-    """Injecte la légende et l'échelle métrique ; grise les lignes de
-    légende des calques masqués."""
-    legend_js = json.dumps(legend_html)
-    # `load` : Folium rend le script d'init de la carte APRÈS </body> ; à
-    # l'exécution de ce bloc, `{map_var}` n'est donc pas encore défini.
+    `load` : Folium rend le script d'init de la carte APRÈS </body> ; à
+    l'exécution de ce bloc, `{map_var}` n'est donc pas encore défini."""
     return f"""
     window.addEventListener('load', function() {{
-        var map = {map_var};
-        var container = document.createElement('div');
-        container.innerHTML = {legend_js};
-        document.body.appendChild(container.firstChild);
-        L.control.scale({{imperial: false, position: 'bottomleft'}}).addTo(map);
-        function setLegend(name, on) {{
-            document.querySelectorAll('.oracle-legend [data-layer]').forEach(function(li) {{
-                if (li.getAttribute('data-layer') === name) li.classList.toggle('oracle-legend-off', !on);
-            }});
-        }}
-        map.on('overlayadd', function(e) {{ setLegend(e.name, true); }});
-        map.on('overlayremove', function(e) {{ setLegend(e.name, false); }});
+        L.control.scale({{imperial: false, position: 'bottomleft'}}).addTo({map_var});
     }});
     """
 
@@ -878,25 +846,13 @@ def main(ville='lyon'):
         .leaflet-popup-close-button:hover {{ color: #f8fafc !important; }}
         .leaflet-interactive {{ cursor: pointer !important; }}
 
-        /* Légende (ORA-166) */
-        .oracle-legend {{
-            position: absolute; left: 12px; bottom: 34px; z-index: 1000; max-width: 210px;
-            background: rgba(15,23,42,0.92); color: #e2e8f0; border: 1px solid #334155;
-            border-radius: 10px; padding: 8px 10px; font: 11px/1.5 sans-serif;
-        }}
-        .oracle-legend ul {{ list-style: none; margin: 0 0 4px; padding: 0; }}
-        .oracle-legend-title {{ font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; font-weight: 700; margin-top: 4px; }}
-        .oracle-legend-swatch {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }}
-        .oracle-legend-muted {{ color: #94a3b8; }}
-        .oracle-legend-off {{ opacity: 0.35; text-decoration: line-through; }}
-
         /* Icônes des cavaliers (ORA-130, cavalier_icon_html) */
         {CAVALIER_ICON_CSS}
     </style>
 
     <script>
     {build_bridge_message_script(m.get_name())}
-    {build_legend_and_scale_script(m.get_name(), build_legend_html(layers_config))}
+    {build_scale_script(m.get_name())}
     window.addEventListener('load', function() {{
         // Folium rend son propre script d'initialisation (variables
         // marker_xxx/feature_group_xxx) APRES `</body>` : ce bloc ne doit

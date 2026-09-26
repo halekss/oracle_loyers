@@ -596,25 +596,22 @@ class FilterByVilleTest(unittest.TestCase):
         self.assertEqual(len(result), 2)
 
 
-class LegendAndScaleTest(unittest.TestCase):
-    def test_legend_lists_the_layers_of_the_shared_config(self):
-        layers = [
-            {'name': 'Immo T2', 'label': 'Apparts T2', 'group': 'immobilier', 'uiColor': '#22c55e'},
-            {'name': 'Metro', 'label': 'Métro', 'group': 'transports', 'uiColor': '#818181'},
-        ]
+class ScaleScriptTest(unittest.TestCase):
+    """ORA-183 (v3) : l'ancienne légende Folium (build_legend_html, groupes
+    Annonces/Métro/Cavaliers & quartiers) est supprimée — elle se
+    superposait à la légende React (MapComponent) et cachait l'échelle
+    métrique. Seule l'échelle survit côté carte générée."""
 
-        legend = generate_map.build_legend_html(layers)
-
-        self.assertIn("data-layer='Immo T2'", legend)
-        self.assertIn("data-layer='Metro'", legend)
-        self.assertNotIn('Écart au loyer médian', legend)
-
-    def test_scale_script_waits_for_load_and_tracks_layers(self):
-        script = generate_map.build_legend_and_scale_script('map_abc', '<div class="oracle-legend"></div>')
+    def test_scale_script_waits_for_load_and_adds_the_metric_scale(self):
+        script = generate_map.build_scale_script('map_abc')
 
         self.assertIn("addEventListener('load'", script)
         self.assertIn('L.control.scale', script)
-        self.assertIn('overlayremove', script)
+        self.assertIn("position: 'bottomleft'", script)
+
+    def test_no_longer_builds_a_folium_side_legend(self):
+        self.assertFalse(hasattr(generate_map, 'build_legend_html'))
+        self.assertFalse(hasattr(generate_map, 'build_legend_and_scale_script'))
 
 
 class MainRegeneratesAWorkingLyonMapTest(unittest.TestCase):
@@ -676,6 +673,15 @@ class MainRegeneratesAWorkingLyonMapTest(unittest.TestCase):
 
     def test_toggle_layer_no_longer_matches_by_label_text(self):
         self.assertNotIn("getElementsByTagName('label')", self.html)
+
+    def test_no_folium_side_legend_in_the_generated_html(self):
+        """ORA-183 (v3) : une seule légende (React, MapComponent) — celle
+        générée côté Folium (oracle-legend) est retirée pour ne plus se
+        superposer à elle et masquer l'échelle métrique."""
+        self.assertNotIn("oracle-legend", self.html)
+
+    def test_the_metric_scale_is_still_present(self):
+        self.assertIn("L.control.scale", self.html)
 
 
 if __name__ == "__main__":
