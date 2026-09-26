@@ -109,6 +109,27 @@ class CavaliersRequestSchemaTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             CavaliersRequestSchema(lat=45.75, lng=4.83, ville="   ")
 
+    def test_rayon_m_none_string_means_no_radius(self):
+        """Rayon "Aucun" (ORA-183, v3) : le sélecteur segmenté envoie la
+        valeur "none" (query string GET, toujours une chaîne) pour demander
+        les totaux à l'échelle de la ville plutôt qu'un rayon précis."""
+        payload = CavaliersRequestSchema(lat=45.75, lng=4.83, ville="lyon", rayon_m="none")
+        self.assertIsNone(payload.rayon_m)
+
+    def test_rayon_m_none_string_is_case_insensitive(self):
+        payload = CavaliersRequestSchema(lat=45.75, lng=4.83, ville="lyon", rayon_m="NONE")
+        self.assertIsNone(payload.rayon_m)
+
+    def test_rayon_m_python_none_is_also_accepted(self):
+        payload = CavaliersRequestSchema(lat=45.75, lng=4.83, ville="lyon", rayon_m=None)
+        self.assertIsNone(payload.rayon_m)
+
+    def test_absent_rayon_m_still_defaults_to_500_not_none(self):
+        """Non-régression : seul un "none" explicite retire le rayon — un
+        appel qui omet rayon_m garde le comportement historique (500m)."""
+        payload = CavaliersRequestSchema(lat=45.75, lng=4.83, ville="lyon")
+        self.assertEqual(payload.rayon_m, 500)
+
 
 if __name__ == "__main__":
     unittest.main()

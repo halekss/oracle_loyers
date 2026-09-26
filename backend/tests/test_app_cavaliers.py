@@ -52,6 +52,16 @@ class CavaliersRouteTest(unittest.TestCase):
 
         self.mock_service.compute.assert_called_once_with(45.75, 4.83, "lyon", 500)
 
+    def test_accepts_rayon_m_none_and_forwards_none_to_the_service(self):
+        """Rayon "Aucun" (ORA-183, v3) : le service reçoit `None`, pas une
+        chaîne, pour distinguer ce cas d'un vrai rayon numérique."""
+        response = self.client.get("/api/cavaliers?lat=45.75&lng=4.83&ville=lyon&rayon_m=none")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIsNone(data["rayon_m"])
+        self.mock_service.compute.assert_called_once_with(45.75, 4.83, "lyon", None)
+
     def test_rejects_an_invalid_rayon_m(self):
         response = self.client.get("/api/cavaliers?lat=45.75&lng=4.83&ville=lyon&rayon_m=400")
 

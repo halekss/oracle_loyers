@@ -71,11 +71,33 @@ class CavaliersRadiusService:
         subset = df[df['categorie'] == category]
         return subset if not subset.empty else None
 
+    @staticmethod
+    def _city_wide_detail(label, df_family):
+        """Une catégorie, rayon "Aucun" : total et détail par sous-catégorie
+        sur `df_family` (déjà filtré par ville, garanti non vide — cf.
+        `_family_dataframe`), sans aucune distance : `nearest`/`empty_message`
+        n'ont pas de sens à l'échelle d'une ville entière (un total nul
+        n'existe que filtré par rayon)."""
+        items = [
+            {'poi': poi_raw.replace('_', ' ').capitalize(), 'count': int(len(group))}
+            for poi_raw, group in df_family.groupby('poi')
+        ]
+        items.sort(key=lambda item: item['count'], reverse=True)
+
+        return {
+            'categorie': label,
+            'total': sum(item['count'] for item in items),
+            'items': items,
+            'empty_message': None,
+            'nearest': None,
+        }
+
     def compute(self, lat, lng, ville, radius_m=DEFAULT_RADIUS_M):
         """Détail (`cavaliers_detail`, même forme que
         cavaliers_factors.detail_cavaliers) + phrases (`facteurs`, même forme
         que cavaliers_factors.summarize_cavaliers) pour (lat, lng, ville),
-        au rayon `radius_m`."""
+        au rayon `radius_m` — ou pour toute la ville si `radius_m` est None
+        (rayon "Aucun", ORA-183/v3, sélecteur de la vue Calques)."""
         detail = []
         facteurs = []
 
@@ -86,6 +108,12 @@ class CavaliersRadiusService:
             if df_family is None:
                 # Catégorie totalement absente des données de cette ville —
                 # même convention que detail_cavaliers (on ne l'affiche pas).
+                continue
+
+            if radius_m is None:
+                detail.append(self._city_wide_detail(label, df_family))
+                # Pas de phrase humoristique : elle parle toujours d'un rayon
+                # ("... à moins de {rayon}m"), qui n'existe plus ici.
                 continue
 
             dists = haversine_distance_m(

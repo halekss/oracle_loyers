@@ -145,5 +145,58 @@ class CavaliersRadiusServiceTest(unittest.TestCase):
         self.assertEqual(categories, ["Vice", "Gentrification", "Nuisance", "Superstition"])
 
 
+class CavaliersRadiusServiceNoRadiusTest(unittest.TestCase):
+    """Rayon « Aucun » (ORA-183, v3) : totaux à l'échelle de la ville, sans
+    filtre de distance ni notion de "plus proche" — l'utilisateur a
+    explicitement retiré le rayon, tous les lieux de la ville comptent."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp_dir = tempfile.mkdtemp()
+        self.lyon_csv = os.path.join(self.tmp_dir, "cavaliers_lyon.csv")
+        self.lille_csv = os.path.join(self.tmp_dir, "cavaliers_lille.csv")
+        _write_csv(self.lyon_csv, LYON_ROWS, with_code_postal=True)
+        _write_csv(self.lille_csv, LILLE_ROWS, with_code_postal=False)
+        self.service = CavaliersRadiusService(self.lyon_csv, self.lille_csv)
+
+    def test_counts_every_place_in_the_city_regardless_of_distance(self):
+        """3 lieux Vice à Lyon (Le Bar Proche 100m, Le Bar Loin 800m, Kebab
+        King 400m) : tous comptent, y compris le plus lointain (800m, hors
+        de tous les rayons 300/500/1000 proposés)."""
+        result = self.service.compute(CENTER_LAT, CENTER_LNG, "lyon", None)
+        vice = CavaliersRadiusService.category(result, "Vice")
+
+        self.assertEqual(vice["total"], 3)
+
+    def test_items_have_no_distance_field(self):
+        result = self.service.compute(CENTER_LAT, CENTER_LNG, "lyon", None)
+        vice = CavaliersRadiusService.category(result, "Vice")
+
+        for item in vice["items"]:
+            self.assertNotIn("dist_m", item)
+
+    def test_a_category_absent_from_the_city_data_is_simply_skipped(self):
+        """Lille (fixture LILLE_ROWS) n'a que du Vice : à l'échelle d'une
+        ville, une catégorie présente dans les données a forcément un total
+        > 0 (le "vide" n'a de sens que filtré par rayon) — une catégorie
+        totalement absente du CSV reste omise, comme pour un rayon donné."""
+        result = self.service.compute(CENTER_LAT, CENTER_LNG, "lille", None)
+        categories = [d["categorie"] for d in result["cavaliers_detail"]]
+
+        self.assertEqual(categories, ["Vice"])
+
+    def test_facteurs_are_empty_because_the_joke_phrase_talks_about_a_radius(self):
+        result = self.service.compute(CENTER_LAT, CENTER_LNG, "lyon", None)
+
+        self.assertEqual(result["facteurs"], [])
+
+    def test_lyon_and_lille_still_kept_separate(self):
+        lyon_result = self.service.compute(CENTER_LAT, CENTER_LNG, "lyon", None)
+        lille_result = self.service.compute(CENTER_LAT, CENTER_LNG, "lille", None)
+
+        self.assertEqual(CavaliersRadiusService.category(lyon_result, "Vice")["total"], 3)
+        self.assertEqual(CavaliersRadiusService.category(lille_result, "Vice")["total"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

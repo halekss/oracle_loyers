@@ -292,7 +292,7 @@ curl -X POST http://localhost:5000/api/quartier-stats \
 
 ## `GET /api/cavaliers`
 
-Détail des 4 "Cavaliers" (Vice, Gentrification, Nuisance, Superstition) autour d'un point donné, calculé **en direct** (distance haversine) pour un rayon choisi — contrairement à `facteurs`/`cavaliers_detail` de `/api/quartier-stats`, qui restent fixés à 500m (colonnes précalculées de `master_immo_final.csv`). Alimente le sélecteur de rayon (300 m/500 m/1 km) de la vue "Calques" du rail.
+Détail des 4 "Cavaliers" (Vice, Gentrification, Nuisance, Superstition) autour d'un point donné, calculé **en direct** (distance haversine) pour un rayon choisi — contrairement à `facteurs`/`cavaliers_detail` de `/api/quartier-stats`, qui restent fixés à 500m (colonnes précalculées de `master_immo_final.csv`). Alimente le sélecteur de rayon (Aucun · 300 m · 500 m · 1 km) de la vue "Calques" du rail.
 
 - **Paramètres de requête** :
 
@@ -301,13 +301,14 @@ Détail des 4 "Cavaliers" (Vice, Gentrification, Nuisance, Superstition) autour 
 | `lat` | number | oui | — | Latitude WGS84 du centre (ex. quartier scanné, `center` de `/api/quartier-stats`) |
 | `lng` | number | oui | — | Longitude WGS84 du centre |
 | `ville` | string | oui | — | `"lyon"` ou `"lille"` — sélectionne `cavaliers_<ville>.csv` |
-| `rayon_m` | integer | non | `500` | Uniquement `300`, `500` ou `1000` |
+| `rayon_m` | integer ou `"none"` | non | `500` | `300`, `500`, `1000`, ou `"none"` (insensible à la casse) pour le rayon "Aucun" — totaux à l'échelle de la ville, sans filtre de distance. Absent : `500` (comportement historique, inchangé). |
 
 ```bash
 curl "http://localhost:5000/api/cavaliers?lat=45.75&lng=4.83&ville=lyon&rayon_m=300"
+curl "http://localhost:5000/api/cavaliers?lat=45.75&lng=4.83&ville=lyon&rayon_m=none"
 ```
 
-- **Réponse `200`** :
+- **Réponse `200`** (rayon `300`) :
 
 ```json
 {
@@ -330,8 +331,29 @@ curl "http://localhost:5000/api/cavaliers?lat=45.75&lng=4.83&ville=lyon&rayon_m=
 
 `cavaliers_detail`/`facteurs` : même forme que les champs homonymes de `/api/quartier-stats` (voir ci-dessus), calculés pour `rayon_m` plutôt que fixés à 500m. `nearest` (supplémentaire) : lieu le plus proche de la catégorie, quel que soit `rayon_m` (utilisé pour nommer le lieu dans `empty_message` quand la catégorie est vide dans le rayon demandé).
 
+- **Réponse `200`** (rayon `"none"`, totaux ville) :
+
+```json
+{
+  "ville": "lyon",
+  "rayon_m": null,
+  "cavaliers_detail": [
+    {
+      "categorie": "Vice",
+      "total": 546,
+      "items": [{ "poi": "Bar", "count": 320 }, { "poi": "Kebab", "count": 226 }],
+      "empty_message": null,
+      "nearest": null
+    }
+  ],
+  "facteurs": []
+}
+```
+
+Rayon "Aucun" : `items` n'a plus de `dist_m` (compte par sous-catégorie à l'échelle de la ville, sans notion de distance), `nearest` vaut toujours `null` (pas de sens à cette échelle), et `facteurs` est toujours vide — la phrase humoristique parle systématiquement d'un rayon ("... à moins de {rayon}m"), qui n'existe plus dans ce mode.
+
 - **Codes d'erreur** :
-  - `400` si `lat`/`lng`/`ville` manquent ou si `rayon_m` n'est pas 300/500/1000 : `{ "error": "Paramètres invalides : lat, lng et ville sont requis ; rayon_m doit être 300, 500 ou 1000" }`
+  - `400` si `lat`/`lng`/`ville` manquent ou si `rayon_m` n'est ni 300/500/1000 ni `"none"` : `{ "error": "Paramètres invalides : lat, lng et ville sont requis ; rayon_m doit être 300, 500, 1000 ou \"none\"" }`
   - `500` en cas d'erreur de calcul : `{ "error": "Erreur lors du calcul des cavaliers" }` (jamais le détail de l'exception)
 
 ---

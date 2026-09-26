@@ -684,17 +684,24 @@ def get_cavaliers():
         example: lyon
       - name: rayon_m
         in: query
-        type: integer
+        type: string
         required: false
-        default: 500
-        description: "300, 500 ou 1000 uniquement"
+        default: "500"
+        description: >
+          300, 500 ou 1000 ; ou "none" (rayon "Aucun") pour les totaux à
+          l'échelle de la ville, sans filtre de distance. Absent : 500.
     responses:
       200:
         description: >
           cavaliers_detail (même forme que /api/quartier-stats) et facteurs
-          (phrases), calculés pour le rayon demandé.
+          (phrases), calculés pour le rayon demandé. Avec rayon_m=none,
+          cavaliers_detail donne les totaux ville (items sans dist_m,
+          nearest/empty_message à null) et facteurs est vide (la phrase
+          humoristique parle toujours d'un rayon).
       400:
-        description: Paramètres manquants ou invalides (lat/lng/ville requis, rayon_m doit être 300/500/1000)
+        description: >
+          Paramètres manquants ou invalides (lat/lng/ville requis, rayon_m
+          doit être 300, 500, 1000 ou "none")
       500:
         description: Erreur lors du calcul
     """
@@ -702,7 +709,7 @@ def get_cavaliers():
         payload = CavaliersRequestSchema(**request.args.to_dict())
     except (ValidationError, TypeError):
         return jsonify({
-            "error": "Paramètres invalides : lat, lng et ville sont requis ; rayon_m doit être 300, 500 ou 1000",
+            "error": "Paramètres invalides : lat, lng et ville sont requis ; rayon_m doit être 300, 500, 1000 ou \"none\"",
         }), 400
 
     try:
