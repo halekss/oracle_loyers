@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -87,8 +87,32 @@ describe('AnnonceCard', () => {
     openSpy.mockRestore();
   });
 
-  it('renders a generic illustration instead of any image (ORA-133 : pas de photo tierce)', () => {
+  it('renders a generic illustration when the annonce has no photo', () => {
     const { container } = render(<AnnonceCard annonce={baseAnnonce} />);
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('shows the annonce photo (hotlink) in place of the illustration, keeping the type label', () => {
+    const photo = 'https://lb1.vizzit.com/1a/Aabc/Photos/Aabc_1.jpg';
+    const { container } = render(<AnnonceCard annonce={{ ...baseAnnonce, images: [photo] }} />);
+
+    expect(container.querySelector('img')).toHaveAttribute('src', photo);
+    expect(screen.getByText('T2')).toBeInTheDocument();
+  });
+
+  it('ignores a non-http(s) photo url', () => {
+    const { container } = render(<AnnonceCard annonce={{ ...baseAnnonce, images: ['javascript:alert(1)'] }} />);
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+    expect(container.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('falls back to the illustration when the photo fails to load', () => {
+    const { container } = render(<AnnonceCard annonce={{ ...baseAnnonce, images: ['https://example.test/404.jpg'] }} />);
+
+    fireEvent.error(container.querySelector('img'));
 
     expect(container.querySelector('img')).not.toBeInTheDocument();
     expect(container.querySelector('svg')).toBeInTheDocument();
