@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import ResultCard from './components/ResultCard';
 import PriceHistory from './components/PriceHistory';
-import MapComponent, { ToggleItem } from './components/MapComponent';
+import MapComponent from './components/MapComponent';
+import CalquesView from './components/CalquesView';
 import ChatOracle from './components/ChatOracle';
 import AnnoncesList from './components/AnnoncesList';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -19,7 +20,11 @@ import { computeBoundsForQuartiers } from './services/mapBounds';
 import { computeHomeStats } from './services/homeStats';
 import { computeQuartierOptions } from './services/quartierStats';
 import { computeLatestDataDate } from './services/latestDataDate';
-import { layersByGroup } from './services/mapLayers';
+import { useLayerVisibility } from './hooks/useLayerVisibility';
+import { useCavaliersRadius } from './hooks/useCavaliersRadius';
+import { useLayerCounts } from './hooks/useLayerCounts';
+import { CAVALIERS_RADIUS_M } from './services/cavaliersDisplay';
+import { loadCavaliersRadiusM, saveCavaliersRadiusM } from './services/cavaliersRadiusStorage';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
 // l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
@@ -110,11 +115,21 @@ function App() {
   // quitte la vue Recherche, pour qu'une visite ultérieure (rail direct)
   // n'hérite pas de ce focus ciblé.
   const [focusSurfaceNext, setFocusSurfaceNext] = useState(false);
-  // ORA-178 : miroir de l'état interne de MapComponent (calques + compteurs),
-  // pour que la vue "Calques" du rail affiche exactement ce qu'il sait déjà
-  // — jamais recalculé ici, seulement reflété (cf. MapComponent#onLayersChange).
-  const [mapLayersState, setMapLayersState] = useState({ layers: {}, layerCounts: {} });
-  const mapRef = useRef(null);
+  // ORA-178 : visibilité des calques — remontée depuis MapComponent (qui
+  // devient un composant contrôlé) pour qu'App en soit l'unique source de
+  // vérité, partagée par la vue "Calques" du rail ET le panneau flottant
+  // mobile (hook dédié, testable indépendamment : useLayerVisibility.test.js).
+  const { layers: layerVisibility, toggleLayer, resetLayers, setLayersVisible } = useLayerVisibility();
+  // Vue "Calques", sélecteur de rayon (Aucun/300 m/500 m/1 km) : remis à
+  // 500 m à chaque nouveau scan (cf. handleScan) pour repartir du rayon par
+  // défaut plutôt que d'hériter du dernier rayon consulté sur un autre
+  // quartier. Le choix (y compris "Aucun", `null`) est mémorisé en
+  // localStorage — seule la valeur initiale au montage en dépend, un nouveau
+  // scan garde la remise à 500 m ci-dessus inchangée.
+  const [cavaliersRadiusM, setCavaliersRadiusM] = useState(() => loadCavaliersRadiusM(CAVALIERS_RADIUS_M));
+  useEffect(() => {
+    saveCavaliersRadiusM(cavaliersRadiusM);
+  }, [cavaliersRadiusM]);
   // Sélecteur de ville (ORA-71 POC) : ne change que la carte affichée et le
   // bornage des recherches quartier/historique — les CSV/codes postaux
   // Lyon/Lille restant jamais ambigus entre les deux villes.
@@ -131,6 +146,10 @@ function App() {
   const quartierOptions = useMemo(() => computeQuartierOptions(listings, ville), [listings, ville]);
   // ORA-171 : badge "Données au" de la topbar, repris sur toutes les vues.
   const latestDataDate = useMemo(() => computeLatestDataDate(listings, ville), [listings, ville]);
+  // ORA-183 (v3) : compteurs par calque (bloc "Annonces" de la vue Calques),
+  // même hook que le panneau flottant mobile (MapComponent) — un seul fetch
+  // par composant qui en a besoin, jamais recalculé depuis `listings`.
+  const layerCounts = useLayerCounts(ville);
   // ORA-178 : "Estimation personnalisée" (maquette 03) — vraie prédiction
   // modèle disponible, cf. ResultCard.jsx (même condition).
   const hasModelEstimate = Boolean(result?.surface) && Boolean(result?.confiance);
@@ -139,6 +158,18 @@ function App() {
   // de `activeView` : la fiche reste en cache tant qu'une autre annonce n'a
   // pas été sélectionnée, même après avoir changé de vue.
   const ficheDetail = useAnnonceDetail(selectedAnnonceId);
+  // Vue "Calques" : détail des 4 cavaliers pour `cavaliersRadiusM` — reprend
+  // result.cavaliersDetail/facteurs (500 m, déjà fournis par le scan) sans
+  // appel réseau, sauf si un autre rayon a été choisi (GET /api/cavaliers,
+  // mis en cache par (quartier, rayon) — hooks/useCavaliersRadius.js).
+  const cavaliersRadius = useCavaliersRadius({
+    quartier: result?.quartier,
+    center: result?.center,
+    ville,
+    radiusM: cavaliersRadiusM,
+    defaultDetail: result?.cavaliersDetail,
+    defaultFacteurs: result?.facteurs,
+  });
 
   // ORA-105 : chargé une fois, sert à résoudre les coordonnées des quartiers
   // des annonces affichées (AnnoncesList n'a pas de latitude/longitude), et
@@ -265,6 +296,9 @@ function App() {
     setResult(null);
     setPriceHistory(null);
     setAmbiguousQuartier(null);
+    // Nouveau scan : repart du rayon par défaut plutôt que d'hériter du
+    // dernier rayon consulté sur un autre quartier (vue "Calques").
+    setCavaliersRadiusM(CAVALIERS_RADIUS_M);
     // ORA-179 : lancer un scan bascule immédiatement sur la vue "Scan" du
     // rail (desktop), ou "Estimation" si une surface a été saisie — connu
     // synchroniquement, pas besoin d'attendre la réponse du serveur. Sans
@@ -340,6 +374,9 @@ function App() {
         // présent) pour le panneau "Les 4 Cavaliers", en plus des phrases résumées ci-dessus (PDF).
         cavaliersDetail: data.cavaliers_detail || [],
         comparables: data.comparables || [],
+        // ORA-178 : centre du quartier scanné — vue "Calques", cercle de
+        // rayon des cavaliers tracé sur la carte (MapComponent#radiusCircle).
+        center: data.center,
         // ORA-171 : "Estimation personnalisée" (maquette 03) ne s'affiche que
         // lorsqu'une vraie prédiction modèle a eu lieu (confiance non nulle) ;
         // `surface` sert d'entrée aux scénarios "et si la surface change ?" et
@@ -483,33 +520,28 @@ function App() {
     );
   }
 
-  // ORA-178 : vue "Calques" — mêmes lignes que le panneau flottant de
-  // MapComponent (mobile), pilotées à distance via `mapRef.current.toggleLayer`
-  // pour ne jamais dupliquer la logique d'envoi des commandes à l'iframe.
+  // ORA-178 : vue "Calques" (maquette vue-calques.png) — Fonds de carte +
+  // lecture détaillée des 4 cavaliers autour du quartier scanné. Au rayon
+  // 500 m, réutilise les mêmes données que le bloc "Les 4 Cavaliers" de la
+  // vue Scan (`result.cavaliersDetail`/`result.facteurs`) ; pour 300 m/1 km,
+  // useCavaliersRadius appelle GET /api/cavaliers (cf. plus haut).
   function renderCalquesView() {
-    const { layers, layerCounts } = mapLayersState;
-    const toggle = (key) => mapRef.current?.toggleLayer(key);
     return (
-      <div className="p-4 md:p-5 space-y-4">
-        <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Transports</h3>
-          {layersByGroup('transports').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} />
-          ))}
-        </div>
-        <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Les 4 Cavaliers</h3>
-          {layersByGroup('contexte').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} count={layerCounts[layer.key]} />
-          ))}
-        </div>
-        <div>
-          <h3 className="text-[10px] uppercase tracking-widest text-ink-dim mb-2 font-bold">Offres Immobilières</h3>
-          {layersByGroup('immobilier').map((layer) => (
-            <ToggleItem key={layer.key} label={layer.label} color={layer.uiColor} isActive={layers[layer.key]} onToggle={() => toggle(layer.key)} count={layerCounts[layer.key]} />
-          ))}
-        </div>
-      </div>
+      <CalquesView
+        layers={layerVisibility}
+        onToggleLayer={toggleLayer}
+        onSetLayersVisible={setLayersVisible}
+        layerCounts={layerCounts}
+        cavaliersDetail={cavaliersRadius.cavaliersDetail}
+        facteurs={cavaliersRadius.facteurs}
+        isLoadingCavaliers={cavaliersRadius.isLoading}
+        radiusM={cavaliersRadiusM}
+        onChangeRadiusM={setCavaliersRadiusM}
+        quartier={result?.quartier}
+        zonesCount={homeStats.districts.length}
+        ville={ville}
+        onGoToRecherche={() => setActiveView('recherche')}
+      />
     );
   }
 
@@ -567,8 +599,29 @@ function App() {
         return { overline: breadcrumb, title: 'Scan du quartier' };
       case 'estimation':
         return { overline: breadcrumb, title: 'Estimation personnalisée' };
-      case 'calques':
-        return { title: 'Calques & 4 cavaliers' };
+      case 'calques': {
+        // ORA-178 : sur-titre "QUARTIER · TYPE · ARRONDISSEMENT" (maquette
+        // vue-calques.png) — l'arrondissement vient de `quartierOptions`
+        // (déjà calculé, palette de recherche), jamais recalculé ici.
+        const arrondissement = quartierOptions.find((o) => o.quartier === result?.quartier)?.arrondissement;
+        const calquesBreadcrumb = result?.quartier
+          ? [result.quartier, result.type && result.type !== 'Tout' ? result.type : null, arrondissement]
+              .filter(Boolean).join(' · ').toUpperCase()
+          : undefined;
+        return {
+          overline: calquesBreadcrumb,
+          title: 'Calques & 4 cavaliers',
+          actions: (
+            <button
+              type="button"
+              onClick={resetLayers}
+              className="shrink-0 min-h-[44px] px-2 flex items-center text-[10px] uppercase tracking-widest font-bold text-violet-400 hover:text-violet-300"
+            >
+              Réinitialiser
+            </button>
+          ),
+        };
+      }
       case 'annonces':
         return { title: 'Annonces' };
       case 'fiche': {
@@ -587,7 +640,7 @@ function App() {
     }
   }
 
-  const { overline: sheetOverline, title: sheetTitle } = panelSheetHeader();
+  const { overline: sheetOverline, title: sheetTitle, actions: sheetActions } = panelSheetHeader();
 
   return (
     <div className="flex flex-col h-screen w-screen bg-ink-950 text-ink overflow-hidden font-sans selection:bg-accent/30">
@@ -608,8 +661,9 @@ function App() {
 
         {/* COLONNE GAUCHE — Carte (60% desktop, plein écran mobile). Ne se
             démonte/remonte jamais au changement de vue du rail (ORA-178) :
-            seuls `center`/`bounds` changent, la vue "Calques" pilote ses
-            calques à distance via `mapRef`. */}
+            seuls `center`/`bounds` changent, la vue "Calques" pilote
+            `layerVisibility`, qu'App transmet directement en prop (composant
+            contrôlé). */}
         <div
           id="panel-carte"
           role="tabpanel"
@@ -619,14 +673,22 @@ function App() {
           {shouldMountMap && (
             <ErrorBoundary fallback={makePanelFallback('La carte')}>
               <MapComponent
-                ref={mapRef}
                 center={mapCenter}
                 bounds={mapBounds}
                 chatOpen={isChatOpen}
                 ville={ville}
                 hidePanel={isDesktop}
-                onLayersChange={(layers, layerCounts) => setMapLayersState({ layers, layerCounts })}
+                layers={layerVisibility}
+                onToggleLayer={toggleLayer}
                 onAnnonceClick={handleSelectAnnonce}
+                focus={
+                  // Rayon "Aucun" (ORA-183, v3) : `cavaliersRadiusM` vaut
+                  // `null` — CLEAR_FOCUS (pas de cercle, pings au style
+                  // normal), jamais SET_FOCUS avec un radius_m manquant.
+                  activeView === 'calques' && result?.center && cavaliersRadiusM != null
+                    ? { lat: result.center.lat, lng: result.center.lng, radiusM: cavaliersRadiusM }
+                    : null
+                }
               />
             </ErrorBoundary>
           )}
@@ -649,6 +711,7 @@ function App() {
               id={PANEL_SHEET_ID}
               overline={activeView === 'immotep' ? undefined : sheetOverline}
               title={activeView === 'immotep' ? undefined : sheetTitle}
+              actions={activeView === 'immotep' ? undefined : sheetActions}
             >
               {/* ORA-175/178 : Immotep reste monté en permanence (juste
                   masqué) pour ne jamais perdre l'historique de conversation

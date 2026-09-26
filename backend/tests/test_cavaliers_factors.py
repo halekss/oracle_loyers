@@ -93,6 +93,34 @@ class SummarizeCavaliersTest(unittest.TestCase):
         self.assertEqual(len(factors), 1)
         self.assertEqual(factors[0]['categorie'], 'Vice')
 
+    def test_defaults_to_a_500m_radius_when_unspecified(self):
+        """Non-régression : /api/quartier-stats et le PDF n'appellent
+        summarize_cavaliers sans argument rayon — le comportement (et le
+        texte "500m") doit rester identique à avant la paramétrisation."""
+        df = pd.DataFrame([_row(nb_vice_bar_500m=4, dist_vice_bar=120)])
+
+        factors = summarize_cavaliers(df)
+
+        vice_factor = next(f for f in factors if f['categorie'] == 'Vice')
+        self.assertIn("500m", vice_factor['phrase'])
+
+    def test_uses_the_given_rayon_in_the_phrase_instead_of_500m(self):
+        df = pd.DataFrame([_row(nb_vice_bar_500m=4, dist_vice_bar=120)])
+
+        factors = summarize_cavaliers(df, rayon=300)
+
+        vice_factor = next(f for f in factors if f['categorie'] == 'Vice')
+        self.assertIn("300m", vice_factor['phrase'])
+        self.assertNotIn("500m", vice_factor['phrase'])
+
+    def test_absence_phrase_also_uses_the_given_rayon(self):
+        df = pd.DataFrame([_row(nb_vice_bar_500m=0, nb_vice_kebab_500m=0)])
+
+        factors = summarize_cavaliers(df, rayon=1000)
+
+        vice_factor = next(f for f in factors if f['categorie'] == 'Vice')
+        self.assertIn("1000m", vice_factor['phrase'])
+
 
 class DetailCavaliersTest(unittest.TestCase):
     def test_lists_every_poi_subtype_with_rounded_count_and_min_distance(self):

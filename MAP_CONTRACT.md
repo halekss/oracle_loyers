@@ -62,18 +62,44 @@ Indique à la carte où aller chercher ses tuiles : le **proxy de tuiles du back
 
 ### `TOGGLE_LAYER`
 
-Active/désactive un calque Folium (`LayerControl`) depuis le panneau de contrôle React, sans dupliquer ce panneau dans la carte elle-même (masqué via CSS).
+Active/désactive un calque Folium (FeatureGroup ou GeoJson) depuis le panneau de contrôle React, sans dupliquer ce panneau dans la carte elle-même (masqué via CSS).
 
-**Émis par** : `MapComponent.jsx`, sur toggle utilisateur ou au chargement initial de l'iframe (`handleIframeLoad`, pour resynchroniser l'état des calques React vers la carte).
+**Émis par** : `MapComponent.jsx`, sur toggle utilisateur ou au chargement initial de l'iframe (`handleIframeLoad`, pour resynchroniser l'état complet des calques React vers la carte).
 
 ```json
-{ "type": "TOGGLE_LAYER", "name": "Immo T2", "show": true }
+{ "type": "TOGGLE_LAYER", "key": "T2", "show": true }
 ```
 
-* `name` : libellé du calque tel qu'affiché dans le `LayerControl` Folium (`LAYER_MAPPING` dans `MapComponent.jsx` fait la correspondance clé interne → libellé réel — voir "Config partagée des calques" ci-dessous pour la source de vérité de cette correspondance).
+* `key` : clé interne du calque, celle de `mapLayers.config.json` (`layer.key` — la même que l'état React `layers` et `toggleLayer(key)`, voir "Config partagée des calques" ci-dessous). **Ne plus utiliser `name`/le libellé Folium** (contrat changé : l'ancienne correspondance par texte de `<label>` du `LayerControl` était fragile — un contrôle masqué/altéré cassait silencieusement tout le mécanisme).
 * `show` : état cible (`true`/`false`).
 
-**Traité par** : `build_bridge_message_script` → simule un clic sur la case à cocher Leaflet correspondante si son état diverge de `show` (Folium n'expose pas d'API JS directe pour piloter `LayerControl` par nom).
+**Traité par** : `build_bridge_message_script` → `window.oracleLayerGroups[key]` (dictionnaire `{clé -> FeatureGroup/GeoJson}`, construit par `build_layer_groups_script` une fois la carte rendue, cf. `SET_FOCUS` ci-dessous pour le même principe de déférence) → `map.addLayer(group)`/`map.removeLayer(group)` directement, aucune dépendance au texte des `<label>` ni aux cases à cocher (dorénavant purement décoratives, toujours masquées via CSS).
+
+### `SET_FOCUS` / `CLEAR_FOCUS`
+
+Matérialise le rayon des cavaliers choisi (300/500/1000m, `GET /api/cavaliers`) directement sur la carte, dans la vue "Calques" du rail : un cavalier actif garde **tous** ses pings visibles, dans le rayon comme hors du rayon (ORA-183/v3 — l'ancienne opacité résiduelle de 0,25 rendait les pings hors rayon quasi invisibles sur fond sombre, régression corrigée). Le rayon se contente de **mettre en avant** ceux qu'il contient : voir `FOCUS_STYLE` (`generate_map.py`) — dans le rayon, taille 14px/opacité 1/halo `drop-shadow` de la couleur du cavalier ; hors du rayon, taille 10px/opacité 0,75. Un cercle pointillé violet (rempli à 6 %) matérialise le rayon lui-même. `CLEAR_FOCUS` restaure le style normal de tous les cavaliers et retire le cercle — envoyé aussi pour le rayon "Aucun" (`radiusM` `null` côté React), qui n'a pas de `radius_m` à transmettre.
+
+**Émis par** : `MapComponent.jsx`, `SET_FOCUS` quand la vue "Calques" est active, qu'un quartier a été scanné (`center` connu) ET qu'un rayon concret (300/500/1000) est choisi ; `CLEAR_FOCUS` sinon (changement de vue, aucun scan, ou rayon "Aucun").
+
+```json
+{ "type": "SET_FOCUS", "lat": 45.750, "lng": 4.832, "radius_m": 500 }
+```
+
+```json
+{ "type": "CLEAR_FOCUS" }
+```
+
+* `lat`, `lng` : centre du quartier scanné (`center` de `/api/quartier-stats`/`/api/cavaliers`).
+* `radius_m` : rayon en mètres (300, 500 ou 1000 — cf. `GET /api/cavaliers`, API_CONTRACT.md).
+
+**Traité par** : `build_bridge_message_script` →
+* pour chaque entrée de `oracleCavalierMarkers` (déclaré par `build_cavalier_markers_script`, une entrée `{m, lat, lng, famille, color}` par marker cavalier posé sur la carte), calcule la distance au point de focus via `L.LatLng#distanceTo` (pas de haversine dupliqué côté JS) et applique `FOCUS_STYLE.focus` (`entry.m.setOpacity(1)`, `transform: scale(14/12)` + `filter: drop-shadow(...)` de `entry.color` sur l'élément `.oracle-cav-outer` du marker) ou `FOCUS_STYLE.dim` (`setOpacity(0.75)`, `scale(10/12)`, pas de halo) selon qu'elle est dans le rayon ou non ;
+* dessine `L.circle([lat, lng], { radius: radius_m, color: '#A78BFA', dashArray: '6 6', fill: true, fillOpacity: 0.06 })`, en retirant l'éventuel cercle précédent (`window.__oracleFocusCircle`) avant d'ajouter le nouveau — un seul cercle affiché à la fois, jamais empilés à chaque changement de rayon ;
+* `CLEAR_FOCUS` : `setOpacity(1)` et style normal (`transform`/`filter` réinitialisés) sur chaque entrée de `oracleCavalierMarkers`, retire `window.__oracleFocusCircle`.
+
+**Pings des cavaliers (`cavalier_icon_html`, `generate_map.py`)** : depuis ORA-130 (voir ci-dessous), chaque cavalier est un `folium.Marker`/`DivIcon` (plus un `CircleMarker`) dont la forme et la couleur viennent de `mapLayers.config.json` (`shape`/`uiColor`) — même source que le panneau React (`CavalierRow.jsx`) et sa légende carte. Une classe CSS par forme (`oracle-cav-circle`/`-diamond`/`-triangle`/`-square`, injectée une fois dans le `<style>` de la page) plutôt qu'un SVG inline par marker, pour ne pas alourdir le HTML généré (des centaines de cavaliers par carte).
+
+**Piège Folium résolu (bug de régression, cf. historique) : ordre de rendu.** Folium rend son propre script d'initialisation (variables `marker_xxx`/`feature_group_xxx`) **après** `</body>` (voir plus bas, section légende). `window.oracleCavalierMarkers` (`build_cavalier_markers_script`) et `window.oracleLayerGroups` (`build_layer_groups_script`, utilisé par `TOGGLE_LAYER` ci-dessus) référencent ces variables : ils doivent donc être construits **à l'intérieur** d'un `window.addEventListener('load', function() { ... })`, jamais en haut du `<script>` injecté — sinon la première variable non définie lève une `ReferenceError` qui interrompt immédiatement tout le reste du `<script>`, y compris l'enregistrement du listener `message` (`TOGGLE_LAYER`/`SET_TILE_URL` cessent alors de fonctionner silencieusement). Les deux fonctions assignent sur `window.*` plutôt que `var` pour rester accessibles depuis le listener `message`, déclaré dans une fonction séparée.
 
 ## Config partagée des calques (ORA-130)
 
@@ -101,10 +127,11 @@ Les deux côtés lisent maintenant le même fichier JSON, source de vérité uni
 * `label` : texte affiché dans le panneau de contrôle React (`ToggleItem`).
 * `group` : section du panneau React (`transports`, `contexte`, `immobilier`) — détermine où le calque apparaît, pas la structure des sections elle-même (toujours codée dans `MapComponent.jsx`).
 * `defaultVisible` : état initial, des deux côtés — `layers` initial dans `MapComponent.jsx` **et** `show=` du `FeatureGroup`/`GeoJson` correspondant dans `generate_map.py`.
-* `uiColor` : couleur du point/pastille affiché à côté du libellé dans le panneau React (`ToggleItem`). Sans effet côté carte Folium (les couleurs des marqueurs/POI restent définies séparément dans `generate_map.COLORS`, une préoccupation distincte de l'identité du calque).
+* `uiColor` : couleur du point/pastille affiché à côté du libellé dans le panneau React (`ToggleItem`). Pour les 4 calques cavaliers, cette même couleur pilote aussi l'icône du marker Folium (`generate_map.cavalier_icon_html`) — une seule source pour panneau/légende/carte, plus de dict `COLORS` séparé côté Python pour ces calques. Sans effet côté carte pour les autres calques (immo, métro, quartiers), dont le rendu vient d'ailleurs (`generate_map.COLORS['Immo']`, `METRO_COLORS`, style GeoJSON).
+* `shape` (cavaliers uniquement) : forme de l'icône, une des 4 valeurs `circle`/`diamond`/`triangle`/`square` — lue à la fois par `generate_map.cavalier_icon_html` (classe CSS `oracle-cav-<shape>`) et par React (`CavalierShapeIcon.jsx`, mêmes noms de forme).
 
 **Consommé par** :
-* `MapComponent.jsx` : `import mapLayersConfig from '../config/mapLayers.config.json'` (import JS statique, bundlé par Vite — synchrone, pas de `fetch` réseau). `LAYER_MAPPING`, l'état initial `layers` et le rendu des `ToggleItem` du panneau en dérivent tous.
+* `MapComponent.jsx` : `import mapLayersConfig from '../config/mapLayers.config.json'` (import JS statique, bundlé par Vite — synchrone, pas de `fetch` réseau). L'état initial `layers` et le rendu des `ToggleItem` du panneau en dérivent ; `TOGGLE_LAYER` envoie directement `layer.key` (plus de table de correspondance `LAYER_MAPPING` vers un libellé Folium, cf. contrat `TOGGLE_LAYER` ci-dessus).
 * `generate_map.py` : `load_layers_config()` (`json.load` sur `LAYERS_CONFIG_JSON = <repo>/frontend/src/config/mapLayers.config.json`, chemin résolu via `PROJECT_ROOT`, déjà utilisé pour écrire dans `frontend/public/data/`). Fichier requis : contrairement à `load_geojson_file` (calque optionnel), une config manquante ou invalide fait échouer la génération plutôt que produire une carte sans calques.
 
 **Pourquoi un fichier dans `frontend/src/` plutôt qu'à la racine du repo** : le build Docker du frontend (`frontend/Dockerfile`) a pour contexte `./frontend` uniquement (voir `docker-compose.yml`) — un fichier à la racine du repo ne serait pas copié dans l'image et casserait `npm run build`. `generate_map.py`, lui, a toujours besoin d'un checkout complet du repo (il écrit déjà dans `frontend/public/data/` via `PROJECT_ROOT`), donc lire un fichier sous `frontend/src/` ne lui ajoute pas de contrainte nouvelle.
@@ -125,15 +152,15 @@ Notifie React qu'un utilisateur a cliqué sur le lien "Voir l'annonce" d'un popu
 
 **Traité par** : `MapComponent.jsx`, un listener `message` dédié (distinct du contrat React → iframe ci-dessus) qui appelle `api.logAnnonceClick(id)` — même fonction que `AnnonceCard.jsx`, donc même comportement (fire-and-forget, ne bloque jamais la navigation vers l'annonce qui s'ouvre via le `<a href>` natif du popup, indépendant de ce message).
 
-## Rendu de la carte : légende, échelle, noms (ORA-165/166)
+## Rendu de la carte : légende, échelle, noms (ORA-165/166/183)
 
 Conventions visuelles de la carte générée — sans nouveau type de message `postMessage` :
 
 * **Annonces** : simples points verts (un `CircleMarker` par annonce, popup au clic, tooltip au survol). Une version « pastille prix colorée par écart au loyer médian » avec regroupement des annonces à même adresse a été livrée puis retirée : la carte reste volontairement en points.
-* **Légende** (`build_legend_html`) : injectée au chargement de la page, ses lignes de calques portent `data-layer` = `name` Folium et sont grisées quand le calque est masqué (`overlayadd`/`overlayremove`) — donc suit `TOGGLE_LAYER` sans message dédié.
-* **Échelle** métrique (`L.control.scale`) et classes `oracle-z13`/`oracle-z14` sur `<body>` : les labels de quartiers (capitales, centre des annonces du quartier) apparaissent dès le zoom 13, les noms de stations de métro dès le zoom 14.
+* **Légende** : entièrement React désormais (`frontend/src/components/MapLegend.jsx`, monté par `MapComponent.jsx`) — sections Annonces/Métro/Cavaliers/Rayon, une seule affichée par calque réellement actif, repliable. L'ancienne légende côté Folium (`build_legend_html`/`build_legend_and_scale_script`, groupes Annonces/Métro/Cavaliers & quartiers injectés dans le HTML généré) a été supprimée (ORA-183/v3) : elle se superposait à la légende React et masquait l'échelle métrique. `generate_map.py` n'injecte donc plus qu'un script d'échelle (`build_scale_script`), rien côté légende.
+* **Échelle** métrique (`L.control.scale`, `build_scale_script`) et classes `oracle-z13`/`oracle-z14` sur `<body>` : les labels de quartiers (capitales, centre des annonces du quartier) apparaissent dès le zoom 13, les noms de stations de métro dès le zoom 14.
 
-Le script de légende s'exécute sur l'événement `load` : Folium rend le script d'initialisation de la carte **après** `</body>`, la variable `map_…` n'existe pas encore lors de l'exécution d'un bloc injecté avant.
+Le script d'échelle s'exécute sur l'événement `load` : Folium rend le script d'initialisation de la carte **après** `</body>`, la variable `map_…` n'existe pas encore lors de l'exécution d'un bloc injecté avant.
 
 ## Ajouter un nouveau type de message
 

@@ -108,11 +108,93 @@ if BACKEND_DIR not in sys.path:
 from services import annonces_store  # noqa: E402 (après le sys.path.insert nécessaire)
 
 # --- 2. DATA & COULEURS ---
+# Les couleurs/formes des cavaliers ne sont PLUS codées ici : elles viennent
+# de mapLayers.config.json (`uiColor`/`shape`, cf. load_layers_config), seule
+# source partagée avec le panneau React (CavalierRow.jsx) — voir
+# cavalier_icon_html ci-dessous.
 COLORS = {
-    'Vice': '#e74c3c', 'Gentrification': '#3b82f6',
-    'Nuisance': '#f59e0b', 'Superstition': '#9333ea',
     'Immo': '#22c55e'
 }
+
+# Formes de cavalier supportées par cavalier_icon_html — tout `shape` inconnu
+# (config mal renseignée) retombe sur 'circle' plutôt que de planter.
+CAVALIER_SHAPES = ('circle', 'diamond', 'triangle', 'square')
+
+# Icône DivIcon d'un cavalier (cavalier_icon_html) : une classe CSS par forme
+# plutôt qu'un SVG inline par marker — des centaines de cavaliers par carte,
+# un SVG répété alourdirait sensiblement le HTML généré. Contour 1.5px
+# #070A12 obtenu par calque (outer = contour, inner = couleur), mêmes formes
+# que CavalierShapeIcon.jsx (React).
+CAVALIER_ICON_CSS = """
+        .oracle-cav-outer { width: 12px; height: 12px; transition: transform 0.15s ease-out; }
+        .oracle-cav-inner { width: 9px; height: 9px; margin: 1.5px; }
+        .oracle-cav-circle { border-radius: 50%; }
+        .oracle-cav-square { }
+        .oracle-cav-diamond { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+        .oracle-cav-triangle { clip-path: polygon(50% 0%, 100% 100%, 0% 100%); }
+"""
+
+# ORA-183 (v3) : un cavalier actif montre TOUJOURS tous ses lieux (rayon actif
+# ou non) — le rayon ne fait plus que les mettre en avant (SET_FOCUS,
+# build_bridge_message_script), sans faire disparaître le reste sur fond
+# sombre (opacité 0.25 illisible, cf. régression signalée). Échelle relative à
+# la taille de base .oracle-cav-outer (12px) : 14/12 dans le rayon, 10/12 hors
+# du rayon, appliquée via `transform: scale()` sur ce même élément (jamais sur
+# l'icône Leaflet elle-même, qui porte le positionnement — cf. SET_FOCUS).
+FOCUS_STYLE = {
+    'focus': {'scale': 14 / 12, 'opacity': 1},
+    'dim': {'scale': 10 / 12, 'opacity': 0.75},
+}
+
+
+def cavalier_icon_html(shape, color):
+    """HTML DivIcon d'un marker cavalier (icon_size=(12,12)) — voir
+    CAVALIER_ICON_CSS pour les classes CSS par forme qu'il référence."""
+    css_shape = shape if shape in CAVALIER_SHAPES else 'circle'
+    return (
+        f'<div class="oracle-cav-outer oracle-cav-{css_shape}" style="background:#070A12">'
+        f'<div class="oracle-cav-inner oracle-cav-{css_shape}" style="background:{color}"></div>'
+        f'</div>'
+    )
+
+
+def build_cavalier_markers_script(entries):
+    """JS `window.oracleCavalierMarkers=[...]` : référence (variable Folium du
+    marker, lat/lng, famille) de chaque cavalier posé sur la carte —
+    nécessaire pour que SET_FOCUS (build_bridge_message_script) fasse varier
+    son opacité selon la distance au point choisi, sans dépendre d'un calcul
+    haversine dupliqué côté JS (L.LatLng#distanceTo suffit).
+    `entries` : [{"js_var", "lat", "lng", "famille", "color"}, ...]. `color`
+    (uiColor de mapLayers.config.json) sert au halo drop-shadow dessiné par
+    SET_FOCUS autour des pings mis en avant par le rayon (ORA-183).
+
+    Assigne sur `window` plutôt qu'un `var` local : ce script est exécuté à
+    l'intérieur du callback `window.addEventListener('load', ...)` (cf.
+    `main`), pour ne référencer les variables `marker_xxx` (rendues par
+    Folium après `</body>`) qu'une fois qu'elles existent réellement — un
+    `var` s'y serait limité à la portée de cette fonction, invisible depuis le
+    listener `message` séparé (`build_bridge_message_script`)."""
+    items = ",".join(
+        f'{{m:{entry["js_var"]},lat:{entry["lat"]},lng:{entry["lng"]},'
+        f'famille:{json.dumps(entry["famille"])},color:{json.dumps(entry["color"])}}}'
+        for entry in entries
+    )
+    return f"window.oracleCavalierMarkers=[{items}];"
+
+
+def build_layer_groups_script(entries):
+    """JS `window.oracleLayerGroups={{key: FeatureGroup, ...}}` : un calque
+    Folium (FeatureGroup ou GeoJson) par clé de mapLayers.config.json —
+    permet à TOGGLE_LAYER (build_bridge_message_script) de piloter
+    directement `map.addLayer`/`removeLayer` par clé, sans dépendre du texte
+    des `<label>` du LayerControl Folium (fragile : cassait dès que le
+    contrôle était masqué/altéré — bugs #1/#2/#3/#5/#8).
+
+    `entries` : {layer_key: js_var_name, ...}. Assigné sur `window` pour la
+    même raison que `build_cavalier_markers_script` (exécuté dans le
+    callback `load`)."""
+    items = ",".join(f"{json.dumps(key)}:{js_var}" for key, js_var in entries.items())
+    return f"window.oracleLayerGroups={{{items}}};"
 
 METRO_COLORS = {
     'A': '#e9003a', 'B': '#0073ba',
@@ -221,53 +303,21 @@ def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_ur
     """
 
 
-# --- ORA-166 : légende, échelle ---
+# --- ORA-166 : échelle métrique ---
+# ORA-183 (v3) : l'ancienne légende Folium (build_legend_html, groupes
+# Annonces/Métro/Cavaliers & quartiers) est supprimée — elle se superposait à
+# la légende React (MapComponent) et cachait l'échelle. Une seule légende
+# désormais, entièrement côté React, qui ne liste que les calques actifs.
 
 
-def build_legend_html(layers_config):
-    """Légende en coin de carte (ORA-166) : groupes Annonces / Métro /
-    Cavaliers / Quartiers issus de la config partagée des calques. Chaque
-    ligne porte `data-layer` (nom Folium du calque) : un script grise la ligne quand le
-    calque est masqué depuis le panneau de contrôle."""
-    groups = [
-        ('immobilier', 'Annonces'), ('transports', 'Métro'), ('contexte', 'Cavaliers & quartiers'),
-    ]
-    sections = []
-    for group_key, title in groups:
-        rows = ''.join(
-            f"<li data-layer='{html.escape(layer['name'], quote=True)}'>"
-            f"<span class='oracle-legend-swatch' style='background:{layer['uiColor']};'></span>"
-            f"{html.escape(layer['label'])}</li>"
-            for layer in layers_config if layer['group'] == group_key
-        )
-        sections.append(f"<div class='oracle-legend-title'>{title}</div><ul>{rows}</ul>")
-    return (
-        "<div class='oracle-legend' role='region' aria-label='Légende de la carte'>"
-        f"{''.join(sections)}"
-        "</div>"
-    )
+def build_scale_script(map_var):
+    """Injecte l'échelle métrique Leaflet (ORA-166) en bas à gauche.
 
-
-def build_legend_and_scale_script(map_var, legend_html):
-    """Injecte la légende et l'échelle métrique ; grise les lignes de
-    légende des calques masqués."""
-    legend_js = json.dumps(legend_html)
-    # `load` : Folium rend le script d'init de la carte APRÈS </body> ; à
-    # l'exécution de ce bloc, `{map_var}` n'est donc pas encore défini.
+    `load` : Folium rend le script d'init de la carte APRÈS </body> ; à
+    l'exécution de ce bloc, `{map_var}` n'est donc pas encore défini."""
     return f"""
     window.addEventListener('load', function() {{
-        var map = {map_var};
-        var container = document.createElement('div');
-        container.innerHTML = {legend_js};
-        document.body.appendChild(container.firstChild);
-        L.control.scale({{imperial: false, position: 'bottomleft'}}).addTo(map);
-        function setLegend(name, on) {{
-            document.querySelectorAll('.oracle-legend [data-layer]').forEach(function(li) {{
-                if (li.getAttribute('data-layer') === name) li.classList.toggle('oracle-legend-off', !on);
-            }});
-        }}
-        map.on('overlayadd', function(e) {{ setLegend(e.name, true); }});
-        map.on('overlayremove', function(e) {{ setLegend(e.name, false); }});
+        L.control.scale({{imperial: false, position: 'bottomleft'}}).addTo({map_var});
     }});
     """
 
@@ -366,6 +416,7 @@ def build_bridge_message_script(map_js_var_name):
     `map_js_var_name` : nom de la variable JS de l'objet Leaflet généré par
     Folium (`m.get_name()`), utilisé pour piloter la carte (ex: FLY_TO).
     """
+    focus_style_json = json.dumps(FOCUS_STYLE)
     return f"""
     window.addEventListener("message", function(e) {{
         if (e.origin !== window.location.origin) {{
@@ -373,12 +424,18 @@ def build_bridge_message_script(map_js_var_name):
         }}
 
         if (e.data.type === 'TOGGLE_LAYER') {{
-            var labels = document.getElementsByTagName('label');
-            for (var i = 0; i < labels.length; i++) {{
-                var labelText = labels[i].textContent.trim();
-                if (labelText === e.data.name || labelText.includes(e.data.name)) {{
-                    var box = labels[i].querySelector('input');
-                    if (box && box.checked !== e.data.show) box.click();
+            // `window.oracleLayerGroups` (build_layer_groups_script) associe
+            // directement la clé de mapLayers.config.json au FeatureGroup/
+            // GeoJson Folium correspondant — piloté par map.addLayer/
+            // removeLayer, sans dépendre du texte des <label> du
+            // LayerControl (fragile, cassait dès que ce contrôle était
+            // masqué/altéré).
+            var group = (window.oracleLayerGroups || {{}})[e.data.key];
+            if (group) {{
+                if (e.data.show) {{
+                    if (!{map_js_var_name}.hasLayer(group)) {map_js_var_name}.addLayer(group);
+                }} else {{
+                    if ({map_js_var_name}.hasLayer(group)) {map_js_var_name}.removeLayer(group);
                 }}
             }}
         }} else if (e.data.type === 'FLY_TO') {{
@@ -398,6 +455,60 @@ def build_bridge_message_script(map_js_var_name):
                         layer.setUrl(tileUrl);
                     }}
                 }});
+            }}
+        }} else if (e.data.type === 'SET_FOCUS') {{
+            // Vue "Calques" du rail, sélecteur de rayon (ORA-183) : un
+            // cavalier actif garde TOUJOURS tous ses pings visibles — le
+            // rayon se contente de mettre en avant ceux qui s'y trouvent
+            // (taille + opacité pleines + halo), sans faire disparaître le
+            // reste (l'ancienne opacité résiduelle était illisible sur fond
+            // sombre, cf. régression signalée). Distance calculée par
+            // Leaflet (L.LatLng#distanceTo), pas de haversine dupliqué ici.
+            // `oracleCavalierMarkers` est déclaré par
+            // build_cavalier_markers_script, plus haut dans ce même script.
+            var oracleFocusPoint = L.latLng(e.data.lat, e.data.lng);
+            var oracleFocusStyle = {focus_style_json};
+            (window.oracleCavalierMarkers || []).forEach(function(entry) {{
+                var d = oracleFocusPoint.distanceTo(L.latLng(entry.lat, entry.lng));
+                var inFocus = d <= e.data.radius_m;
+                var style = inFocus ? oracleFocusStyle.focus : oracleFocusStyle.dim;
+                entry.m.setOpacity(style.opacity);
+                var el = entry.m.getElement && entry.m.getElement();
+                var shape = el && el.querySelector('.oracle-cav-outer');
+                if (shape) {{
+                    shape.style.transform = 'scale(' + style.scale + ')';
+                    shape.style.filter = inFocus ? ('drop-shadow(0 0 4px ' + entry.color + ')') : 'none';
+                }}
+            }});
+            // Cercle pointillé violet du rayon, dessiné par la carte
+            // elle-même (suit zoom/pan) — un seul à la fois, on retire
+            // l'ancien avant d'ajouter le nouveau plutôt que de les empiler
+            // à chaque changement de rayon.
+            if (window.__oracleFocusCircle) {{
+                {map_js_var_name}.removeLayer(window.__oracleFocusCircle);
+            }}
+            window.__oracleFocusCircle = L.circle([e.data.lat, e.data.lng], {{
+                radius: e.data.radius_m,
+                color: '#A78BFA',
+                weight: 2,
+                dashArray: '6 6',
+                fill: true,
+                fillOpacity: 0.06,
+            }});
+            {map_js_var_name}.addLayer(window.__oracleFocusCircle);
+        }} else if (e.data.type === 'CLEAR_FOCUS') {{
+            (window.oracleCavalierMarkers || []).forEach(function(entry) {{
+                entry.m.setOpacity(1);
+                var el = entry.m.getElement && entry.m.getElement();
+                var shape = el && el.querySelector('.oracle-cav-outer');
+                if (shape) {{
+                    shape.style.transform = '';
+                    shape.style.filter = 'none';
+                }}
+            }});
+            if (window.__oracleFocusCircle) {{
+                {map_js_var_name}.removeLayer(window.__oracleFocusCircle);
+                window.__oracleFocusCircle = null;
             }}
         }}
     }});
@@ -605,8 +716,9 @@ def main(ville='lyon'):
 
     # --- 6bis. LIMITES DES QUARTIERS (ARRONDISSEMENTS), ORA-104 ---
     quartiers_geojson = load_geojson_file(paths['quartiers_geojson'])
+    fg_quartiers = None
     if quartiers_geojson:
-        folium.GeoJson(
+        fg_quartiers = folium.GeoJson(
             quartiers_geojson,
             name=layer_by_key['Quartiers']['name'],
             show=layer_by_key['Quartiers']['defaultVisible'],  # Off par défaut, cohérent avec Nuisance/Gentrification/Superstition
@@ -618,23 +730,39 @@ def main(ville='lyon'):
             },
             highlight_function=lambda feature: {'fillOpacity': 0.18, 'weight': 3},
             tooltip=folium.GeoJsonTooltip(fields=['nom'], aliases=['Quartier :']),
-        ).add_to(m)
+        )
+        fg_quartiers.add_to(m)
         print(f"🗺️ Quartiers chargés : {len(quartiers_geojson.get('features', []))} arrondissements tracés.")
     else:
         print(f"⚠️ GeoJSON des quartiers introuvable ou invalide ({paths['quartiers_geojson']}), couche ignorée.")
 
     # --- 7. CAVALIERS ---
-    mapping_simple = {'vice': (fg_vice, COLORS['Vice']), 'gentrification': (fg_gentri, COLORS['Gentrification']), 'nuisance': (fg_nuisance, COLORS['Nuisance']), 'superstition': (fg_superstition, COLORS['Superstition'])}
+    # Couleur/forme des icônes viennent de mapLayers.config.json (uiColor/
+    # shape, layer_by_key) — source unique partagée avec le panneau React
+    # (CavalierRow.jsx), plus de dict COLORS séparé ici (cf. ORA-130).
+    mapping_simple = {
+        'vice': (fg_vice, layer_by_key['Vice']),
+        'gentrification': (fg_gentri, layer_by_key['Gentrification']),
+        'nuisance': (fg_nuisance, layer_by_key['Nuisance']),
+        'superstition': (fg_superstition, layer_by_key['Superstition']),
+    }
+    # Référence JS (variable Folium + lat/lng + famille) de chaque marker
+    # cavalier posé, pour que SET_FOCUS (build_bridge_message_script) puisse
+    # faire varier son opacité selon la distance au point choisi.
+    cavalier_marker_entries = []
     if 'type' in df_poi.columns:
         for _, row in df_poi.iterrows():
             raw_type = str(row.get('type', '')).lower().strip()
             target_config = None
+            famille = None
             for key, config in mapping_simple.items():
                 if key in raw_type:
                     target_config = config
+                    famille = key
                     break
             if target_config and pd.notnull(row.get('latitude')):
-                group, color_hex = target_config
+                group, layer_config = target_config
+                color_hex = layer_config['uiColor']
 
                 # Nettoyage Type (ex: "Vice - Bar" -> "Bar")
                 if ' - ' in raw_type:
@@ -649,10 +777,20 @@ def main(ville='lyon'):
                 </div>
                 """
 
-                folium.CircleMarker(
-                    [row['latitude'], row['longitude']], radius=5, color=color_hex, weight=1, fill=True, fill_color=color_hex, fill_opacity=0.8,
-                    popup=folium.Popup(txt_popup, max_width=200, className='oracle-popup')
-                ).add_to(group)
+                marker = folium.Marker(
+                    [row['latitude'], row['longitude']],
+                    icon=folium.DivIcon(
+                        html=cavalier_icon_html(layer_config.get('shape', 'circle'), color_hex),
+                        icon_size=(12, 12), icon_anchor=(6, 6),
+                    ),
+                    popup=folium.Popup(txt_popup, max_width=200, className='oracle-popup'),
+                )
+                marker.add_to(group)
+                cavalier_marker_entries.append({
+                    'js_var': marker.get_name(),
+                    'lat': row['latitude'], 'lng': row['longitude'], 'famille': famille,
+                    'color': color_hex,
+                })
 
     # --- 8. RENDU ---
     fg_studio.add_to(m)
@@ -667,6 +805,26 @@ def main(ville='lyon'):
     fg_nuisance.add_to(m)
     fg_superstition.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
+
+    # Dictionnaire clé (mapLayers.config.json) -> variable JS Folium, pour
+    # TOGGLE_LAYER (map.addLayer/removeLayer direct, cf. build_layer_groups_script
+    # et build_bridge_message_script) — remplace la correspondance par texte
+    # de <label> du LayerControl (bugs #1/#2/#3/#5/#8).
+    layer_group_js_vars = {
+        'Studio': fg_studio.get_name(),
+        'T2': fg_t2.get_name(),
+        'T3': fg_t3.get_name(),
+        'T4': fg_t4.get_name(),
+        'Metro': fg_metro.get_name(),
+        'Vice': fg_vice.get_name(),
+        'Gentrification': fg_gentri.get_name(),
+        'Nuisance': fg_nuisance.get_name(),
+        'Superstition': fg_superstition.get_name(),
+    }
+    if fg_funicular is not None:
+        layer_group_js_vars['Funicular'] = fg_funicular.get_name()
+    if fg_quartiers is not None:
+        layer_group_js_vars['Quartiers'] = fg_quartiers.get_name()
 
     html_out = m.get_root().render()
 
@@ -688,22 +846,23 @@ def main(ville='lyon'):
         .leaflet-popup-close-button:hover {{ color: #f8fafc !important; }}
         .leaflet-interactive {{ cursor: pointer !important; }}
 
-        /* Légende (ORA-166) */
-        .oracle-legend {{
-            position: absolute; left: 12px; bottom: 34px; z-index: 1000; max-width: 210px;
-            background: rgba(15,23,42,0.92); color: #e2e8f0; border: 1px solid #334155;
-            border-radius: 10px; padding: 8px 10px; font: 11px/1.5 sans-serif;
-        }}
-        .oracle-legend ul {{ list-style: none; margin: 0 0 4px; padding: 0; }}
-        .oracle-legend-title {{ font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; font-weight: 700; margin-top: 4px; }}
-        .oracle-legend-swatch {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }}
-        .oracle-legend-muted {{ color: #94a3b8; }}
-        .oracle-legend-off {{ opacity: 0.35; text-decoration: line-through; }}
+        /* Icônes des cavaliers (ORA-130, cavalier_icon_html) */
+        {CAVALIER_ICON_CSS}
     </style>
 
     <script>
     {build_bridge_message_script(m.get_name())}
-    {build_legend_and_scale_script(m.get_name(), build_legend_html(layers_config))}
+    {build_scale_script(m.get_name())}
+    window.addEventListener('load', function() {{
+        // Folium rend son propre script d'initialisation (variables
+        // marker_xxx/feature_group_xxx) APRES `</body>` : ce bloc ne doit
+        // s'exécuter qu'une fois la page entièrement chargée, jamais avant
+        // (sinon ReferenceError immédiat, qui empêchait aussi le reste de ce
+        // <script> — dont le listener 'message' ci-dessus — de s'exécuter,
+        // bugs #1/#2/#3/#5/#8).
+        {build_cavalier_markers_script(cavalier_marker_entries)}
+        {build_layer_groups_script(layer_group_js_vars)}
+    }});
     </script>
     </body>
     """

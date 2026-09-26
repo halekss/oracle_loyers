@@ -16,6 +16,7 @@ __all__ = [
     "QuartierStatsRequestSchema",
     "PredictRequestSchema",
     "PdfReportRequestSchema",
+    "CavaliersRequestSchema",
     "ValidationError",
 ]
 
@@ -46,6 +47,47 @@ class QuartierStatsRequestSchema(BaseModel):
     def quartier_must_not_be_blank(cls, value):
         if not value or not value.strip():
             raise ValueError("quartier vide")
+        return value
+
+
+class CavaliersRequestSchema(BaseModel):
+    # GET /api/cavaliers — query string (request.args), toujours des chaînes
+    # : pydantic les convertit en float/int (mode non strict par défaut).
+    lat: float
+    lng: float
+    ville: str
+    # Seul rayon précalculé actuellement côté données : 500m — 300/1000
+    # existent uniquement via le calcul en direct de cavaliers_radius.py.
+    # None (sentinelle "none", insensible à la casse — cf. rayon_none_sentinel
+    # ci-dessous) : rayon "Aucun" de la vue Calques (ORA-183/v3), totaux à
+    # l'échelle de la ville plutôt qu'autour d'un point. L'absence pure et
+    # simple du paramètre garde le comportement historique (défaut 500).
+    rayon_m: Optional[int] = 500
+
+    @field_validator("ville")
+    @classmethod
+    def ville_must_not_be_blank(cls, value):
+        if not value or not value.strip():
+            raise ValueError("ville vide")
+        return value
+
+    @field_validator("rayon_m", mode="before")
+    @classmethod
+    def rayon_none_sentinel(cls, value):
+        """La query string GET ne transporte que des chaînes : "none" (toute
+        casse) est la façon dont le front demande le rayon "Aucun" — un
+        `None` Python explicite (appel direct du schéma) est accepté de la
+        même façon."""
+        if isinstance(value, str) and value.strip().lower() == "none":
+            return None
+        return value
+
+    @field_validator("rayon_m")
+    @classmethod
+    def rayon_must_be_allowed_or_none(cls, value):
+        from services.cavaliers_radius import ALLOWED_RADII_M
+        if value is not None and value not in ALLOWED_RADII_M:
+            raise ValueError(f"rayon_m doit être l'un de {ALLOWED_RADII_M} ou \"none\"")
         return value
 
 

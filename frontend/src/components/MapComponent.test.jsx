@@ -1,4 +1,4 @@
-import { createRef } from 'react';
+import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -14,7 +14,21 @@ vi.mock('../services/api', async () => {
 import { api } from '../services/api';
 import MapComponent from './MapComponent';
 import mapLayersConfig from '../config/mapLayers.config.json';
-import { LAYER_MAPPING } from '../services/mapLayers';
+import { defaultLayerVisibility } from '../services/mapLayers';
+
+const noop = () => {};
+
+// ORA-178 : MapComponent est désormais un composant CONTRÔLÉ — App porte
+// l'état `layers` et la fonction `toggleLayer` (remontés, persistés en
+// localStorage). Ce petit harnais reproduit ce contrat côté test (état local
+// + `onToggleLayer` qui le met à jour) pour vérifier un clic bout-en-bout
+// jusqu'au postMessage TOGGLE_LAYER, sans dupliquer la logique d'App dans le
+// composant lui-même.
+function ControlledMapComponent(props) {
+  const [layers, setLayers] = useState(() => props.layers ?? defaultLayerVisibility());
+  const toggleLayer = (key) => setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+  return <MapComponent {...props} layers={layers} onToggleLayer={toggleLayer} />;
+}
 
 describe('MapComponent', () => {
   beforeEach(() => {
@@ -23,35 +37,35 @@ describe('MapComponent', () => {
   });
 
   it('renders an iframe pointing to the static generated map', () => {
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     const iframe = screen.getByTitle('Carte Oracle');
     expect(iframe.getAttribute('src')).toMatch(/^\/data\/map_pings_lyon_calques\.html/);
   });
 
   it('points to the lille static map when ville=lille (ORA-71 POC)', () => {
-    render(<MapComponent center={null} ville="lille" />);
+    render(<MapComponent center={null} ville="lille" layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     const iframe = screen.getByTitle('Carte Oracle');
     expect(iframe.getAttribute('src')).toMatch(/^\/data\/map_pings_lille_calques\.html/);
   });
 
   it('reloads the iframe src when ville changes after mount', () => {
-    const { rerender } = render(<MapComponent center={null} ville="lyon" />);
+    const { rerender } = render(<MapComponent center={null} ville="lyon" layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     expect(screen.getByTitle('Carte Oracle').getAttribute('src')).toMatch(/map_pings_lyon_calques\.html/);
 
-    rerender(<MapComponent center={null} ville="lille" />);
+    rerender(<MapComponent center={null} ville="lille" layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     expect(screen.getByTitle('Carte Oracle').getAttribute('src')).toMatch(/map_pings_lille_calques\.html/);
   });
 
   it('shows the layer control panel open by default', () => {
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     expect(screen.getByText('Contrôle des Calques')).toBeInTheDocument();
     expect(screen.getByText('Métro (Lignes & Stations)')).toBeInTheDocument();
   });
 
   it('closes the panel and shows the reopen button when the close button is clicked', async () => {
     const user = userEvent.setup();
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     // Le bouton de fermeture n'a pas de nom accessible (icône seule) : avant
     // fermeture, c'est le seul bouton présent dans le panneau de contrôle.
@@ -64,7 +78,7 @@ describe('MapComponent', () => {
 
   it('toggling a layer does not throw even before the iframe has finished loading', async () => {
     const user = userEvent.setup();
-    render(<MapComponent center={null} />);
+    render(<ControlledMapComponent center={null} />);
 
     // Le contentWindow de l'iframe n'est pas nécessairement prêt dans ce test ;
     // le composant doit ignorer silencieusement la commande plutôt que planter.
@@ -72,11 +86,11 @@ describe('MapComponent', () => {
   });
 
   it('does not attempt to fly to a center when none is provided', () => {
-    expect(() => render(<MapComponent center={null} />)).not.toThrow();
+    expect(() => render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />)).not.toThrow();
   });
 
   it('sends FLY_TO to the page origin instead of any origin (ORA-125)', () => {
-    const { rerender } = render(<MapComponent center={null} />);
+    const { rerender } = render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     const iframe = screen.getByTitle('Carte Oracle');
     const postMessage = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
@@ -84,7 +98,7 @@ describe('MapComponent', () => {
       configurable: true,
     });
 
-    rerender(<MapComponent center={[45.75, 4.85, 15]} />);
+    rerender(<MapComponent center={[45.75, 4.85, 15]} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'FLY_TO' }),
@@ -94,7 +108,7 @@ describe('MapComponent', () => {
 
   describe('fond de carte via le proxy du backend (SET_TILE_URL)', () => {
     it('sends the backend tile proxy URL to the page origin when the iframe loads, never a key', () => {
-      render(<MapComponent center={null} />);
+      render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
       const iframe = screen.getByTitle('Carte Oracle');
       const postMessage = vi.fn();
       Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
@@ -112,7 +126,7 @@ describe('MapComponent', () => {
 
   it('sends TOGGLE_LAYER to the page origin instead of any origin (ORA-125)', async () => {
     const user = userEvent.setup();
-    render(<MapComponent center={null} />);
+    render(<ControlledMapComponent center={null} />);
     const iframe = screen.getByTitle('Carte Oracle');
     const postMessage = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
@@ -129,7 +143,7 @@ describe('MapComponent', () => {
   });
 
   it('sends FLY_TO_BOUNDS to the page origin when bounds are provided (ORA-105)', () => {
-    const { rerender } = render(<MapComponent center={null} bounds={undefined} />);
+    const { rerender } = render(<MapComponent center={null} bounds={undefined} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     const iframe = screen.getByTitle('Carte Oracle');
     const postMessage = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
@@ -141,7 +155,7 @@ describe('MapComponent', () => {
       [45.72, 4.83],
       [45.74, 4.86],
     ];
-    rerender(<MapComponent center={null} bounds={bounds} />);
+    rerender(<MapComponent center={null} bounds={bounds} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     expect(postMessage).toHaveBeenCalledWith(
       { type: 'FLY_TO_BOUNDS', bounds },
@@ -150,7 +164,7 @@ describe('MapComponent', () => {
   });
 
   it('falls back to a FLY_TO on the city center when bounds is explicitly empty (ORA-105)', () => {
-    const { rerender } = render(<MapComponent center={null} bounds={undefined} />);
+    const { rerender } = render(<MapComponent center={null} bounds={undefined} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     const iframe = screen.getByTitle('Carte Oracle');
     const postMessage = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
@@ -158,7 +172,7 @@ describe('MapComponent', () => {
       configurable: true,
     });
 
-    rerender(<MapComponent center={null} bounds={null} />);
+    rerender(<MapComponent center={null} bounds={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'FLY_TO' }),
@@ -167,7 +181,7 @@ describe('MapComponent', () => {
   });
 
   it('does not send any bounds-related message while bounds has not been computed yet (ORA-105)', () => {
-    render(<MapComponent center={null} bounds={undefined} />);
+    render(<MapComponent center={null} bounds={undefined} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     const iframe = screen.getByTitle('Carte Oracle');
     const postMessage = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
@@ -179,35 +193,35 @@ describe('MapComponent', () => {
   });
 
   it('shows a Quartiers toggle', () => {
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     expect(screen.getByText('Quartiers')).toBeInTheDocument();
   });
 
   it('collapses the layer control panel when the chat opens (ORA-116)', () => {
-    const { rerender } = render(<MapComponent center={null} chatOpen={false} />);
+    const { rerender } = render(<MapComponent center={null} chatOpen={false} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     expect(screen.getByText('Contrôle des Calques')).toBeInTheDocument();
 
-    rerender(<MapComponent center={null} chatOpen={true} />);
+    rerender(<MapComponent center={null} chatOpen={true} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     expect(screen.queryByText('Contrôle des Calques')).not.toBeInTheDocument();
   });
 
   it('does not offer to reopen the layer panel while the chat is open (ORA-116)', () => {
-    render(<MapComponent center={null} chatOpen={true} />);
+    render(<MapComponent center={null} chatOpen={true} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     expect(screen.queryByTitle('Ouvrir les filtres')).not.toBeInTheDocument();
   });
 
   it('offers to reopen the layer panel again once the chat is closed (ORA-116)', () => {
-    const { rerender } = render(<MapComponent center={null} chatOpen={true} />);
+    const { rerender } = render(<MapComponent center={null} chatOpen={true} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
-    rerender(<MapComponent center={null} chatOpen={false} />);
+    rerender(<MapComponent center={null} chatOpen={false} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     expect(screen.getByTitle('Ouvrir les filtres')).toBeInTheDocument();
   });
 
   it('syncs Quartiers as off by default when the iframe loads (ORA-104)', () => {
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
     const iframe = screen.getByTitle('Carte Oracle');
     const postMessage = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
@@ -218,14 +232,14 @@ describe('MapComponent', () => {
     iframe.dispatchEvent(new Event('load'));
 
     expect(postMessage).toHaveBeenCalledWith(
-      { type: 'TOGGLE_LAYER', name: 'Quartiers', show: false },
+      { type: 'TOGGLE_LAYER', key: 'Quartiers', show: false },
       window.location.origin,
     );
   });
 
-  it('toggling Quartiers sends TOGGLE_LAYER with name Quartiers (ORA-104)', async () => {
+  it('toggling Quartiers sends TOGGLE_LAYER with key Quartiers (ORA-104)', async () => {
     const user = userEvent.setup();
-    render(<MapComponent center={null} />);
+    render(<ControlledMapComponent center={null} />);
     const iframe = screen.getByTitle('Carte Oracle');
     const postMessage = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
@@ -236,13 +250,13 @@ describe('MapComponent', () => {
     await user.click(screen.getByText('Quartiers'));
 
     expect(postMessage).toHaveBeenCalledWith(
-      { type: 'TOGGLE_LAYER', name: 'Quartiers', show: true },
+      { type: 'TOGGLE_LAYER', key: 'Quartiers', show: true },
       window.location.origin,
     );
   });
 
   it('logs the click when the iframe reports an ANNONCE_CLICK from the same origin (ORA-107)', () => {
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     window.dispatchEvent(new MessageEvent('message', {
       data: { type: 'ANNONCE_CLICK', id: 42 },
@@ -253,7 +267,7 @@ describe('MapComponent', () => {
   });
 
   it('ignores an ANNONCE_CLICK message from a different origin (ORA-107)', () => {
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     window.dispatchEvent(new MessageEvent('message', {
       data: { type: 'ANNONCE_CLICK', id: 42 },
@@ -264,7 +278,7 @@ describe('MapComponent', () => {
   });
 
   it('renders one toggle per layer declared in the shared mapLayers.config.json (ORA-130)', () => {
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     // La liste des calques (nom, libellé, visibilité par défaut) vient d'un
     // seul JSON partagé avec generate_map.py (ORA-130) : chaque entrée doit
@@ -274,9 +288,13 @@ describe('MapComponent', () => {
     }
   });
 
-  it('sends TOGGLE_LAYER using the Folium layer name from the shared config, not the internal key (ORA-130)', async () => {
+  it('sends TOGGLE_LAYER using the internal key from the shared config, not the Folium label (MAP_CONTRACT.md)', async () => {
+    // Contrat changé : l'ancienne correspondance par texte de <label> du
+    // LayerControl Folium était fragile (cassait dès que ce contrôle était
+    // masqué/altéré) — remplacée côté carte par un dictionnaire direct
+    // clé -> FeatureGroup (window.oracleLayerGroups, build_layer_groups_script).
     const user = userEvent.setup();
-    render(<MapComponent center={null} />);
+    render(<ControlledMapComponent center={null} />);
     const iframe = screen.getByTitle('Carte Oracle');
     const postMessage = vi.fn();
     Object.defineProperty(iframe, 'contentWindow', {
@@ -288,13 +306,13 @@ describe('MapComponent', () => {
     await user.click(screen.getByText(gentrification.label));
 
     expect(postMessage).toHaveBeenCalledWith(
-      { type: 'TOGGLE_LAYER', name: gentrification.name, show: true },
+      { type: 'TOGGLE_LAYER', key: gentrification.key, show: true },
       window.location.origin,
     );
   });
 
   it('ignores unrelated message events', () => {
-    render(<MapComponent center={null} />);
+    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     window.dispatchEvent(new MessageEvent('message', {
       data: { type: 'SOME_OTHER_MESSAGE' },
@@ -312,7 +330,7 @@ describe('MapComponent', () => {
     });
 
     it('renames the old generic "Contexte" group to "Les 4 Cavaliers" (maquette 04), always expanded', () => {
-      render(<MapComponent center={null} />);
+      render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
       expect(screen.getByText('Les 4 Cavaliers')).toBeInTheDocument();
       expect(screen.queryByText('Contexte')).not.toBeInTheDocument();
@@ -322,7 +340,7 @@ describe('MapComponent', () => {
     it('fetches layer counts from the ville-scoped static map metadata', () => {
       globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ layer_counts: {} }) });
 
-      render(<MapComponent center={null} ville="lille" />);
+      render(<MapComponent center={null} ville="lille" layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
       expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/data\/map_metadata_lille\.json/));
     });
@@ -333,7 +351,7 @@ describe('MapComponent', () => {
         json: async () => ({ layer_counts: { Vice: 526, T2: 300 } }),
       });
 
-      render(<MapComponent center={null} />);
+      render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
       expect(await screen.findByText('526')).toBeInTheDocument();
       expect(screen.getByText('300')).toBeInTheDocument();
@@ -342,7 +360,7 @@ describe('MapComponent', () => {
     it('does not throw and shows no count when the metadata fetch fails', async () => {
       globalThis.fetch = vi.fn().mockRejectedValue(new Error('network down'));
 
-      render(<MapComponent center={null} />);
+      render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
       await new Promise((r) => setTimeout(r, 0));
       expect(screen.queryByText('526')).not.toBeInTheDocument();
@@ -351,43 +369,48 @@ describe('MapComponent', () => {
 
   describe('pilotage externe des calques (ORA-178, vue "Calques" du rail)', () => {
     it('hides the floating layer panel and reopen button when hidePanel is true', () => {
-      render(<MapComponent center={null} hidePanel />);
+      render(<MapComponent center={null} hidePanel layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
       expect(screen.queryByText('Contrôle des Calques')).not.toBeInTheDocument();
       expect(screen.queryByTitle('Ouvrir les filtres')).not.toBeInTheDocument();
     });
 
-    it('reports its layers and layer counts to the parent via onLayersChange', () => {
-      const onLayersChange = vi.fn();
-      render(<MapComponent center={null} onLayersChange={onLayersChange} />);
+    it('applies the `layers` prop supplied by the parent, never an internal default (composant contrôlé — App est l\'unique source de vérité)', () => {
+      // Vice est visible par défaut dans mapLayers.config.json : si ce
+      // composant retombait sur un état interne plutôt que sur la prop, ce
+      // test resterait vert par erreur (les deux vaudraient `true`).
+      const layers = { ...defaultLayerVisibility(), Vice: false };
+      render(<MapComponent center={null} layers={layers} onToggleLayer={noop} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
 
-      expect(onLayersChange).toHaveBeenCalledWith(
-        expect.objectContaining({ Vice: expect.any(Boolean) }),
-        expect.any(Object),
+      iframe.dispatchEvent(new Event('load'));
+
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'TOGGLE_LAYER', key: 'Vice', show: false },
+        window.location.origin,
       );
     });
 
-    it('exposes toggleLayer via ref, sending the same TOGGLE_LAYER message as the internal panel', () => {
-      const ref = createRef();
-      render(<MapComponent center={null} ref={ref} hidePanel />);
+    it('sends TOGGLE_LAYER as soon as the `layers` prop changes, even without any click (App pilote la vue "Calques" à distance)', () => {
+      const layers = defaultLayerVisibility();
+      const { rerender } = render(<MapComponent center={null} layers={layers} onToggleLayer={noop} />);
       const iframe = screen.getByTitle('Carte Oracle');
       const postMessage = vi.fn();
-      Object.defineProperty(iframe, 'contentWindow', {
-        value: { postMessage },
-        configurable: true,
-      });
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
 
-      ref.current.toggleLayer('Vice');
+      rerender(<MapComponent center={null} layers={{ ...layers, Vice: !layers.Vice }} onToggleLayer={noop} />);
 
       expect(postMessage).toHaveBeenCalledWith(
-        { type: 'TOGGLE_LAYER', name: LAYER_MAPPING.Vice, show: expect.any(Boolean) },
+        { type: 'TOGGLE_LAYER', key: 'Vice', show: !layers.Vice },
         window.location.origin,
       );
     });
 
     it('calls onAnnonceClick when the iframe reports an ANNONCE_CLICK, in addition to tracking it', () => {
       const onAnnonceClick = vi.fn();
-      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} />);
+      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
       window.dispatchEvent(new MessageEvent('message', {
         data: { type: 'ANNONCE_CLICK', id: 42 },
@@ -395,6 +418,75 @@ describe('MapComponent', () => {
       }));
 
       expect(onAnnonceClick).toHaveBeenCalledWith(42);
+    });
+  });
+
+  describe('focus rayon des cavaliers (vue "Calques", sélecteur de rayon)', () => {
+    it('sends SET_FOCUS when a focus prop is provided', () => {
+      const { rerender } = render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
+      rerender(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 500 }} />,
+      );
+
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'SET_FOCUS', lat: 45.75, lng: 4.83, radius_m: 500 },
+        window.location.origin,
+      );
+    });
+
+    it('sends a new SET_FOCUS when only the radius changes', () => {
+      const { rerender } = render(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 500 }} />,
+      );
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
+      rerender(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 300 }} />,
+      );
+
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'SET_FOCUS', lat: 45.75, lng: 4.83, radius_m: 300 },
+        window.location.origin,
+      );
+    });
+
+    it('sends CLEAR_FOCUS when focus goes back to null', () => {
+      const { rerender } = render(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 500 }} />,
+      );
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
+      rerender(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} focus={null} />);
+
+      expect(postMessage).toHaveBeenCalledWith({ type: 'CLEAR_FOCUS' }, window.location.origin);
+    });
+  });
+
+  describe('légende unique (ORA-183, v3 — remplace le panneau flottant desktop ET la légende Folium)', () => {
+    // Contenu des sections (Annonces/Métro/Cavaliers/Rayon) : couvert par
+    // MapLegend.test.jsx — ici, seul le branchement (hidePanel -> MapLegend
+    // monté avec les bonnes props) est vérifié.
+    it('renders the legend (Cavaliers section) when hidePanel is true and a cavalier layer is active', () => {
+      const layers = { ...defaultLayerVisibility(), Vice: true, Gentrification: false, Nuisance: false, Superstition: false };
+      render(<MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} />);
+
+      expect(screen.getByText('Légende')).toBeInTheDocument();
+      expect(screen.getByText('Vice')).toBeInTheDocument();
+    });
+
+    it('does not render the legend on the mobile floating panel (hidePanel=false)', () => {
+      const layers = { ...defaultLayerVisibility(), Vice: true };
+      render(<MapComponent center={null} layers={layers} onToggleLayer={noop} />);
+
+      expect(screen.queryByText('Légende')).not.toBeInTheDocument();
     });
   });
 });

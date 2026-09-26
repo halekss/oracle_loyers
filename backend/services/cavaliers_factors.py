@@ -12,13 +12,16 @@ DIST_COLUMN_RE = re.compile(r'^dist_(vice|gentrification|nuisance|superstition)_
 
 # Une phrase concrète et cynique par type de POI connu (ton du reste de
 # l'app, cf. README) plutôt qu'un score abstrait. `{n}` = nombre moyen à
-# moins de 500m, `{dist_m}` = distance moyenne au plus proche (mètres).
+# moins de `{rayon}` (mètres), `{dist_m}` = distance moyenne au plus proche
+# (mètres). `{rayon}` est paramétré (summarize_cavaliers, /api/cavaliers) —
+# 500 par défaut pour ne rien changer aux appelants existants
+# (/api/quartier-stats, export PDF, tous fixés à ce rayon).
 POI_PHRASES = {
     ('vice', 'sex-shop'): "Un sex-shop à {dist_m}m — le quartier a plus d'un tour dans son sac.",
-    ('vice', 'bar'): "{n} bar(s) à moins de 500m — parfait pour un verre, moins pour dormir.",
+    ('vice', 'bar'): "{n} bar(s) à moins de {rayon}m — parfait pour un verre, moins pour dormir.",
     ('vice', 'tabac'): "Un bureau de tabac à {dist_m}m — la cigarette du matin n'a jamais été aussi accessible.",
     ('vice', 'cbd_shop'): "Une boutique CBD à {dist_m}m — le quartier gère son stress à sa façon.",
-    ('vice', 'kebab'): "{n} kebab(s) à moins de 500m — le vrai indicateur de vie nocturne.",
+    ('vice', 'kebab'): "{n} kebab(s) à moins de {rayon}m — le vrai indicateur de vie nocturne.",
     ('vice', 'casino'): "Un casino à {dist_m}m — vos voisins jouent peut-être plus gros que le loyer.",
     ('gentrification', 'épicerie_fine'): "Une épicerie fine à {dist_m}m — le loyer du quartier vous remercie.",
     ('gentrification', 'atelier_vélo'): "Un atelier vélo à {dist_m}m — ici, on pédale plutôt qu'on ne prend le bus.",
@@ -37,22 +40,30 @@ POI_PHRASES = {
 }
 
 GENERIC_PHRASES = {
-    'vice': "{n} '{poi}' à moins de 500m — l'ambiance ne manque pas.",
+    'vice': "{n} '{poi}' à moins de {rayon}m — l'ambiance ne manque pas.",
     'gentrification': "Un '{poi}' à {dist_m}m — encore un signe de gentrification.",
     'nuisance': "Un '{poi}' à {dist_m}m — à prendre en compte pour vos nuits.",
     'superstition': "Un '{poi}' à {dist_m}m — pour les âmes sensibles.",
 }
 
 ABSENCE_PHRASES = {
-    'vice': "Aucune tentation (bar, kebab, casino...) à moins de 500m — un quartier sage.",
-    'gentrification': "Aucun signe de gentrification marquant (épicerie fine, yoga...) à moins de 500m — encore un quartier authentique.",
-    'nuisance': "Aucune nuisance notable (école, discothèque...) à moins de 500m — la paix, tout simplement.",
-    'superstition': "Ni cimetière ni pompes funèbres à moins de 500m — rien à signaler côté au-delà.",
+    'vice': "Aucune tentation (bar, kebab, casino...) à moins de {rayon}m — un quartier sage.",
+    'gentrification': "Aucun signe de gentrification marquant (épicerie fine, yoga...) à moins de {rayon}m — encore un quartier authentique.",
+    'nuisance': "Aucune nuisance notable (école, discothèque...) à moins de {rayon}m — la paix, tout simplement.",
+    'superstition': "Ni cimetière ni pompes funèbres à moins de {rayon}m — rien à signaler côté au-delà.",
 }
 
 # En dessous de ce seuil de densité moyenne à 500m, on considère qu'il n'y a
 # pas de signal notable pour la catégorie (bascule sur ABSENCE_PHRASES).
 PRESENCE_THRESHOLD = 0.5
+
+# Rayon par défaut de summarize_cavaliers/detail_cavaliers : ce sont les
+# seules colonnes précalculées disponibles dans master_immo_final.csv
+# (nb_<cat>_<poi>_500m) — /api/quartier-stats et l'export PDF restent fixés
+# à cette valeur. /api/cavaliers (services/cavaliers_radius.py) calcule lui
+# en direct pour 300/500/1000m et passe son propre rayon à `phrase_for`/
+# `ABSENCE_PHRASES`.
+DEFAULT_RAYON_M = 500
 
 
 def list_poi_types(df):
@@ -69,20 +80,29 @@ def list_poi_types(df):
     return result
 
 
-def _phrase_for(category, poi, n, dist_m):
+def phrase_for(category, poi, n, dist_m, rayon=DEFAULT_RAYON_M):
+    """Phrase concrète pour un `poi` connu (POI_PHRASES) ou, à défaut, une
+    phrase générique par catégorie (GENERIC_PHRASES). Partagée avec
+    services/cavaliers_radius.py (calcul en direct par rayon choisi)."""
     template = POI_PHRASES.get((category, poi), GENERIC_PHRASES[category])
-    return template.format(n=n, dist_m=dist_m, poi=poi.replace('_', ' '))
+    return template.format(n=n, dist_m=dist_m, poi=poi.replace('_', ' '), rayon=rayon)
 
 
-def summarize_cavaliers(df_subset):
+def summarize_cavaliers(df_subset, rayon=DEFAULT_RAYON_M):
     """Résume les 4 "Cavaliers" (Vice, Gentrification, Nuisance, Superstition)
     pour un sous-ensemble d'annonces (ex : celles d'un quartier), sous forme de
     phrases concrètes et cynique — pas un score abstrait — pour rester lisible
     hors de l'application (export PDF, ORA-73).
 
     Pour chaque catégorie, sélectionne le type de POI le plus présent (densité
-    moyenne à 500m la plus élevée) ; si aucun n'atteint PRESENCE_THRESHOLD,
+    moyenne à `rayon` la plus élevée) ; si aucun n'atteint PRESENCE_THRESHOLD,
     utilise une phrase d'absence plutôt que de citer un POI non représentatif.
+
+    `rayon` (mètres, défaut 500) : uniquement le libellé inséré dans les
+    phrases ("... à moins de {rayon}m") — les colonnes `nb_*_500m` sous-
+    jacentes restent toujours calculées à 500m (features du modèle, jamais
+    recalculées ici) ; ne passer un autre rayon que si `df_subset` a été
+    filtré/calculé en conséquence par l'appelant (cf. cavaliers_radius.py).
 
     Renvoie une liste de dicts `{"categorie": <label>, "phrase": <texte>}`,
     dans l'ordre Vice / Gentrification / Nuisance / Superstition, en sautant
@@ -112,10 +132,10 @@ def summarize_cavaliers(df_subset):
                 best_dist = dist_mean
 
         if best_poi is None or best_n < PRESENCE_THRESHOLD:
-            phrase = ABSENCE_PHRASES[category]
+            phrase = ABSENCE_PHRASES[category].format(rayon=rayon)
         else:
             dist_m = round(float(best_dist)) if best_dist is not None and best_dist == best_dist else 0
-            phrase = _phrase_for(category, best_poi, round(float(best_n)), dist_m)
+            phrase = phrase_for(category, best_poi, round(float(best_n)), dist_m, rayon=rayon)
 
         factors.append({"categorie": CATEGORY_LABELS[category], "phrase": phrase})
 
