@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { api, getApiBaseUrl } from "../services/api";
 import { layersByGroup } from "../services/mapLayers";
-import { CAVALIER_STYLES } from "../services/cavaliersDisplay";
-import CavalierShapeIcon from "./CavalierShapeIcon";
+import MapLegend from "./MapLegend";
 
 // Contrat des messages postMessage échangés avec la carte HTML embarquée
 // (générée par backend/scripts/generate_map.py) : voir MAP_CONTRACT.md (ORA-125).
@@ -292,32 +291,13 @@ function MapComponent({
       {/* Overlay Vignettage */}
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_60px_rgba(2,6,23,0.9)] z-[400]"></div>
 
-      {/* --- LÉGENDE "CAVALIERS AFFICHÉS" (ORA-178) --- remplace le panneau
-          flottant sur desktop (hidePanel) : ne liste que les calques
-          cavaliers actuellement actifs, plus le rayon quand un cercle est
-          affiché (vue "Calques", quartier scanné). */}
-      {hidePanel && (() => {
-        const activeCavaliers = CAVALIER_STYLES.filter((style) => layers?.[style.categorie]);
-        if (activeCavaliers.length === 0) return null;
-        return (
-          <div className="absolute bottom-6 left-6 z-[500] bg-slate-950/90 backdrop-blur-md px-3 py-2.5 rounded-xl border border-slate-700/50 shadow-2xl">
-            <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold mb-1.5">
-              Cavaliers affichés
-            </p>
-            <ul className="space-y-1">
-              {activeCavaliers.map((style) => (
-                <li key={style.categorie} className="flex items-center gap-1.5 text-xs">
-                  <CavalierShapeIcon shape={style.shape} color={style.color} />
-                  <span style={{ color: style.color }}>{style.categorie}</span>
-                </li>
-              ))}
-            </ul>
-            {focus && (
-              <p className="text-[10px] text-slate-500 mt-1.5">Rayon {focus.radiusM} m</p>
-            )}
-          </div>
-        );
-      })()}
+      {/* --- LÉGENDE UNIQUE (ORA-183, v3) --- remplace le panneau flottant
+          sur desktop (hidePanel) ET l'ancienne légende Folium (supprimée de
+          generate_map.py) : ne liste que les calques réellement actifs
+          (Annonces/Métro/Cavaliers), plus le rayon si un cercle est affiché.
+          Placée en haut à gauche pour ne jamais couvrir l'échelle
+          (bottomleft) ni l'attribution (bottomright). */}
+      {hidePanel && <MapLegend layers={layers} focus={focus} />}
 
       {/* --- BOUTON POUR OUVRIR LES FILTRES (Visible quand fermé, masqué
           tant que le chat est ouvert — ORA-116) --- */}

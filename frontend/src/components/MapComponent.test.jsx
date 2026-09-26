@@ -470,39 +470,23 @@ describe('MapComponent', () => {
     });
   });
 
-  describe('légende "Cavaliers affichés" (remplace le panneau flottant, ORA-178)', () => {
-    it('lists only the cavalier layers that are currently active', () => {
-      const layers = { ...defaultLayerVisibility(), Vice: true, Gentrification: false, Nuisance: true, Superstition: false };
+  describe('légende unique (ORA-183, v3 — remplace le panneau flottant desktop ET la légende Folium)', () => {
+    // Contenu des sections (Annonces/Métro/Cavaliers/Rayon) : couvert par
+    // MapLegend.test.jsx — ici, seul le branchement (hidePanel -> MapLegend
+    // monté avec les bonnes props) est vérifié.
+    it('renders the legend (Cavaliers section) when hidePanel is true and a cavalier layer is active', () => {
+      const layers = { ...defaultLayerVisibility(), Vice: true, Gentrification: false, Nuisance: false, Superstition: false };
       render(<MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} />);
 
-      expect(screen.getByText('Cavaliers affichés')).toBeInTheDocument();
+      expect(screen.getByText('Légende')).toBeInTheDocument();
       expect(screen.getByText('Vice')).toBeInTheDocument();
-      expect(screen.getByText('Nuisance')).toBeInTheDocument();
-      expect(screen.queryByText('Gentrification')).not.toBeInTheDocument();
-      expect(screen.queryByText('Superstition')).not.toBeInTheDocument();
     });
 
-    it('shows the radius alongside the legend when a focus is provided', () => {
-      const layers = { ...defaultLayerVisibility(), Vice: true };
-      render(
-        <MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} focus={{ lat: 45.75, lng: 4.83, radiusM: 500 }} />,
-      );
-
-      expect(screen.getByText(/500 m/)).toBeInTheDocument();
-    });
-
-    it('is not shown when no cavalier layer is active', () => {
-      const layers = { ...defaultLayerVisibility(), Vice: false, Gentrification: false, Nuisance: false, Superstition: false };
-      render(<MapComponent center={null} hidePanel layers={layers} onToggleLayer={noop} />);
-
-      expect(screen.queryByText('Cavaliers affichés')).not.toBeInTheDocument();
-    });
-
-    it('does not replace the mobile floating panel (hidePanel=false) with this legend', () => {
+    it('does not render the legend on the mobile floating panel (hidePanel=false)', () => {
       const layers = { ...defaultLayerVisibility(), Vice: true };
       render(<MapComponent center={null} layers={layers} onToggleLayer={noop} />);
 
-      expect(screen.queryByText('Cavaliers affichés')).not.toBeInTheDocument();
+      expect(screen.queryByText('Légende')).not.toBeInTheDocument();
     });
   });
 });
