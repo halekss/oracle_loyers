@@ -71,6 +71,7 @@ if __name__ == '__main__':
     LIEN_INDEX = CSV_HEADER.index('Lien')
     DESCRIPTION_INDEX = CSV_HEADER.index('Description')
     DERNIERE_VUE_INDEX = CSV_HEADER.index('DerniereVue')
+    IMAGE_INDEX = CSV_HEADER.index('Image')
 
     existing_rows, liens_vus = load_existing_rows(OUTPUT_PATH, CSV_HEADER)
     rows_by_lien = {row[LIEN_INDEX]: row for row in existing_rows}
@@ -141,6 +142,9 @@ if __name__ == '__main__':
                     # Déjà connue : pas de re-scraping de ses détails, on note juste
                     # qu'elle est toujours présente sur le site (ORA-134, TTL).
                     rows_by_lien[lien][DERNIERE_VUE_INDEX] = today
+                    # Annonce scrapée avant la lecture des photos : on complète sa photo.
+                    if not rows_by_lien[lien][IMAGE_INDEX]:
+                        rows_by_lien[lien][IMAGE_INDEX] = find_first_image_url(annonce, base_url=driver.current_url)
                     vus_ce_run.add(lien)
                     continue
 
