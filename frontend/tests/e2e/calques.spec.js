@@ -152,7 +152,7 @@ test.describe('Vue Calques — non-régression', () => {
       return (window.oracleCavalierMarkers || [])
         .filter((entry) => entry.famille === 'vice')
         .map((entry) => ({
-          distM: center.distanceTo(L.latLng(entry.lat, entry.lng)),
+          distM: center.distanceTo(window.L.latLng(entry.lat, entry.lng)),
           opacity: entry.m.options.opacity,
         }));
     });
