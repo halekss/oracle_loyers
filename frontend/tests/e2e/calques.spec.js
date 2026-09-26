@@ -38,6 +38,21 @@ async function goToCalques(page) {
   await expect(page.getByRole('heading', { name: 'Calques & 4 cavaliers' })).toBeVisible();
 }
 
+// Scanne un quartier via la vue "Recherche" du rail — même parcours que
+// l'utilisateur (SearchForm.jsx : champ "Quartier à scanner", bouton submit
+// "Scan"). Le rail lui-même porte aussi un item nommé "Scan" (vue une fois
+// le scan lancé) : les deux boutons partagent le même nom accessible, d'où
+// le scope sur #panel-sheet pour cibler uniquement le bouton du formulaire.
+async function scanQuartier(page, quartier) {
+  await page.getByRole('button', { name: 'Recherche', exact: true }).click();
+  const panelSheet = page.locator('#panel-sheet');
+  await panelSheet.getByLabel('Quartier à scanner').fill(quartier);
+  await Promise.all([
+    page.waitForResponse((res) => res.url().includes('/api/quartier-stats') && res.ok()),
+    panelSheet.getByRole('button', { name: 'Scan', exact: true }).click(),
+  ]);
+}
+
 test.describe('Vue Calques — non-régression', () => {
   test('le fond de carte charge de vraies tuiles (pas le placeholder transparent)', async ({ page }) => {
     await page.goto('/');
@@ -66,6 +81,7 @@ test.describe('Vue Calques — non-régression', () => {
       { label: 'Métro & stations', key: 'Metro' },
       { label: 'Funiculaires', key: 'Funicular' },
       { label: '€/m² par arrondissement', key: 'Quartiers' },
+      { label: 'Apparts T2', key: 'T2' },
       { label: 'Vice', key: 'Vice' },
       { label: 'Gentrification', key: 'Gentrification' },
       { label: 'Nuisance', key: 'Nuisance' },
@@ -113,5 +129,67 @@ test.describe('Vue Calques — non-régression', () => {
     }));
 
     expect(scrollHeight).toBeLessThanOrEqual(innerHeight);
+  });
+
+  test('une seule légende est affichée sur la carte (plus de doublon avec l\'ancienne légende Folium)', async ({ page }) => {
+    await page.goto('/');
+    await getMapFrame(page);
+
+    await expect(page.getByText('Légende', { exact: true })).toHaveCount(1);
+  });
+
+  test('avec Vice actif et un rayon de 300 m, les pings hors du cercle restent visibles (opacité >= 0.75)', async ({ page }) => {
+    await page.goto('/');
+    const frame = await getMapFrame(page);
+    await scanQuartier(page, 'Ainay');
+    await goToCalques(page);
+
+    await page.getByRole('button', { name: '300 m', exact: true }).click();
+    await frame.waitForFunction(() => Boolean(window.__oracleFocusCircle));
+
+    const opacities = await frame.evaluate(() => {
+      const center = window.__oracleFocusCircle.getLatLng();
+      return (window.oracleCavalierMarkers || [])
+        .filter((entry) => entry.famille === 'vice')
+        .map((entry) => ({
+          distM: center.distanceTo(L.latLng(entry.lat, entry.lng)),
+          opacity: entry.m.options.opacity,
+        }));
+    });
+
+    const outsideRadius = opacities.filter((o) => o.distM > 300);
+    expect(outsideRadius.length).toBeGreaterThan(0);
+    for (const o of outsideRadius) {
+      expect(o.opacity).toBeGreaterThanOrEqual(0.75);
+    }
+  });
+
+  test('le rayon "Aucun" supprime le cercle du rayon (CLEAR_FOCUS)', async ({ page }) => {
+    await page.goto('/');
+    const frame = await getMapFrame(page);
+    await scanQuartier(page, 'Ainay');
+    await goToCalques(page);
+
+    await page.getByRole('button', { name: '300 m', exact: true }).click();
+    await frame.waitForFunction(() => Boolean(window.__oracleFocusCircle));
+
+    await page.getByRole('button', { name: 'Aucun', exact: true }).click();
+
+    await frame.waitForFunction(() => !window.__oracleFocusCircle);
+  });
+
+  test('couper l\'interrupteur T2 retire les points T2 de la carte', async ({ page }) => {
+    await page.goto('/');
+    const frame = await getMapFrame(page);
+    await goToCalques(page);
+
+    const switchEl = page.getByRole('switch', { name: 'Apparts T2' });
+    await expect(switchEl).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(() => isLayerOnMap(frame, 'T2')).toBe(true);
+
+    await switchEl.click();
+
+    await expect(switchEl).toHaveAttribute('aria-checked', 'false');
+    await expect.poll(() => isLayerOnMap(frame, 'T2')).toBe(false);
   });
 });
