@@ -203,11 +203,27 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("e.origin", script)
         self.assertIn("window.location.origin", script)
 
-    def test_handles_toggle_layer_by_clicking_matching_checkbox(self):
+    def test_handles_toggle_layer_via_the_key_to_featuregroup_dictionary(self):
+        """Remplace l'ancienne correspondance par texte de <label> (fragile,
+        cassait dès que le contrôle Folium était cassé/masqué) par un accès
+        direct map.addLayer/removeLayer via `window.oracleLayerGroups[key]`,
+        rempli par build_layer_groups_script. Le contrat TOGGLE_LAYER utilise
+        désormais `key` (mapLayers.config.json), plus `name`."""
         script = generate_map.build_bridge_message_script("map_abc123")
 
         self.assertIn("TOGGLE_LAYER", script)
-        self.assertIn("box.click()", script)
+        self.assertIn("oracleLayerGroups", script)
+        self.assertIn("e.data.key", script)
+        self.assertIn("map_abc123.addLayer(", script)
+        self.assertIn("map_abc123.removeLayer(", script)
+        self.assertIn("map_abc123.hasLayer(", script)
+
+    def test_no_longer_depends_on_layercontrol_label_text(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertNotIn("getElementsByTagName('label')", script)
+        self.assertNotIn("box.click()", script)
+        self.assertNotIn("e.data.name", script)
 
     def test_handles_fly_to_by_calling_flyto_on_the_map_instance(self):
         script = generate_map.build_bridge_message_script("map_abc123")
@@ -462,6 +478,42 @@ class BuildCavalierMarkersScriptTest(unittest.TestCase):
 
         self.assertIn("oracleCavalierMarkers=[]", script.replace(" ", ""))
 
+    def test_assigns_to_window_rather_than_declaring_a_local_var(self):
+        """Doit rester accessible une fois englobé dans une fonction (le
+        callback `window.addEventListener('load', ...)`, cf. bug #1/#3/#5/#8 :
+        un `var` s'y serait limité à la portée de cette fonction, invisible
+        depuis le listener 'message' (build_bridge_message_script)."""
+        script = generate_map.build_cavalier_markers_script([
+            {"js_var": "marker_abc", "lat": 45.75, "lng": 4.83, "famille": "vice"},
+        ])
+
+        self.assertIn("window.oracleCavalierMarkers", script)
+        self.assertNotIn("var oracleCavalierMarkers", script)
+
+
+class BuildLayerGroupsScriptTest(unittest.TestCase):
+    """Dictionnaire JS {clé mapLayers.config.json -> FeatureGroup Folium},
+    construit une fois la carte rendue (load) — remplace la correspondance
+    par texte de <label> pour TOGGLE_LAYER (bugs #1/#2/#3/#5/#8)."""
+
+    def test_declares_a_global_dict_keyed_by_layer_key(self):
+        script = generate_map.build_layer_groups_script({
+            "Vice": "feature_group_abc",
+            "Quartiers": "geo_json_def",
+        })
+
+        self.assertIn("window.oracleLayerGroups", script)
+        self.assertNotIn("var oracleLayerGroups", script)
+        self.assertIn('"Vice"', script)
+        self.assertIn("feature_group_abc", script)
+        self.assertIn('"Quartiers"', script)
+        self.assertIn("geo_json_def", script)
+
+    def test_returns_an_empty_dict_for_no_entries(self):
+        script = generate_map.build_layer_groups_script({})
+
+        self.assertIn("oracleLayerGroups={}", script.replace(" ", ""))
+
 
 class ResolveVillePathsTest(unittest.TestCase):
     def test_lyon_paths_match_existing_filenames(self):
@@ -521,6 +573,67 @@ class LegendAndScaleTest(unittest.TestCase):
         self.assertIn("addEventListener('load'", script)
         self.assertIn('L.control.scale', script)
         self.assertIn('overlayremove', script)
+
+
+class MainRegeneratesAWorkingLyonMapTest(unittest.TestCase):
+    """Test d'intégration (données réelles versionnées, backend/data/) : exécute
+    generate_map.main('lyon') pour de vrai et inspecte le HTML produit —
+    seule façon fiable de vérifier que le script injecté ne référence pas des
+    variables pas-encore-définies (bugs #1/#2/#3/#5/#8 : un crash JS en tête
+    du <script> empêchait tout le reste, y compris SET_TILE_URL/TOGGLE_LAYER,
+    de s'exécuter). Réécrit le fichier committé (même effet que la commande
+    de régénération manuelle), pas un fichier temporaire : c'est le fichier
+    qu'on veut justement tenir à jour et vérifier."""
+
+    @classmethod
+    def setUpClass(cls):
+        generate_map.main('lyon')
+        output_path = generate_map.resolve_ville_paths('lyon')['output_html']
+        with open(output_path, 'r', encoding='utf-8') as f:
+            cls.html = f.read()
+
+    def test_the_tile_layer_is_present(self):
+        self.assertIn("CartoDB dark_matter", self.html)
+        self.assertIn(generate_map.TILE_PLACEHOLDER_URL, self.html)
+
+    def test_cavalier_markers_are_declared_after_the_load_listener_opens(self):
+        """Ordre textuel : oracleCavalierMarkers doit être à l'intérieur du
+        callback `addEventListener('load', ...)`, pas avant — sinon il
+        s'exécute avant que Folium ait défini les variables `marker_xxx`
+        (rendues par Folium après `</body>`) et plante (bug #1/#2/#3/#5/#8)."""
+        load_pos = self.html.find("addEventListener('load'")
+        markers_pos = self.html.find("oracleCavalierMarkers=")
+
+        self.assertNotEqual(load_pos, -1)
+        self.assertNotEqual(markers_pos, -1)
+        self.assertLess(load_pos, markers_pos)
+
+    def test_layer_groups_are_declared_after_the_load_listener_opens(self):
+        load_pos = self.html.find("addEventListener('load'")
+        groups_pos = self.html.find("oracleLayerGroups=")
+
+        self.assertNotEqual(load_pos, -1)
+        self.assertNotEqual(groups_pos, -1)
+        self.assertLess(load_pos, groups_pos)
+
+    def test_all_four_cavalier_families_have_at_least_one_marker(self):
+        for famille in ('vice', 'gentrification', 'nuisance', 'superstition'):
+            self.assertIn(f'famille:"{famille}"', self.html, f"aucun marker pour {famille}")
+
+    def test_layer_groups_dict_has_an_entry_for_each_cavalier_and_quartiers(self):
+        for key in ('Vice', 'Gentrification', 'Nuisance', 'Superstition', 'Quartiers', 'Metro'):
+            self.assertIn(f'"{key}":', self.html, f"pas d'entrée oracleLayerGroups pour {key}")
+
+    def test_cavaliers_are_no_longer_rendered_as_circlemarker(self):
+        """Un seul marker par lieu (folium.Marker/DivIcon, cf. cavalier_icon_html)
+        — plus l'ancien folium.CircleMarker (bug #4, doublons suspectés)."""
+        self.assertIn("oracle-cav-circle", self.html)
+        self.assertIn("oracle-cav-diamond", self.html)
+        self.assertIn("oracle-cav-triangle", self.html)
+        self.assertIn("oracle-cav-square", self.html)
+
+    def test_toggle_layer_no_longer_matches_by_label_text(self):
+        self.assertNotIn("getElementsByTagName('label')", self.html)
 
 
 if __name__ == "__main__":

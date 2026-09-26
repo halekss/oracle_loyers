@@ -62,18 +62,18 @@ Indique à la carte où aller chercher ses tuiles : le **proxy de tuiles du back
 
 ### `TOGGLE_LAYER`
 
-Active/désactive un calque Folium (`LayerControl`) depuis le panneau de contrôle React, sans dupliquer ce panneau dans la carte elle-même (masqué via CSS).
+Active/désactive un calque Folium (FeatureGroup ou GeoJson) depuis le panneau de contrôle React, sans dupliquer ce panneau dans la carte elle-même (masqué via CSS).
 
-**Émis par** : `MapComponent.jsx`, sur toggle utilisateur ou au chargement initial de l'iframe (`handleIframeLoad`, pour resynchroniser l'état des calques React vers la carte).
+**Émis par** : `MapComponent.jsx`, sur toggle utilisateur ou au chargement initial de l'iframe (`handleIframeLoad`, pour resynchroniser l'état complet des calques React vers la carte).
 
 ```json
-{ "type": "TOGGLE_LAYER", "name": "Immo T2", "show": true }
+{ "type": "TOGGLE_LAYER", "key": "T2", "show": true }
 ```
 
-* `name` : libellé du calque tel qu'affiché dans le `LayerControl` Folium (`LAYER_MAPPING` dans `MapComponent.jsx` fait la correspondance clé interne → libellé réel — voir "Config partagée des calques" ci-dessous pour la source de vérité de cette correspondance).
+* `key` : clé interne du calque, celle de `mapLayers.config.json` (`layer.key` — la même que l'état React `layers` et `toggleLayer(key)`, voir "Config partagée des calques" ci-dessous). **Ne plus utiliser `name`/le libellé Folium** (contrat changé : l'ancienne correspondance par texte de `<label>` du `LayerControl` était fragile — un contrôle masqué/altéré cassait silencieusement tout le mécanisme).
 * `show` : état cible (`true`/`false`).
 
-**Traité par** : `build_bridge_message_script` → simule un clic sur la case à cocher Leaflet correspondante si son état diverge de `show` (Folium n'expose pas d'API JS directe pour piloter `LayerControl` par nom).
+**Traité par** : `build_bridge_message_script` → `window.oracleLayerGroups[key]` (dictionnaire `{clé -> FeatureGroup/GeoJson}`, construit par `build_layer_groups_script` une fois la carte rendue, cf. `SET_FOCUS` ci-dessous pour le même principe de déférence) → `map.addLayer(group)`/`map.removeLayer(group)` directement, aucune dépendance au texte des `<label>` ni aux cases à cocher (dorénavant purement décoratives, toujours masquées via CSS).
 
 ### `SET_FOCUS` / `CLEAR_FOCUS`
 
@@ -98,6 +98,8 @@ Matérialise le rayon des cavaliers choisi (300/500/1000m, `GET /api/cavaliers`)
 * `CLEAR_FOCUS` : `setOpacity(1)` sur chaque entrée de `oracleCavalierMarkers`, retire `window.__oracleFocusCircle`.
 
 **Pings des cavaliers (`cavalier_icon_html`, `generate_map.py`)** : depuis ORA-130 (voir ci-dessous), chaque cavalier est un `folium.Marker`/`DivIcon` (plus un `CircleMarker`) dont la forme et la couleur viennent de `mapLayers.config.json` (`shape`/`uiColor`) — même source que le panneau React (`CavalierRow.jsx`) et sa légende carte. Une classe CSS par forme (`oracle-cav-circle`/`-diamond`/`-triangle`/`-square`, injectée une fois dans le `<style>` de la page) plutôt qu'un SVG inline par marker, pour ne pas alourdir le HTML généré (des centaines de cavaliers par carte).
+
+**Piège Folium résolu (bug de régression, cf. historique) : ordre de rendu.** Folium rend son propre script d'initialisation (variables `marker_xxx`/`feature_group_xxx`) **après** `</body>` (voir plus bas, section légende). `window.oracleCavalierMarkers` (`build_cavalier_markers_script`) et `window.oracleLayerGroups` (`build_layer_groups_script`, utilisé par `TOGGLE_LAYER` ci-dessus) référencent ces variables : ils doivent donc être construits **à l'intérieur** d'un `window.addEventListener('load', function() { ... })`, jamais en haut du `<script>` injecté — sinon la première variable non définie lève une `ReferenceError` qui interrompt immédiatement tout le reste du `<script>`, y compris l'enregistrement du listener `message` (`TOGGLE_LAYER`/`SET_TILE_URL` cessent alors de fonctionner silencieusement). Les deux fonctions assignent sur `window.*` plutôt que `var` pour rester accessibles depuis le listener `message`, déclaré dans une fonction séparée.
 
 ## Config partagée des calques (ORA-130)
 
@@ -129,7 +131,7 @@ Les deux côtés lisent maintenant le même fichier JSON, source de vérité uni
 * `shape` (cavaliers uniquement) : forme de l'icône, une des 4 valeurs `circle`/`diamond`/`triangle`/`square` — lue à la fois par `generate_map.cavalier_icon_html` (classe CSS `oracle-cav-<shape>`) et par React (`CavalierShapeIcon.jsx`, mêmes noms de forme).
 
 **Consommé par** :
-* `MapComponent.jsx` : `import mapLayersConfig from '../config/mapLayers.config.json'` (import JS statique, bundlé par Vite — synchrone, pas de `fetch` réseau). `LAYER_MAPPING`, l'état initial `layers` et le rendu des `ToggleItem` du panneau en dérivent tous.
+* `MapComponent.jsx` : `import mapLayersConfig from '../config/mapLayers.config.json'` (import JS statique, bundlé par Vite — synchrone, pas de `fetch` réseau). L'état initial `layers` et le rendu des `ToggleItem` du panneau en dérivent ; `TOGGLE_LAYER` envoie directement `layer.key` (plus de table de correspondance `LAYER_MAPPING` vers un libellé Folium, cf. contrat `TOGGLE_LAYER` ci-dessus).
 * `generate_map.py` : `load_layers_config()` (`json.load` sur `LAYERS_CONFIG_JSON = <repo>/frontend/src/config/mapLayers.config.json`, chemin résolu via `PROJECT_ROOT`, déjà utilisé pour écrire dans `frontend/public/data/`). Fichier requis : contrairement à `load_geojson_file` (calque optionnel), une config manquante ou invalide fait échouer la génération plutôt que produire une carte sans calques.
 
 **Pourquoi un fichier dans `frontend/src/` plutôt qu'à la racine du repo** : le build Docker du frontend (`frontend/Dockerfile`) a pour contexte `./frontend` uniquement (voir `docker-compose.yml`) — un fichier à la racine du repo ne serait pas copié dans l'image et casserait `npm run build`. `generate_map.py`, lui, a toujours besoin d'un checkout complet du repo (il écrit déjà dans `frontend/public/data/` via `PROJECT_ROOT`), donc lire un fichier sous `frontend/src/` ne lui ajoute pas de contrainte nouvelle.

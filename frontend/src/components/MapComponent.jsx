@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { api, getApiBaseUrl } from "../services/api";
-import { LAYER_MAPPING, layersByGroup } from "../services/mapLayers";
+import { layersByGroup } from "../services/mapLayers";
 import { CAVALIER_STYLES } from "../services/cavaliersDisplay";
 import CavalierShapeIcon from "./CavalierShapeIcon";
 
@@ -19,8 +19,10 @@ const VILLE_CENTERS = {
 // Source de vérité unique (frontend/src/config/mapLayers.config.json),
 // consommée aussi par backend/scripts/generate_map.py (ORA-130) : ajouter un
 // calque = éditer ce JSON, pas ce composant ET le script Python séparément.
-// `LAYER_MAPPING` (clé interne React -> libellé du calque Folium/TOGGLE_LAYER)
-// dérive de ce fichier plutôt que d'être recopié à la main.
+// TOGGLE_LAYER envoie directement `layer.key` (MAP_CONTRACT.md) : plus de
+// table de correspondance vers un libellé Folium (ancien mécanisme fragile
+// par texte de <label>, remplacé côté carte par un dictionnaire clé ->
+// FeatureGroup).
 // Exporté (ORA-178) : réutilisé tel quel par la vue "Calques" du rail
 // (App.jsx) pour afficher les mêmes lignes que le panneau flottant
 // ci-dessous, sans dupliquer le style des lignes.
@@ -196,11 +198,10 @@ function MapComponent({
 
   const sendLayerCommand = (layerKey, show) => {
     if (iframeRef.current && iframeRef.current.contentWindow) {
-      const realName = LAYER_MAPPING[layerKey];
       iframeRef.current.contentWindow.postMessage(
         {
           type: "TOGGLE_LAYER",
-          name: realName,
+          key: layerKey,
           show: show,
         },
         window.location.origin,

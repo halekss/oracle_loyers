@@ -14,7 +14,7 @@ vi.mock('../services/api', async () => {
 import { api } from '../services/api';
 import MapComponent from './MapComponent';
 import mapLayersConfig from '../config/mapLayers.config.json';
-import { LAYER_MAPPING, defaultLayerVisibility } from '../services/mapLayers';
+import { defaultLayerVisibility } from '../services/mapLayers';
 
 const noop = () => {};
 
@@ -232,12 +232,12 @@ describe('MapComponent', () => {
     iframe.dispatchEvent(new Event('load'));
 
     expect(postMessage).toHaveBeenCalledWith(
-      { type: 'TOGGLE_LAYER', name: 'Quartiers', show: false },
+      { type: 'TOGGLE_LAYER', key: 'Quartiers', show: false },
       window.location.origin,
     );
   });
 
-  it('toggling Quartiers sends TOGGLE_LAYER with name Quartiers (ORA-104)', async () => {
+  it('toggling Quartiers sends TOGGLE_LAYER with key Quartiers (ORA-104)', async () => {
     const user = userEvent.setup();
     render(<ControlledMapComponent center={null} />);
     const iframe = screen.getByTitle('Carte Oracle');
@@ -250,7 +250,7 @@ describe('MapComponent', () => {
     await user.click(screen.getByText('Quartiers'));
 
     expect(postMessage).toHaveBeenCalledWith(
-      { type: 'TOGGLE_LAYER', name: 'Quartiers', show: true },
+      { type: 'TOGGLE_LAYER', key: 'Quartiers', show: true },
       window.location.origin,
     );
   });
@@ -288,7 +288,11 @@ describe('MapComponent', () => {
     }
   });
 
-  it('sends TOGGLE_LAYER using the Folium layer name from the shared config, not the internal key (ORA-130)', async () => {
+  it('sends TOGGLE_LAYER using the internal key from the shared config, not the Folium label (MAP_CONTRACT.md)', async () => {
+    // Contrat changé : l'ancienne correspondance par texte de <label> du
+    // LayerControl Folium était fragile (cassait dès que ce contrôle était
+    // masqué/altéré) — remplacée côté carte par un dictionnaire direct
+    // clé -> FeatureGroup (window.oracleLayerGroups, build_layer_groups_script).
     const user = userEvent.setup();
     render(<ControlledMapComponent center={null} />);
     const iframe = screen.getByTitle('Carte Oracle');
@@ -302,7 +306,7 @@ describe('MapComponent', () => {
     await user.click(screen.getByText(gentrification.label));
 
     expect(postMessage).toHaveBeenCalledWith(
-      { type: 'TOGGLE_LAYER', name: gentrification.name, show: true },
+      { type: 'TOGGLE_LAYER', key: gentrification.key, show: true },
       window.location.origin,
     );
   });
@@ -384,7 +388,7 @@ describe('MapComponent', () => {
       iframe.dispatchEvent(new Event('load'));
 
       expect(postMessage).toHaveBeenCalledWith(
-        { type: 'TOGGLE_LAYER', name: LAYER_MAPPING.Vice, show: false },
+        { type: 'TOGGLE_LAYER', key: 'Vice', show: false },
         window.location.origin,
       );
     });
@@ -399,7 +403,7 @@ describe('MapComponent', () => {
       rerender(<MapComponent center={null} layers={{ ...layers, Vice: !layers.Vice }} onToggleLayer={noop} />);
 
       expect(postMessage).toHaveBeenCalledWith(
-        { type: 'TOGGLE_LAYER', name: LAYER_MAPPING.Vice, show: !layers.Vice },
+        { type: 'TOGGLE_LAYER', key: 'Vice', show: !layers.Vice },
         window.location.origin,
       );
     });

@@ -147,17 +147,40 @@ def cavalier_icon_html(shape, color):
 
 
 def build_cavalier_markers_script(entries):
-    """JS `var oracleCavalierMarkers=[...]` : référence (variable Folium du
+    """JS `window.oracleCavalierMarkers=[...]` : référence (variable Folium du
     marker, lat/lng, famille) de chaque cavalier posé sur la carte —
     nécessaire pour que SET_FOCUS (build_bridge_message_script) fasse varier
     son opacité selon la distance au point choisi, sans dépendre d'un calcul
     haversine dupliqué côté JS (L.LatLng#distanceTo suffit).
-    `entries` : [{"js_var", "lat", "lng", "famille"}, ...]."""
+    `entries` : [{"js_var", "lat", "lng", "famille"}, ...].
+
+    Assigne sur `window` plutôt qu'un `var` local : ce script est exécuté à
+    l'intérieur du callback `window.addEventListener('load', ...)` (cf.
+    `main`), pour ne référencer les variables `marker_xxx` (rendues par
+    Folium après `</body>`, cf. `build_legend_and_scale_script`) qu'une fois
+    qu'elles existent réellement — un `var` s'y serait limité à la portée de
+    cette fonction, invisible depuis le listener `message` séparé
+    (`build_bridge_message_script`)."""
     items = ",".join(
         f'{{m:{entry["js_var"]},lat:{entry["lat"]},lng:{entry["lng"]},famille:{json.dumps(entry["famille"])}}}'
         for entry in entries
     )
-    return f"var oracleCavalierMarkers=[{items}];"
+    return f"window.oracleCavalierMarkers=[{items}];"
+
+
+def build_layer_groups_script(entries):
+    """JS `window.oracleLayerGroups={{key: FeatureGroup, ...}}` : un calque
+    Folium (FeatureGroup ou GeoJson) par clé de mapLayers.config.json —
+    permet à TOGGLE_LAYER (build_bridge_message_script) de piloter
+    directement `map.addLayer`/`removeLayer` par clé, sans dépendre du texte
+    des `<label>` du LayerControl Folium (fragile : cassait dès que le
+    contrôle était masqué/altéré — bugs #1/#2/#3/#5/#8).
+
+    `entries` : {layer_key: js_var_name, ...}. Assigné sur `window` pour la
+    même raison que `build_cavalier_markers_script` (exécuté dans le
+    callback `load`)."""
+    items = ",".join(f"{json.dumps(key)}:{js_var}" for key, js_var in entries.items())
+    return f"window.oracleLayerGroups={{{items}}};"
 
 METRO_COLORS = {
     'A': '#e9003a', 'B': '#0073ba',
@@ -418,12 +441,18 @@ def build_bridge_message_script(map_js_var_name):
         }}
 
         if (e.data.type === 'TOGGLE_LAYER') {{
-            var labels = document.getElementsByTagName('label');
-            for (var i = 0; i < labels.length; i++) {{
-                var labelText = labels[i].textContent.trim();
-                if (labelText === e.data.name || labelText.includes(e.data.name)) {{
-                    var box = labels[i].querySelector('input');
-                    if (box && box.checked !== e.data.show) box.click();
+            // `window.oracleLayerGroups` (build_layer_groups_script) associe
+            // directement la clé de mapLayers.config.json au FeatureGroup/
+            // GeoJson Folium correspondant — piloté par map.addLayer/
+            // removeLayer, sans dépendre du texte des <label> du
+            // LayerControl (fragile, cassait dès que ce contrôle était
+            // masqué/altéré).
+            var group = (window.oracleLayerGroups || {{}})[e.data.key];
+            if (group) {{
+                if (e.data.show) {{
+                    if (!{map_js_var_name}.hasLayer(group)) {map_js_var_name}.addLayer(group);
+                }} else {{
+                    if ({map_js_var_name}.hasLayer(group)) {map_js_var_name}.removeLayer(group);
                 }}
             }}
         }} else if (e.data.type === 'FLY_TO') {{
@@ -686,8 +715,9 @@ def main(ville='lyon'):
 
     # --- 6bis. LIMITES DES QUARTIERS (ARRONDISSEMENTS), ORA-104 ---
     quartiers_geojson = load_geojson_file(paths['quartiers_geojson'])
+    fg_quartiers = None
     if quartiers_geojson:
-        folium.GeoJson(
+        fg_quartiers = folium.GeoJson(
             quartiers_geojson,
             name=layer_by_key['Quartiers']['name'],
             show=layer_by_key['Quartiers']['defaultVisible'],  # Off par défaut, cohérent avec Nuisance/Gentrification/Superstition
@@ -699,7 +729,8 @@ def main(ville='lyon'):
             },
             highlight_function=lambda feature: {'fillOpacity': 0.18, 'weight': 3},
             tooltip=folium.GeoJsonTooltip(fields=['nom'], aliases=['Quartier :']),
-        ).add_to(m)
+        )
+        fg_quartiers.add_to(m)
         print(f"🗺️ Quartiers chargés : {len(quartiers_geojson.get('features', []))} arrondissements tracés.")
     else:
         print(f"⚠️ GeoJSON des quartiers introuvable ou invalide ({paths['quartiers_geojson']}), couche ignorée.")
@@ -773,6 +804,26 @@ def main(ville='lyon'):
     fg_superstition.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
 
+    # Dictionnaire clé (mapLayers.config.json) -> variable JS Folium, pour
+    # TOGGLE_LAYER (map.addLayer/removeLayer direct, cf. build_layer_groups_script
+    # et build_bridge_message_script) — remplace la correspondance par texte
+    # de <label> du LayerControl (bugs #1/#2/#3/#5/#8).
+    layer_group_js_vars = {
+        'Studio': fg_studio.get_name(),
+        'T2': fg_t2.get_name(),
+        'T3': fg_t3.get_name(),
+        'T4': fg_t4.get_name(),
+        'Metro': fg_metro.get_name(),
+        'Vice': fg_vice.get_name(),
+        'Gentrification': fg_gentri.get_name(),
+        'Nuisance': fg_nuisance.get_name(),
+        'Superstition': fg_superstition.get_name(),
+    }
+    if fg_funicular is not None:
+        layer_group_js_vars['Funicular'] = fg_funicular.get_name()
+    if fg_quartiers is not None:
+        layer_group_js_vars['Quartiers'] = fg_quartiers.get_name()
+
     html_out = m.get_root().render()
 
     # --- 9. HACK CSS/JS (POPUPS, CONTROLE CALQUES) ---
@@ -810,9 +861,18 @@ def main(ville='lyon'):
     </style>
 
     <script>
-    {build_cavalier_markers_script(cavalier_marker_entries)}
     {build_bridge_message_script(m.get_name())}
     {build_legend_and_scale_script(m.get_name(), build_legend_html(layers_config))}
+    window.addEventListener('load', function() {{
+        // Folium rend son propre script d'initialisation (variables
+        // marker_xxx/feature_group_xxx) APRES `</body>` : ce bloc ne doit
+        // s'exécuter qu'une fois la page entièrement chargée, jamais avant
+        // (sinon ReferenceError immédiat, qui empêchait aussi le reste de ce
+        // <script> — dont le listener 'message' ci-dessus — de s'exécuter,
+        // bugs #1/#2/#3/#5/#8).
+        {build_cavalier_markers_script(cavalier_marker_entries)}
+        {build_layer_groups_script(layer_group_js_vars)}
+    }});
     </script>
     </body>
     """
