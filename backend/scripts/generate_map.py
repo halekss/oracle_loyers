@@ -126,13 +126,25 @@ CAVALIER_SHAPES = ('circle', 'diamond', 'triangle', 'square')
 # #070A12 obtenu par calque (outer = contour, inner = couleur), mêmes formes
 # que CavalierShapeIcon.jsx (React).
 CAVALIER_ICON_CSS = """
-        .oracle-cav-outer { width: 12px; height: 12px; }
+        .oracle-cav-outer { width: 12px; height: 12px; transition: transform 0.15s ease-out; }
         .oracle-cav-inner { width: 9px; height: 9px; margin: 1.5px; }
         .oracle-cav-circle { border-radius: 50%; }
         .oracle-cav-square { }
         .oracle-cav-diamond { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
         .oracle-cav-triangle { clip-path: polygon(50% 0%, 100% 100%, 0% 100%); }
 """
+
+# ORA-183 (v3) : un cavalier actif montre TOUJOURS tous ses lieux (rayon actif
+# ou non) — le rayon ne fait plus que les mettre en avant (SET_FOCUS,
+# build_bridge_message_script), sans faire disparaître le reste sur fond
+# sombre (opacité 0.25 illisible, cf. régression signalée). Échelle relative à
+# la taille de base .oracle-cav-outer (12px) : 14/12 dans le rayon, 10/12 hors
+# du rayon, appliquée via `transform: scale()` sur ce même élément (jamais sur
+# l'icône Leaflet elle-même, qui porte le positionnement — cf. SET_FOCUS).
+FOCUS_STYLE = {
+    'focus': {'scale': 14 / 12, 'opacity': 1},
+    'dim': {'scale': 10 / 12, 'opacity': 0.75},
+}
 
 
 def cavalier_icon_html(shape, color):
@@ -152,17 +164,19 @@ def build_cavalier_markers_script(entries):
     nécessaire pour que SET_FOCUS (build_bridge_message_script) fasse varier
     son opacité selon la distance au point choisi, sans dépendre d'un calcul
     haversine dupliqué côté JS (L.LatLng#distanceTo suffit).
-    `entries` : [{"js_var", "lat", "lng", "famille"}, ...].
+    `entries` : [{"js_var", "lat", "lng", "famille", "color"}, ...]. `color`
+    (uiColor de mapLayers.config.json) sert au halo drop-shadow dessiné par
+    SET_FOCUS autour des pings mis en avant par le rayon (ORA-183).
 
     Assigne sur `window` plutôt qu'un `var` local : ce script est exécuté à
     l'intérieur du callback `window.addEventListener('load', ...)` (cf.
     `main`), pour ne référencer les variables `marker_xxx` (rendues par
-    Folium après `</body>`, cf. `build_legend_and_scale_script`) qu'une fois
-    qu'elles existent réellement — un `var` s'y serait limité à la portée de
-    cette fonction, invisible depuis le listener `message` séparé
-    (`build_bridge_message_script`)."""
+    Folium après `</body>`) qu'une fois qu'elles existent réellement — un
+    `var` s'y serait limité à la portée de cette fonction, invisible depuis le
+    listener `message` séparé (`build_bridge_message_script`)."""
     items = ",".join(
-        f'{{m:{entry["js_var"]},lat:{entry["lat"]},lng:{entry["lng"]},famille:{json.dumps(entry["famille"])}}}'
+        f'{{m:{entry["js_var"]},lat:{entry["lat"]},lng:{entry["lng"]},'
+        f'famille:{json.dumps(entry["famille"])},color:{json.dumps(entry["color"])}}}'
         for entry in entries
     )
     return f"window.oracleCavalierMarkers=[{items}];"
@@ -434,6 +448,7 @@ def build_bridge_message_script(map_js_var_name):
     `map_js_var_name` : nom de la variable JS de l'objet Leaflet généré par
     Folium (`m.get_name()`), utilisé pour piloter la carte (ex: FLY_TO).
     """
+    focus_style_json = json.dumps(FOCUS_STYLE)
     return f"""
     window.addEventListener("message", function(e) {{
         if (e.origin !== window.location.origin) {{
@@ -474,16 +489,28 @@ def build_bridge_message_script(map_js_var_name):
                 }});
             }}
         }} else if (e.data.type === 'SET_FOCUS') {{
-            // Vue "Calques" du rail, sélecteur de rayon : les pings de
-            // cavaliers dans le rayon restent pleins (opacité 1), ceux hors
-            // du rayon s'estompent (0.25) — distance calculée par Leaflet
-            // (L.LatLng#distanceTo), pas de haversine dupliqué ici.
+            // Vue "Calques" du rail, sélecteur de rayon (ORA-183) : un
+            // cavalier actif garde TOUJOURS tous ses pings visibles — le
+            // rayon se contente de mettre en avant ceux qui s'y trouvent
+            // (taille + opacité pleines + halo), sans faire disparaître le
+            // reste (l'ancienne opacité résiduelle était illisible sur fond
+            // sombre, cf. régression signalée). Distance calculée par
+            // Leaflet (L.LatLng#distanceTo), pas de haversine dupliqué ici.
             // `oracleCavalierMarkers` est déclaré par
             // build_cavalier_markers_script, plus haut dans ce même script.
             var oracleFocusPoint = L.latLng(e.data.lat, e.data.lng);
+            var oracleFocusStyle = {focus_style_json};
             (window.oracleCavalierMarkers || []).forEach(function(entry) {{
                 var d = oracleFocusPoint.distanceTo(L.latLng(entry.lat, entry.lng));
-                entry.m.setOpacity(d <= e.data.radius_m ? 1 : 0.25);
+                var inFocus = d <= e.data.radius_m;
+                var style = inFocus ? oracleFocusStyle.focus : oracleFocusStyle.dim;
+                entry.m.setOpacity(style.opacity);
+                var el = entry.m.getElement && entry.m.getElement();
+                var shape = el && el.querySelector('.oracle-cav-outer');
+                if (shape) {{
+                    shape.style.transform = 'scale(' + style.scale + ')';
+                    shape.style.filter = inFocus ? ('drop-shadow(0 0 4px ' + entry.color + ')') : 'none';
+                }}
             }});
             // Cercle pointillé violet du rayon, dessiné par la carte
             // elle-même (suit zoom/pan) — un seul à la fois, on retire
@@ -504,6 +531,12 @@ def build_bridge_message_script(map_js_var_name):
         }} else if (e.data.type === 'CLEAR_FOCUS') {{
             (window.oracleCavalierMarkers || []).forEach(function(entry) {{
                 entry.m.setOpacity(1);
+                var el = entry.m.getElement && entry.m.getElement();
+                var shape = el && el.querySelector('.oracle-cav-outer');
+                if (shape) {{
+                    shape.style.transform = '';
+                    shape.style.filter = 'none';
+                }}
             }});
             if (window.__oracleFocusCircle) {{
                 {map_js_var_name}.removeLayer(window.__oracleFocusCircle);
@@ -788,6 +821,7 @@ def main(ville='lyon'):
                 cavalier_marker_entries.append({
                     'js_var': marker.get_name(),
                     'lat': row['latitude'], 'lng': row['longitude'], 'famille': famille,
+                    'color': color_hex,
                 })
 
     # --- 8. RENDU ---

@@ -252,16 +252,29 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         self.assertIn("map_abc123.eachLayer(", script)
         self.assertIn("setUrl(tileUrl)", script)
 
-    def test_handles_set_focus_by_dimming_markers_outside_the_radius(self):
-        """Vue "Calques" (sélecteur de rayon) : les pings de cavaliers hors
-        du rayon passent à 0.25 d'opacité, ceux dans le rayon restent pleins."""
+    def test_handles_set_focus_by_styling_markers_per_focus_or_dim_state(self):
+        """v3 (ORA-183) : tous les pings d'un cavalier actif restent visibles,
+        rayon actif ou non. Le rayon les met seulement en avant (FOCUS_STYLE) :
+        14px/opacité 1/halo dans le rayon, 10px/opacité >= 0.75 hors du rayon
+        — plus jamais un ping quasi invisible sur fond sombre."""
         script = generate_map.build_bridge_message_script("map_abc123")
 
         self.assertIn("SET_FOCUS", script)
         self.assertIn("distanceTo(", script)
         self.assertIn("setOpacity(", script)
-        self.assertIn("0.25", script)
         self.assertIn("e.data.radius_m", script)
+        self.assertNotIn("0.25", script)
+        self.assertIn(str(generate_map.FOCUS_STYLE["dim"]["opacity"]), script)
+        self.assertGreaterEqual(generate_map.FOCUS_STYLE["dim"]["opacity"], 0.75)
+
+    def test_set_focus_scales_the_marker_shape_and_adds_a_halo_in_focus(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        set_focus_branch = script.split("'SET_FOCUS'")[1].split("else if")[0]
+        self.assertIn("oracle-cav-outer", set_focus_branch)
+        self.assertIn("scale(", set_focus_branch)
+        self.assertIn("drop-shadow(", set_focus_branch)
+        self.assertIn("entry.color", set_focus_branch)
 
     def test_handles_set_focus_by_drawing_a_filled_dashed_leaflet_circle(self):
         script = generate_map.build_bridge_message_script("map_abc123")
@@ -289,6 +302,26 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         clear_focus_branch = script.split("'CLEAR_FOCUS'")[1]
         self.assertIn("setOpacity(1)", clear_focus_branch)
         self.assertIn("map_abc123.removeLayer(", clear_focus_branch)
+
+    def test_clear_focus_resets_the_marker_shape_scale_and_halo(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        clear_focus_branch = script.split("'CLEAR_FOCUS'")[1]
+        self.assertIn("oracle-cav-outer", clear_focus_branch)
+
+
+class FocusStyleConstantTest(unittest.TestCase):
+    """FOCUS_STYLE (ORA-183) : source unique des tailles/opacités appliquées
+    par SET_FOCUS/CLEAR_FOCUS, dans le rayon (`focus`) et hors du rayon
+    (`dim`) — base 12px (CAVALIER_ICON_CSS .oracle-cav-outer)."""
+
+    def test_focus_state_is_full_size_full_opacity(self):
+        self.assertAlmostEqual(generate_map.FOCUS_STYLE["focus"]["scale"], 14 / 12)
+        self.assertEqual(generate_map.FOCUS_STYLE["focus"]["opacity"], 1)
+
+    def test_dim_state_stays_readable_on_a_dark_background(self):
+        self.assertAlmostEqual(generate_map.FOCUS_STYLE["dim"]["scale"], 10 / 12)
+        self.assertGreaterEqual(generate_map.FOCUS_STYLE["dim"]["opacity"], 0.75)
 
 
 class TileLayerNeverEmbedsAKeyTest(unittest.TestCase):
@@ -463,8 +496,8 @@ class BuildCavalierMarkersScriptTest(unittest.TestCase):
 
     def test_declares_a_global_array_with_one_entry_per_marker(self):
         script = generate_map.build_cavalier_markers_script([
-            {"js_var": "marker_abc", "lat": 45.75, "lng": 4.83, "famille": "vice"},
-            {"js_var": "marker_def", "lat": 45.76, "lng": 4.84, "famille": "gentrification"},
+            {"js_var": "marker_abc", "lat": 45.75, "lng": 4.83, "famille": "vice", "color": "#F87171"},
+            {"js_var": "marker_def", "lat": 45.76, "lng": 4.84, "famille": "gentrification", "color": "#C084FC"},
         ])
 
         self.assertIn("oracleCavalierMarkers", script)
@@ -472,6 +505,15 @@ class BuildCavalierMarkersScriptTest(unittest.TestCase):
         self.assertIn("marker_def", script)
         self.assertIn("45.75", script)
         self.assertIn("vice", script)
+
+    def test_includes_the_marker_color_for_the_in_focus_halo(self):
+        """SET_FOCUS (build_bridge_message_script) lit `entry.color` pour
+        dessiner le halo drop-shadow des pings dans le rayon."""
+        script = generate_map.build_cavalier_markers_script([
+            {"js_var": "marker_abc", "lat": 45.75, "lng": 4.83, "famille": "vice", "color": "#F87171"},
+        ])
+
+        self.assertIn("color:\"#F87171\"", script.replace(" ", "").replace("'", '"'))
 
     def test_returns_an_empty_array_for_no_entries(self):
         script = generate_map.build_cavalier_markers_script([])
@@ -484,7 +526,7 @@ class BuildCavalierMarkersScriptTest(unittest.TestCase):
         un `var` s'y serait limité à la portée de cette fonction, invisible
         depuis le listener 'message' (build_bridge_message_script)."""
         script = generate_map.build_cavalier_markers_script([
-            {"js_var": "marker_abc", "lat": 45.75, "lng": 4.83, "famille": "vice"},
+            {"js_var": "marker_abc", "lat": 45.75, "lng": 4.83, "famille": "vice", "color": "#F87171"},
         ])
 
         self.assertIn("window.oracleCavalierMarkers", script)
