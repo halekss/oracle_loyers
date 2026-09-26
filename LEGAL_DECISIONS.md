@@ -17,11 +17,19 @@ et le commit `5a5a9c1`, 2026-08-03 — ce document ne les modifie pas, il s'appu
 - **Revue robots.txt** : 4 des 6 scrapers (Century21, Orpi, PAP, SeLoger) ciblent des chemins
   explicitement `Disallow`. Décision assumée à l'époque : ne pas modifier les scrapers en
   production, compte tenu de l'usage non commercial, des volumes faibles/temporisés, et de
-  l'absence de republication de contenu protégé. Risque résiduel assumé explicitement.
+  l'absence de republication de contenu protégé (depuis ORA-134 : aucune photo téléchargée ni
+  re-servie, seulement affichée en hotlink sur la carte). Risque résiduel assumé explicitement.
 - **Photos** : point déjà vérifié en ORA-93 — **aucun des 6 scrapers ne collecte ni ne stocke de
   colonne photo/image** dans les CSV de sortie (`atomic_csv_writer` dans chaque `scraper_*.py`).
   Seuls des champs texte (titre, prix, lieu, détails) et un champ `Lien` vers l'annonce d'origine
   sont exposés. L'application n'a donc, à ce stade, jamais hébergé de photo scrapée.
+
+  > **Mise à jour (2026-09-27, suite à ORA-134)** : ce constat n'est plus exact. Les scrapers
+  > lisent désormais l'**URL** de la photo principale de chaque annonce (colonne `Image` des CSV,
+  > puis `image` dans `master_immo_final.csv` et `annonces.db`) ; sur les sites actifs (Vizzit,
+  > Orpi, Century 21), 1 221 annonces sur 1 230 en ont une. Seule l'URL est stockée : **aucun
+  > fichier image n'est téléchargé ni re-servi** depuis notre infrastructure. Elle n'est
+  > affichée que dans les popups de la carte, en hotlink (cf. ORA-94 ci-dessous).
 
 ## ORA-94 — Héberger les photos des annonces, ou juste un lien + thumbnail ?
 
