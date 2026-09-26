@@ -158,6 +158,25 @@ describe('CalquesView', () => {
 
       expect(onChangeRadiusM).toHaveBeenCalledWith(1000);
     });
+
+    it('is disabled (aria-disabled, no onChange) when no quartier has been scanned yet (bug régression)', async () => {
+      const user = userEvent.setup();
+      const onChangeRadiusM = vi.fn();
+      renderView({ cavaliersDetail: undefined, facteurs: undefined, radiusM: 500, onChangeRadiusM });
+
+      const option300 = screen.getByRole('button', { name: '300 m' });
+      expect(option300).toHaveAttribute('aria-disabled', 'true');
+
+      await user.click(option300);
+
+      expect(onChangeRadiusM).not.toHaveBeenCalled();
+    });
+
+    it('is enabled again once a quartier has been scanned', () => {
+      renderView({ cavaliersDetail, facteurs, radiusM: 500 });
+
+      expect(screen.getByRole('button', { name: '300 m' })).toHaveAttribute('aria-disabled', 'false');
+    });
   });
 
   describe('changement de rayon en cours (isLoadingCavaliers)', () => {

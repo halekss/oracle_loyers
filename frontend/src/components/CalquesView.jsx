@@ -48,22 +48,27 @@ const RADIUS_OPTIONS = [
   { label: '1 km', value: 1000 },
 ];
 
-function RadiusSelector({ radiusM, onChange }) {
+// Sans quartier scanné, le rayon n'a rien à faire varier (pas de détail à
+// recalculer) — désactivé plutôt que silencieusement sans effet, cf. bug de
+// régression (le sélecteur restait cliquable sans scan).
+function RadiusSelector({ radiusM, onChange, disabled }) {
   return (
     <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Rayon des cavaliers">
       {RADIUS_OPTIONS.map((option) => {
-        const isActive = option.value === radiusM;
+        const isActive = !disabled && option.value === radiusM;
         return (
           <button
             key={option.label}
             type="button"
             aria-pressed={isActive}
-            onClick={() => onChange(option.value)}
+            aria-disabled={disabled}
+            title={disabled ? 'Lance un scan pour changer de rayon' : undefined}
+            onClick={disabled ? undefined : () => onChange(option.value)}
             className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]"
             style={{
               background: isActive ? '#7C3AED' : 'transparent',
-              color: isActive ? '#F1F5F9' : '#8B93A7',
-              cursor: 'pointer',
+              color: disabled ? '#4B5266' : (isActive ? '#F1F5F9' : '#8B93A7'),
+              cursor: disabled ? 'not-allowed' : 'pointer',
             }}
           >
             {option.label}
@@ -162,7 +167,7 @@ export default function CalquesView({
           <h3 className="text-[10px] uppercase tracking-widest font-bold" style={{ color: '#8B93A7' }}>
             Cavaliers{quartier ? ` · ${quartier}` : ''}
           </h3>
-          <RadiusSelector radiusM={radiusM} onChange={onChangeRadiusM} />
+          <RadiusSelector radiusM={radiusM} onChange={onChangeRadiusM} disabled={!hasCavaliersDetail} />
         </div>
 
         {!hasCavaliersDetail && (
