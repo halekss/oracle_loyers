@@ -121,6 +121,44 @@ describe('CavalierRow', () => {
     expect(onToggleVisibility).toHaveBeenCalledTimes(1);
   });
 
+  describe('rayon "Aucun" (totaux ville, sans distance)', () => {
+    const villeWideDetail = {
+      categorie: 'Vice',
+      total: 546,
+      items: [{ poi: 'Bar', count: 320 }, { poi: 'Kebab', count: 226 }],
+      empty_message: null,
+    };
+
+    it('shows "N lieux à <ville>" instead of a distance when radiusM is null', () => {
+      render(<CavalierRow {...baseProps} detail={villeWideDetail} radiusM={null} villeLabel="Lyon" />);
+
+      expect(screen.getByText('546 lieux à Lyon')).toBeInTheDocument();
+    });
+
+    it('never shows a per-item distance when radiusM is null', () => {
+      render(
+        <CavalierRow
+          {...baseProps}
+          detail={villeWideDetail}
+          radiusM={null}
+          villeLabel="Lyon"
+          isExpanded
+        />,
+      );
+
+      expect(screen.getByText('Bar')).toBeInTheDocument();
+      expect(screen.queryByText(/dès \d+ m/)).not.toBeInTheDocument();
+    });
+
+    it('hides the humorous phrase when radiusM is null (no phrase provided)', () => {
+      render(
+        <CavalierRow {...baseProps} detail={villeWideDetail} radiusM={null} villeLabel="Lyon" phrase={undefined} isExpanded />,
+      );
+
+      expect(screen.queryByText(/parfait pour un verre/i)).not.toBeInTheDocument();
+    });
+  });
+
   describe('changement de rayon en cours (isLoading)', () => {
     it('shows a skeleton placeholder instead of the meta text while loading', () => {
       render(<CavalierRow {...baseProps} detail={viceDetail} isLoading />);

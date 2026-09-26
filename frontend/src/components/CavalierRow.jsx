@@ -26,12 +26,21 @@ function Chevron({ open }) {
 export default function CavalierRow({
   categorie, color, shape, detail, phrase, isLoading,
   isVisible, onToggleVisibility, isExpanded, onToggleExpand,
+  radiusM, villeLabel,
 }) {
   const meta = !isLoading && detail ? cavalierMeta(detail) : null;
+  // Rayon "Aucun" (ORA-183, v3) : `detail` porte des totaux à l'échelle de
+  // la ville, sans aucune distance (services/cavaliers_radius.py) — la méta
+  // nomme la ville plutôt qu'une distance qui n'existe pas dans ce mode.
+  const isCityWide = radiusM === null;
   const metaText = meta
     ? (meta.count > 0
-      ? `${meta.count} lieu${meta.count > 1 ? 'x' : ''}${meta.distM != null ? ` · dès ${meta.distM} m` : ''}`
-      : (meta.distM != null ? `0 · le 1er à ${meta.distM} m` : '0 lieu'))
+      ? `${meta.count} lieu${meta.count > 1 ? 'x' : ''}${
+        isCityWide
+          ? (villeLabel ? ` à ${villeLabel}` : '')
+          : (meta.distM != null ? ` · dès ${meta.distM} m` : '')
+      }`
+      : (isCityWide ? '0 lieu' : (meta.distM != null ? `0 · le 1er à ${meta.distM} m` : '0 lieu')))
     : null;
   const contentId = `cavalier-${categorie}`;
   const maxCount = detail ? Math.max(1, ...detail.items.map((item) => item.count)) : 1;

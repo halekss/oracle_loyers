@@ -121,6 +121,27 @@ describe('useCavaliersRadius', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it('calls the API with null (not the default radius) for the "Aucun" choice', async () => {
+    api.getCavaliers.mockResolvedValue({
+      cavaliers_detail: [{ categorie: 'Vice', total: 546, items: [{ poi: 'Bar', count: 546 }] }],
+      facteurs: [],
+    });
+    const { result, rerender } = renderCavaliersRadius({
+      quartier: 'Ainay', center: { lat: 45.75, lng: 4.83 }, ville: 'lyon',
+      radiusM: CAVALIERS_RADIUS_M, defaultDetail, defaultFacteurs,
+    });
+
+    rerender({
+      quartier: 'Ainay', center: { lat: 45.75, lng: 4.83 }, ville: 'lyon',
+      radiusM: null, defaultDetail, defaultFacteurs,
+    });
+
+    expect(api.getCavaliers).toHaveBeenCalledWith(45.75, 4.83, 'lyon', null);
+    await waitFor(() => expect(result.current.cavaliersDetail).toBeDefined());
+    expect(result.current.cavaliersDetail[0].total).toBe(546);
+    expect(result.current.facteurs).toEqual([]);
+  });
+
   it('returns no detail when there is no scanned quartier', () => {
     const { result } = renderCavaliersRadius({
       quartier: undefined, center: undefined, ville: 'lyon',

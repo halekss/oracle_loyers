@@ -40,9 +40,10 @@ function DashedLine() {
 }
 
 // Rayon des cavaliers : calculé en direct (GET /api/cavaliers,
-// services/cavaliers_radius.py) pour 300/500/1000m — les 3 options sont
-// actives.
+// services/cavaliers_radius.py) pour 300/500/1000m, ou "Aucun" (totaux à
+// l'échelle de la ville, sans filtre de distance, ORA-183/v3) — value `null`.
 const RADIUS_OPTIONS = [
+  { label: 'Aucun', value: null },
   { label: '300 m', value: 300 },
   { label: '500 m', value: 500 },
   { label: '1 km', value: 1000 },
@@ -50,12 +51,14 @@ const RADIUS_OPTIONS = [
 
 // Sans quartier scanné, le rayon n'a rien à faire varier (pas de détail à
 // recalculer) — désactivé plutôt que silencieusement sans effet, cf. bug de
-// régression (le sélecteur restait cliquable sans scan).
+// régression (le sélecteur restait cliquable sans scan). Dans cet état,
+// "Aucun" est affiché comme l'option active : c'est effectivement l'état
+// courant (pas de rayon appliqué tant qu'aucun scan n'a eu lieu).
 function RadiusSelector({ radiusM, onChange, disabled }) {
   return (
     <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Rayon des cavaliers">
       {RADIUS_OPTIONS.map((option) => {
-        const isActive = !disabled && option.value === radiusM;
+        const isActive = disabled ? option.value === null : option.value === radiusM;
         return (
           <button
             key={option.label}
@@ -63,7 +66,8 @@ function RadiusSelector({ radiusM, onChange, disabled }) {
             aria-pressed={isActive}
             aria-disabled={disabled}
             title={disabled ? 'Lance un scan pour changer de rayon' : undefined}
-            onClick={disabled ? undefined : () => onChange(option.value)}
+            // Recliquer sur le préréglage actif le désélectionne ("Aucun").
+            onClick={disabled ? undefined : () => onChange(option.value === radiusM ? null : option.value)}
             className="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A78BFA]"
             style={{
               background: isActive ? '#7C3AED' : 'transparent',
@@ -78,6 +82,8 @@ function RadiusSelector({ radiusM, onChange, disabled }) {
     </div>
   );
 }
+
+const VILLE_LABELS = { lyon: 'Lyon', lille: 'Lille' };
 
 function AnnonceColorSegment() {
   return (
@@ -205,6 +211,8 @@ export default function CalquesView({
                 onToggleVisibility={() => onToggleLayer(style.categorie)}
                 isExpanded={expandedCategory === style.categorie}
                 onToggleExpand={() => setExpandedCategory((prev) => (prev === style.categorie ? null : style.categorie))}
+                radiusM={radiusM}
+                villeLabel={VILLE_LABELS[ville] || ville}
               />
             );
           })}

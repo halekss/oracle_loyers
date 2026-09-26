@@ -209,7 +209,10 @@ export const api = {
   // de rayon (hooks/useCavaliersRadius.js).
   getCavaliers: async (lat, lng, ville, rayonM) => {
     try {
-      const params = new URLSearchParams({ lat, lng, ville, rayon_m: rayonM });
+      // Rayon "Aucun" (ORA-183, v3) : `rayonM` vaut `null` côté React, mais
+      // une query string GET ne transporte que des chaînes — "none" est la
+      // sentinelle attendue par CavaliersRequestSchema (backend/schemas.py).
+      const params = new URLSearchParams({ lat, lng, ville, rayon_m: rayonM == null ? 'none' : rayonM });
       const response = await fetchWithClassification(`${API_URL}/cavaliers?${params.toString()}`);
 
       return await response.json();

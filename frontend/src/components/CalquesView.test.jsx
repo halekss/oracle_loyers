@@ -179,6 +179,57 @@ describe('CalquesView', () => {
     });
   });
 
+  describe('option "Aucun" (rayon désactivable, ORA-183 v3)', () => {
+    it('shows "Aucun" as the first segmented option', () => {
+      renderView({ cavaliersDetail, facteurs, radiusM: 500 });
+
+      const options = screen.getAllByRole('button', { name: /^(Aucun|300 m|500 m|1 km)$/ });
+      expect(options.map((el) => el.textContent)).toEqual(['Aucun', '300 m', '500 m', '1 km']);
+    });
+
+    it('clicking the currently active preset deselects it (calls onChangeRadiusM with null)', async () => {
+      const user = userEvent.setup();
+      const onChangeRadiusM = vi.fn();
+      renderView({ cavaliersDetail, facteurs, radiusM: 500, onChangeRadiusM });
+
+      await user.click(screen.getByRole('button', { name: '500 m' }));
+
+      expect(onChangeRadiusM).toHaveBeenCalledWith(null);
+    });
+
+    it('clicking "Aucun" while a radius is active also calls onChangeRadiusM with null', async () => {
+      const user = userEvent.setup();
+      const onChangeRadiusM = vi.fn();
+      renderView({ cavaliersDetail, facteurs, radiusM: 500, onChangeRadiusM });
+
+      await user.click(screen.getByRole('button', { name: 'Aucun' }));
+
+      expect(onChangeRadiusM).toHaveBeenCalledWith(null);
+    });
+
+    it('shows "Aucun" as pressed when radiusM is null', () => {
+      renderView({ cavaliersDetail, facteurs, radiusM: null });
+
+      expect(screen.getByRole('button', { name: 'Aucun' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: '500 m' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('shows "Aucun" as the displayed (pressed-looking) state while disabled, without a scan', () => {
+      renderView({ cavaliersDetail: undefined, facteurs: undefined, radiusM: 500 });
+
+      expect(screen.getByRole('button', { name: 'Aucun' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('shows city-wide totals (no distance, ville name) on a cavalier row when radiusM is null', () => {
+      const villeWideDetail = [
+        { categorie: 'Vice', total: 546, items: [{ poi: 'Bar', count: 546 }], empty_message: null },
+      ];
+      renderView({ cavaliersDetail: villeWideDetail, facteurs: [], radiusM: null, ville: 'lyon' });
+
+      expect(screen.getByText('546 lieux à Lyon')).toBeInTheDocument();
+    });
+  });
+
   describe('changement de rayon en cours (isLoadingCavaliers)', () => {
     it('shows a skeleton on the cavalier rows while a new radius is loading', () => {
       renderView({ cavaliersDetail, facteurs, isLoadingCavaliers: true });

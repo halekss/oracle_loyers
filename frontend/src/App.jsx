@@ -23,6 +23,7 @@ import { computeLatestDataDate } from './services/latestDataDate';
 import { useLayerVisibility } from './hooks/useLayerVisibility';
 import { useCavaliersRadius } from './hooks/useCavaliersRadius';
 import { CAVALIERS_RADIUS_M } from './services/cavaliersDisplay';
+import { loadCavaliersRadiusM, saveCavaliersRadiusM } from './services/cavaliersRadiusStorage';
 
 // ORA-123 : fallback compact par panneau, pour ne pas faire planter tout
 // l'écran (comportement par défaut d'ErrorBoundary) quand une seule zone
@@ -118,10 +119,16 @@ function App() {
   // vérité, partagée par la vue "Calques" du rail ET le panneau flottant
   // mobile (hook dédié, testable indépendamment : useLayerVisibility.test.js).
   const { layers: layerVisibility, toggleLayer, resetLayers } = useLayerVisibility();
-  // Vue "Calques", sélecteur de rayon (300 m/500 m/1 km) : remis à 500 m à
-  // chaque nouveau scan (cf. handleScan) pour repartir du rayon par défaut
-  // plutôt que d'hériter du dernier rayon consulté sur un autre quartier.
-  const [cavaliersRadiusM, setCavaliersRadiusM] = useState(CAVALIERS_RADIUS_M);
+  // Vue "Calques", sélecteur de rayon (Aucun/300 m/500 m/1 km) : remis à
+  // 500 m à chaque nouveau scan (cf. handleScan) pour repartir du rayon par
+  // défaut plutôt que d'hériter du dernier rayon consulté sur un autre
+  // quartier. Le choix (y compris "Aucun", `null`) est mémorisé en
+  // localStorage — seule la valeur initiale au montage en dépend, un nouveau
+  // scan garde la remise à 500 m ci-dessus inchangée.
+  const [cavaliersRadiusM, setCavaliersRadiusM] = useState(() => loadCavaliersRadiusM(CAVALIERS_RADIUS_M));
+  useEffect(() => {
+    saveCavaliersRadiusM(cavaliersRadiusM);
+  }, [cavaliersRadiusM]);
   // Sélecteur de ville (ORA-71 POC) : ne change que la carte affichée et le
   // bornage des recherches quartier/historique — les CSV/codes postaux
   // Lyon/Lille restant jamais ambigus entre les deux villes.
@@ -668,7 +675,10 @@ function App() {
                 onToggleLayer={toggleLayer}
                 onAnnonceClick={handleSelectAnnonce}
                 focus={
-                  activeView === 'calques' && result?.center
+                  // Rayon "Aucun" (ORA-183, v3) : `cavaliersRadiusM` vaut
+                  // `null` — CLEAR_FOCUS (pas de cercle, pings au style
+                  // normal), jamais SET_FOCUS avec un radius_m manquant.
+                  activeView === 'calques' && result?.center && cavaliersRadiusM != null
                     ? { lat: result.center.lat, lng: result.center.lng, radiusM: cavaliersRadiusM }
                     : null
                 }
