@@ -16,14 +16,36 @@ const ILLUSTRATION_BY_CATEGORY = {
 };
 const DEFAULT_ILLUSTRATION_CLASSES = 'from-slate-800 to-slate-900 text-slate-500';
 
-// Illustration générique produite par nous (icône SVG maison inline, pas de
-// fichier externe) — jamais de photo ni de capture d'écran issue de l'annonce
-// ou du site source (ORA-133 ; contrainte légale documentée dans
-// LEGAL_DECISIONS.md, section ORA-94 : AnnonceCard ne doit afficher aucune
-// image provenant de l'annonce elle-même, y compris via hotlink).
-function AnnonceIllustration({ titre, surface }) {
+// Photo de l'annonce en hotlink (URL du site source, jamais téléchargée ni
+// re-servie — même posture que les popups de la carte, cf. LEGAL_DECISIONS.md,
+// ORA-94/ORA-134), même hauteur que l'illustration. Repli sur l'illustration
+// générique (icône SVG maison) sans photo, avec une URL non http(s), ou si
+// l'image ne se charge pas.
+function AnnonceIllustration({ titre, surface, image }) {
+  const [broken, setBroken] = useState(false);
   const category = getTypeCategory(titre, surface);
   const classes = ILLUSTRATION_BY_CATEGORY[category] || DEFAULT_ILLUSTRATION_CLASSES;
+  const photo = broken ? null : sanitizeListingUrl(image);
+
+  if (photo) {
+    return (
+      <div className="relative h-20 bg-slate-900">
+        <img
+          src={photo}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setBroken(true)}
+          className="w-full h-full object-cover"
+        />
+        {category && (
+          <span className="absolute bottom-1 left-1 text-[8px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded bg-slate-900/75 text-white">
+            {category}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={`h-20 flex flex-col items-center justify-center gap-1 bg-gradient-to-br ${classes}`}>
@@ -67,7 +89,7 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
 
   if (!annonce) return null;
 
-  const { id, titre, prix, surface, ville, quartier, url } = annonce;
+  const { id, titre, prix, surface, ville, quartier, url, images } = annonce;
   const favorite = isFavorite(id);
   const source = deriveSource(url);
 
@@ -120,7 +142,7 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
         safeUrl ? 'cursor-pointer hover:border-purple-500/50 transition-colors' : 'cursor-not-allowed opacity-60'
       }`}
     >
-      <AnnonceIllustration titre={titre} surface={surface} />
+      <AnnonceIllustration titre={titre} surface={surface} image={images?.[0]} />
 
       <div className="p-3">
         <div className="flex justify-between items-start gap-2 min-w-0">
