@@ -306,23 +306,26 @@ def _vu_au_dernier_scrape(df):
 # ORA-192 : types détectés par data_fusion.extract_type qui ne sont pas des
 # logements — hors master, hors archive des prix, hors entraînement du modèle.
 TYPES_NON_LOGEMENT = {'Parking', 'Local/Bureau'}
-# En dessous, un loyer mensuel est suspect (parking non détecté, location à la
-# journée…) : signalé pour revue, jamais supprimé automatiquement.
-LOYER_SUSPECT_MAX = 150
+# Aucun logement ne se loue sous ce loyer mensuel à Lyon/Lille (même une
+# chambre étudiante) : en dessous, c'est un parking non détecté ou une
+# location à la journée (« dispo pour week-end braderie », 100 € pour 50 m²).
+# Mesuré au 27/09 : 1 seule annonce de logement sous ce seuil sur 2 456,
+# toutes sources confondues. Exclue et tracée dans le log.
+LOYER_MIN_LOGEMENT = 150
 
 
 def step_exclure_non_logement(df):
-    """Retire les annonces de type non-logement (tracées dans le log) et signale
-    les loyers < LOYER_SUSPECT_MAX € sans les supprimer (ORA-192)."""
-    print("\n🚗 ETAPE 0 : Exclusion des biens non-logement (parkings, locaux)...")
-    exclues = df['type'].isin(TYPES_NON_LOGEMENT) if 'type' in df.columns else pd.Series(False, index=df.index)
-    for _, row in df[exclues].iterrows():
+    """Retire les annonces de type non-logement et les loyers mensuels
+    irréalistes (< LOYER_MIN_LOGEMENT €), chacune tracée dans le log (ORA-192)."""
+    print("\n🚗 ETAPE 0 : Exclusion des biens non-logement (parkings, locaux, loyers irréalistes)...")
+    non_logement = df['type'].isin(TYPES_NON_LOGEMENT) if 'type' in df.columns else pd.Series(False, index=df.index)
+    irrealistes = ~non_logement & (pd.to_numeric(df['prix'], errors='coerce') < LOYER_MIN_LOGEMENT)
+    for _, row in df[non_logement].iterrows():
         print(f"   🚫 {row['type']} exclu : {row.get('site')} {row.get('prix')} € — {row.get('url')}")
-    df = df[~exclues].reset_index(drop=True)
-    suspects = df[pd.to_numeric(df['prix'], errors='coerce') < LOYER_SUSPECT_MAX]
-    for _, row in suspects.iterrows():
-        print(f"   ⚠️  Loyer suspect (< {LOYER_SUSPECT_MAX} €) à revoir : {row.get('site')} {row.get('prix')} € — {row.get('url')}")
-    print(f"   ✅ {int(exclues.sum())} annonce(s) non-logement exclue(s), {len(suspects)} loyer(s) suspect(s) signalé(s).")
+    for _, row in df[irrealistes].iterrows():
+        print(f"   🚫 Loyer irréaliste (< {LOYER_MIN_LOGEMENT} €) exclu : {row.get('site')} {row.get('prix')} € — {row.get('url')}")
+    df = df[~(non_logement | irrealistes)].reset_index(drop=True)
+    print(f"   ✅ {int(non_logement.sum())} non-logement(s) et {int(irrealistes.sum())} loyer(s) irréaliste(s) exclu(s).")
     return df
 
 
