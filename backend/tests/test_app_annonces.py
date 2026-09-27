@@ -77,6 +77,34 @@ class AnnoncesRoutesTest(unittest.TestCase):
         response = self.client.get("/api/annonces?sort=prix&order=bogus")
         self.assertEqual(response.status_code, 400)
 
+    def test_list_annonces_restricts_to_ids_across_pages(self):
+        """ORA-183 : les favoris sont servis ensemble, quel que soit leur rang
+        dans la liste complète paginée."""
+        created = [
+            annonces_store.upsert_annonce(url=f"https://example.com/{i}", ville="Lyon", prix=500 + i, db_path=self.db_path)
+            for i in range(30)
+        ]
+        wanted = [created[0]["id"], created[15]["id"], created[29]["id"]]
+
+        response = self.client.get(f"/api/annonces?per_page=12&sort=prix&order=asc&ids={','.join(map(str, wanted))}")
+
+        data = response.get_json()
+        self.assertEqual(data["total"], 3)
+        self.assertEqual(data["total_pages"], 1)
+        self.assertEqual([item["id"] for item in data["items"]], wanted)
+
+    def test_list_annonces_with_empty_ids_returns_nothing(self):
+        annonces_store.upsert_annonce(url="https://example.com/a", db_path=self.db_path)
+
+        data = self.client.get("/api/annonces?ids=").get_json()
+
+        self.assertEqual(data["total"], 0)
+        self.assertEqual(data["items"], [])
+
+    def test_list_annonces_rejects_non_integer_ids(self):
+        response = self.client.get("/api/annonces?ids=1,abc")
+        self.assertEqual(response.status_code, 400)
+
     def test_get_annonce_detail_returns_the_annonce(self):
         created = annonces_store.upsert_annonce(
             titre="T3 Confluence", url="https://example.com/c", db_path=self.db_path,

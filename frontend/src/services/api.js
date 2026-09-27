@@ -95,7 +95,8 @@ export const api = {
   // optionnel appliqué côté serveur, la pagination étant déjà côté serveur
   // (ORA-127 — cohérent avec le reste de la liste plutôt qu'un tri client
   // limité à la page courante).
-  getAnnonces: async ({ ville, quartier, page = 1, perPage = 20, sort, order } = {}) => {
+  // `ids` (ORA-183, optionnel) : restreint aux favoris — tableau vide = aucune annonce.
+  getAnnonces: async ({ ville, quartier, page = 1, perPage = 20, sort, order, ids } = {}) => {
     try {
       const params = new URLSearchParams();
       if (ville) params.set('ville', ville);
@@ -104,6 +105,7 @@ export const api = {
       params.set('per_page', perPage);
       if (sort) params.set('sort', sort);
       if (order) params.set('order', order);
+      if (ids) params.set('ids', ids.join(','));
 
       const response = await fetchWithClassification(`${API_URL}/annonces?${params.toString()}`);
 

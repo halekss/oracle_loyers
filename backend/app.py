@@ -198,6 +198,7 @@ CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_all.csv')
 SNAPSHOTS_DIR = os.path.join(BASE_DIR, 'data', 'snapshots')
 SNAPSHOTS_MANIFEST_PATH = os.path.join(SNAPSHOTS_DIR, 'manifest.csv')
 ANNONCES_DB_PATH = os.path.join(BASE_DIR, 'data', 'annonces.db')
+MAX_ANNONCE_IDS = 500  # borne du filtre `ids` de /api/annonces (favoris, ORA-183)
 
 # Chargement des services
 logger.info("Initialisation de la base annonces...")
@@ -379,6 +380,11 @@ def get_annonces():
         type: string
         required: false
         description: "'prix', 'surface' ou 'date' (ORA-127)"
+      - name: ids
+        in: query
+        type: string
+        required: false
+        description: "Ids séparés par des virgules (onglet « Mes favoris », ORA-183) ; vide = aucune annonce"
       - name: order
         in: query
         type: string
@@ -408,6 +414,16 @@ def get_annonces():
     if order not in ('asc', 'desc'):
         return jsonify({"error": "order doit être 'asc' ou 'desc'"}), 400
 
+    # ORA-183 : `ids=1,2,3` (onglet « Mes favoris »). Présent mais vide = aucun favori.
+    ids = None
+    if 'ids' in request.args:
+        try:
+            ids = [int(x) for x in request.args['ids'].split(',') if x.strip()]
+        except ValueError:
+            return jsonify({"error": "ids doit être une liste d'entiers séparés par des virgules"}), 400
+        if len(ids) > MAX_ANNONCE_IDS:
+            return jsonify({"error": f"ids limité à {MAX_ANNONCE_IDS} valeurs"}), 400
+
     result = annonces_store.list_annonces(
         ville=request.args.get('ville') or None,
         quartier=request.args.get('quartier') or None,
@@ -415,6 +431,7 @@ def get_annonces():
         per_page=per_page,
         sort=sort,
         order=order,
+        ids=ids,
         db_path=ANNONCES_DB_PATH,
     )
     return jsonify(result)

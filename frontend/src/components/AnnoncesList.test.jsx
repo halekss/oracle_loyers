@@ -24,6 +24,17 @@ const makeAnnonce = (id) => ({
   url: `https://example.com/${id}`,
 });
 
+// Simule /api/annonces : pagination et filtre `ids` côté serveur (ORA-183).
+const fakeServer = (all) => ({ page = 1, perPage = 20, ids } = {}) => {
+  const matching = ids ? all.filter((a) => ids.includes(a.id)) : all;
+  return Promise.resolve({
+    items: matching.slice((page - 1) * perPage, page * perPage),
+    page,
+    total: matching.length,
+    total_pages: Math.ceil(matching.length / perPage),
+  });
+};
+
 describe('AnnoncesList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -262,11 +273,7 @@ describe('AnnoncesList', () => {
 
     it('filters to only the favorited annonces when switching to "Mes favoris"', async () => {
       localStorage.setItem('oracle-loyers:favorites', JSON.stringify([2]));
-      api.getAnnonces.mockResolvedValue({
-        items: [makeAnnonce(1), makeAnnonce(2)],
-        page: 1,
-        total_pages: 1,
-      });
+      api.getAnnonces.mockImplementation(fakeServer([makeAnnonce(1), makeAnnonce(2)]));
       const user = userEvent.setup();
 
       render(<AnnoncesList />);
@@ -274,16 +281,12 @@ describe('AnnoncesList', () => {
 
       await user.click(screen.getByRole('tab', { name: /mes favoris/i }));
 
-      expect(screen.queryByText('Annonce 1')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText('Annonce 1')).not.toBeInTheDocument());
       expect(screen.getByText('Annonce 2')).toBeInTheDocument();
     });
 
-    it('shows an empty-favorites message when no fetched annonce is favorited', async () => {
-      api.getAnnonces.mockResolvedValue({
-        items: [makeAnnonce(1), makeAnnonce(2)],
-        page: 1,
-        total_pages: 1,
-      });
+    it('shows an empty-favorites message when no annonce is favorited', async () => {
+      api.getAnnonces.mockImplementation(fakeServer([makeAnnonce(1), makeAnnonce(2)]));
       const user = userEvent.setup();
 
       render(<AnnoncesList />);
@@ -291,22 +294,40 @@ describe('AnnoncesList', () => {
 
       await user.click(screen.getByRole('tab', { name: /mes favoris/i }));
 
-      expect(screen.getByText(/aucun favori pour le moment/i)).toBeInTheDocument();
+      expect(await screen.findByText(/aucun favori pour le moment/i)).toBeInTheDocument();
+      // La bascule reste disponible pour revenir à "Toutes".
+      expect(screen.getByRole('tab', { name: /^toutes/i })).toBeInTheDocument();
+    });
+
+    it('shows favorites located beyond server page 1 all together on page 1 (ORA-183)', async () => {
+      const all = Array.from({ length: 30 }, (_, i) => makeAnnonce(i + 1));
+      localStorage.setItem('oracle-loyers:favorites', JSON.stringify([1, 15, 30]));
+      api.getAnnonces.mockImplementation(fakeServer(all));
+      const user = userEvent.setup();
+
+      render(<AnnoncesList />);
+      await waitFor(() => expect(screen.getByText('Page 1 / 3')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('tab', { name: /mes favoris/i }));
+
+      expect(await screen.findByText('Annonce 15')).toBeInTheDocument();
+      expect(screen.getByText('Annonce 1')).toBeInTheDocument();
+      expect(screen.getByText('Annonce 30')).toBeInTheDocument();
+      expect(api.getAnnonces).toHaveBeenLastCalledWith(expect.objectContaining({ ids: [1, 15, 30], page: 1 }));
+      expect(screen.getByRole('tab', { name: /mes favoris · 3/i })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /toutes · 30/i })).toBeInTheDocument();
+      expect(screen.queryByText(/page 1 \//i)).not.toBeInTheDocument();
     });
 
     it('switches back to showing all annonces when "Toutes" is clicked', async () => {
-      api.getAnnonces.mockResolvedValue({
-        items: [makeAnnonce(1), makeAnnonce(2)],
-        page: 1,
-        total_pages: 1,
-      });
+      api.getAnnonces.mockImplementation(fakeServer([makeAnnonce(1), makeAnnonce(2)]));
       const user = userEvent.setup();
 
       render(<AnnoncesList />);
       await waitFor(() => expect(screen.getByText('Annonce 1')).toBeInTheDocument());
 
       await user.click(screen.getByRole('tab', { name: /mes favoris/i }));
-      expect(screen.getByText(/aucun favori pour le moment/i)).toBeInTheDocument();
+      expect(await screen.findByText(/aucun favori pour le moment/i)).toBeInTheDocument();
 
       await user.click(screen.getByRole('tab', { name: /^toutes/i }));
       expect(screen.getByText('Annonce 1')).toBeInTheDocument();

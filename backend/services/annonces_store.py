@@ -187,7 +187,7 @@ def upsert_annonce(
         conn.close()
 
 
-def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, sort=None, order="desc", db_path=DEFAULT_DB_PATH):
+def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, sort=None, order="desc", ids=None, db_path=DEFAULT_DB_PATH):
     """Liste paginée des annonces, filtrable par ville et/ou quartier (ORA-84).
 
     `statut` (ORA-134 bis) : `None` (défaut) exclut uniquement les annonces
@@ -202,6 +202,10 @@ def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, s
     `order` : "asc" ou "desc" (défaut), n'a d'effet que si `sort` est fourni.
     `id DESC` est toujours ajouté en tie-breaker pour un ordre stable entre
     annonces de même prix/surface/date.
+
+    `ids` (ORA-183, optionnel) : restreint aux annonces de ces ids (onglet
+    « Mes favoris ») — tri, filtres et pagination s'appliquent ensuite comme
+    pour la liste complète. Une liste vide ne renvoie rien.
 
     Renvoie {"items": [...], "page", "per_page", "total", "total_pages"}.
     """
@@ -224,6 +228,10 @@ def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, s
         params["statut"] = statut
     else:
         where_clauses.append("statut != 'inactive'")
+    if ids is not None:
+        id_params = {f"id{i}": int(annonce_id) for i, annonce_id in enumerate(ids)}
+        where_clauses.append(f"id IN ({', '.join(':' + k for k in id_params)})" if id_params else "0")
+        params.update(id_params)
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     sort_column = SORT_COLUMNS.get(sort)
