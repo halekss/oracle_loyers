@@ -80,7 +80,7 @@ test.describe('Vue Calques — non-régression', () => {
     const cases = [
       { label: 'Métro & stations', key: 'Metro' },
       { label: 'Funiculaires', key: 'Funicular' },
-      { label: '€/m² par arrondissement', key: 'Quartiers' },
+      { label: 'Limites des quartiers', key: 'Quartiers' },
       { label: 'Apparts T2', key: 'T2' },
       { label: 'Vice', key: 'Vice' },
       { label: 'Gentrification', key: 'Gentrification' },
