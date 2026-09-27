@@ -141,7 +141,7 @@ describe('CalquesView', () => {
     const onToggleLayer = vi.fn();
     renderView({ onToggleLayer });
 
-    await user.click(screen.getByRole('switch', { name: /€\/m²/i }));
+    await user.click(screen.getByRole('switch', { name: /limites des quartiers/i }));
 
     expect(onToggleLayer).toHaveBeenCalledWith('Quartiers');
   });

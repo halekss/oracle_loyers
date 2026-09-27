@@ -166,7 +166,7 @@ export default function CalquesView({
           />
           <LayerRow
             swatch={<Dot color={quartiersLayer?.uiColor || '#a78bfa'} />}
-            label="€/m² par arrondissement"
+            label="Limites des quartiers"
             meta={zonesCount != null ? `${zonesCount} zones` : undefined}
             checked={Boolean(layers.Quartiers)}
             onToggle={() => onToggleLayer('Quartiers')}
