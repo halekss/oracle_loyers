@@ -388,6 +388,35 @@ def load_geojson_file(path):
         return None
 
 
+QUARTIERS_PANE = 'quartiers'
+# Sous l'overlayPane de Leaflet (400) où vivent les CircleMarker des annonces :
+# les polygones de quartiers ajoutés après eux captaient sinon le clic (ORA-184).
+QUARTIERS_PANE_Z_INDEX = 350
+
+
+def add_quartiers_layer(m, quartiers_geojson, layer_cfg):
+    """Calque des limites de quartiers (ORA-104), dans un pane dédié sous les
+    marqueurs (ORA-184) : le clic sur une annonce passe, le tooltip « Quartier »
+    reste au survol des zones sans marqueur."""
+    folium.map.CustomPane(QUARTIERS_PANE, z_index=QUARTIERS_PANE_Z_INDEX, pointer_events=True).add_to(m)
+    layer = folium.GeoJson(
+        quartiers_geojson,
+        name=layer_cfg['name'],
+        show=layer_cfg['defaultVisible'],  # Off par défaut, cohérent avec Nuisance/Gentrification/Superstition
+        style_function=lambda feature: {
+            'fillColor': '#a78bfa',
+            'color': '#a78bfa',
+            'weight': 2,
+            'fillOpacity': 0.06,
+        },
+        highlight_function=lambda feature: {'fillOpacity': 0.18, 'weight': 3},
+        tooltip=folium.GeoJsonTooltip(fields=['nom'], aliases=['Quartier :']),
+        pane=QUARTIERS_PANE,
+    )
+    layer.add_to(m)
+    return layer
+
+
 def load_layers_config(path=LAYERS_CONFIG_JSON):
     """Charge la liste des calques carte depuis le JSON partagé avec le
     frontend (ORA-130) : `[{key, name, label, group, defaultVisible, uiColor}, ...]`.
@@ -718,20 +747,7 @@ def main(ville='lyon'):
     quartiers_geojson = load_geojson_file(paths['quartiers_geojson'])
     fg_quartiers = None
     if quartiers_geojson:
-        fg_quartiers = folium.GeoJson(
-            quartiers_geojson,
-            name=layer_by_key['Quartiers']['name'],
-            show=layer_by_key['Quartiers']['defaultVisible'],  # Off par défaut, cohérent avec Nuisance/Gentrification/Superstition
-            style_function=lambda feature: {
-                'fillColor': '#a78bfa',
-                'color': '#a78bfa',
-                'weight': 2,
-                'fillOpacity': 0.06,
-            },
-            highlight_function=lambda feature: {'fillOpacity': 0.18, 'weight': 3},
-            tooltip=folium.GeoJsonTooltip(fields=['nom'], aliases=['Quartier :']),
-        )
-        fg_quartiers.add_to(m)
+        fg_quartiers = add_quartiers_layer(m, quartiers_geojson, layer_by_key['Quartiers'])
         print(f"🗺️ Quartiers chargés : {len(quartiers_geojson.get('features', []))} arrondissements tracés.")
     else:
         print(f"⚠️ GeoJSON des quartiers introuvable ou invalide ({paths['quartiers_geojson']}), couche ignorée.")

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
+import folium
 import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -437,6 +438,34 @@ class LoadGeojsonFileTest(unittest.TestCase):
                 f.write("{not valid json")
 
             self.assertIsNone(generate_map.load_geojson_file(path))
+
+
+class AddQuartiersLayerTest(unittest.TestCase):
+    """ORA-184 : les polygones de quartiers doivent vivre dans un pane sous
+    l'overlayPane (400) des CircleMarker d'annonces, sinon ils captent le clic."""
+
+    GEOJSON = {"type": "FeatureCollection", "features": [{
+        "type": "Feature", "properties": {"nom": "Ainay"},
+        "geometry": {"type": "Polygon", "coordinates": [[[4.82, 45.75], [4.83, 45.75], [4.83, 45.76], [4.82, 45.75]]]},
+    }]}
+
+    def render(self):
+        m = folium.Map(location=[45.75, 4.83])
+        layer = generate_map.add_quartiers_layer(m, self.GEOJSON, {"name": "Quartiers", "defaultVisible": False})
+        return layer, m.get_root().render()
+
+    def test_pane_sits_below_the_marker_overlay_pane(self):
+        _, html_out = self.render()
+
+        self.assertRegex(html_out, r'createPane\(\s*"quartiers"\)')
+        self.assertLess(generate_map.QUARTIERS_PANE_Z_INDEX, 400)
+        self.assertIn(f"zIndex = {generate_map.QUARTIERS_PANE_Z_INDEX}", html_out)
+
+    def test_geojson_is_drawn_in_the_quartiers_pane_and_keeps_its_tooltip(self):
+        layer, html_out = self.render()
+
+        self.assertEqual(layer.options.get("pane"), "quartiers")
+        self.assertIn("Quartier :", html_out)
 
 
 class BuildImmoTooltipHtmlTest(unittest.TestCase):
