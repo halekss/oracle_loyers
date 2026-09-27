@@ -579,33 +579,39 @@ class SyncDeactivatesHorsMasterTest(unittest.TestCase):
 
 
 class StepExclureNonLogementTest(unittest.TestCase):
-    """ORA-192 : parkings/locaux hors master ; loyers très bas signalés, gardés."""
+    """ORA-192 : parkings/locaux et loyers irréalistes hors master, tracés dans le log."""
 
     def df(self):
         return pd.DataFrame([
             {"type": "Appartement", "site": "Vizzit", "prix": 750, "url": "https://ex/t2"},
             {"type": "Parking", "site": "Orpi", "prix": 95, "url": "https://ex/parking"},
             {"type": "Local/Bureau", "site": "Century 21", "prix": 1215, "url": "https://ex/local"},
-            {"type": "Studio", "site": "Vizzit", "prix": 100, "url": "https://ex/braderie"},
+            {"type": "Appartement", "site": "Vizzit", "prix": 100, "url": "https://ex/braderie"},
+            {"type": "Studio", "site": "Vizzit", "prix": 150, "url": "https://ex/studio-150"},
         ])
 
-    def test_excludes_non_housing_types(self):
-        result = clean_immo.step_exclure_non_logement(self.df())
-
-        self.assertEqual(list(result["url"]), ["https://ex/t2", "https://ex/braderie"])
-
-    def test_low_rent_is_flagged_in_the_log_but_kept(self):
+    def run_step(self):
         import io
         from contextlib import redirect_stdout
 
         out = io.StringIO()
         with redirect_stdout(out):
             result = clean_immo.step_exclure_non_logement(self.df())
+        return result, out.getvalue()
 
-        self.assertIn("https://ex/braderie", list(result["url"]))
-        self.assertIn("Loyer suspect", out.getvalue())
-        self.assertIn("https://ex/braderie", out.getvalue())
-        self.assertIn("Parking exclu", out.getvalue())
+    def test_excludes_non_housing_types_and_unrealistic_rents(self):
+        result, _ = self.run_step()
+
+        # 150 € pile reste : le seuil est strict.
+        self.assertEqual(list(result["url"]), ["https://ex/t2", "https://ex/studio-150"])
+
+    def test_every_exclusion_is_traced_in_the_log(self):
+        _, log = self.run_step()
+
+        self.assertIn("Parking exclu", log)
+        self.assertIn("Local/Bureau exclu", log)
+        self.assertIn("Loyer irréaliste", log)
+        self.assertIn("https://ex/braderie", log)
 
 
 class BuildTitreTest(unittest.TestCase):
