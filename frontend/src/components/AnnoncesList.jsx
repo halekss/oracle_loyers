@@ -57,10 +57,18 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
   // canoniques que celle écrite dans annonces.db par clean_immo.py) —
   // annonces.db n'a pas d'endpoint dédié pour lister les quartiers connus.
   const [quartierOptions, setQuartierOptions] = useState([]);
-  // ORA-132 : filtre additif "Mes favoris" — n'affecte ni le tri, ni la
-  // pagination/le fetch (filtre client-side sur la page déjà chargée).
+  // ORA-132 : filtre additif "Mes favoris". ORA-183 : les ids favoris sont
+  // envoyés au serveur (`ids`) pour que tri, filtre quartier et pagination
+  // portent sur les favoris eux-mêmes — un filtre client sur la page chargée
+  // cachait les favoris situés sur d'autres pages serveur.
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const { isFavorite, favoriteIds } = useFavorites();
+  const { favoriteIds } = useFavorites();
+  // Clé stable (dépendance d'effet) : un nouveau Set à chaque toggle ne doit
+  // refetch que si le contenu change.
+  const favoritesKey = [...favoriteIds].sort((a, b) => a - b).join(',');
+  // Nombre total hors mode favoris, pour garder « Toutes · N » juste quand
+  // `total` décrit la liste des favoris.
+  const [allTotal, setAllTotal] = useState(0);
 
   const perPage = compact ? 4 : 12;
   const activeSort = SORT_OPTIONS.find((opt) => opt.value === sortValue) || SORT_OPTIONS[0];
@@ -113,10 +121,12 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
           quartier: quartierFilter || undefined,
           sort: activeSort.sort,
           order: activeSort.order,
+          ids: showFavoritesOnly ? (favoritesKey ? favoritesKey.split(',').map(Number) : []) : undefined,
         });
         if (cancelled) return;
         setItems(data.items || []);
         setTotal(data.total || 0);
+        if (!showFavoritesOnly) setAllTotal(data.total || 0);
         setTotalPages(data.total_pages || 0);
         onItemsChange?.(data.items || []);
       } catch (err) {
@@ -133,7 +143,12 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
     return () => {
       cancelled = true;
     };
-  }, [ville, page, perPage, quartierFilter, activeSort.sort, activeSort.order]);
+  }, [ville, page, perPage, quartierFilter, activeSort.sort, activeSort.order, showFavoritesOnly, favoritesKey]);
+
+  const handleFavoritesToggle = (favoritesOnly) => {
+    setShowFavoritesOnly(favoritesOnly);
+    setPage(1);
+  };
 
   const handleQuartierChange = (e) => {
     setQuartierFilter(e.target.value);
@@ -184,34 +199,35 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
   );
 
   // ORA-132 : bascule "Toutes" / "Mes favoris", additive au filtre quartier
-  // et au tri existants — ne modifie ni le tri, ni le fetch paginé.
+  // et au tri existants.
   const favoritesToggleControl = (
     <div className="mb-2 flex items-center gap-2" role="tablist" aria-label="Filtrer les annonces">
       <button
         type="button"
         role="tab"
         aria-selected={!showFavoritesOnly}
-        onClick={() => setShowFavoritesOnly(false)}
+        onClick={() => handleFavoritesToggle(false)}
         className={`text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-lg border transition-colors ${
           !showFavoritesOnly
             ? 'bg-purple-900/40 text-purple-300 border-purple-700/50'
             : 'text-slate-500 border-slate-700 hover:text-slate-300'
         }`}
       >
-        Toutes · {total}
+        Toutes · {allTotal}
       </button>
       <button
         type="button"
         role="tab"
         aria-selected={showFavoritesOnly}
-        onClick={() => setShowFavoritesOnly(true)}
+        onClick={() => handleFavoritesToggle(true)}
         className={`text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded-lg border transition-colors ${
           showFavoritesOnly
             ? 'bg-purple-900/40 text-purple-300 border-purple-700/50'
             : 'text-slate-500 border-slate-700 hover:text-slate-300'
         }`}
       >
-        ★ Mes favoris · {favoriteIds.size}
+        {/* En mode favoris, `total` = favoris encore listés et filtrés (quartier) = cartes affichées. */}
+        ★ Mes favoris · {showFavoritesOnly ? total : favoriteIds.size}
       </button>
     </div>
   );
@@ -247,12 +263,13 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
       <div>
         {quartierFilterControl}
         {sortControl}
-        <p className="text-xs text-slate-500 text-center py-4">Aucune annonce disponible pour le moment.</p>
+        {showFavoritesOnly && favoritesToggleControl}
+        <p className="text-xs text-slate-500 text-center py-4">
+          {showFavoritesOnly ? 'Aucun favori pour le moment.' : 'Aucune annonce disponible pour le moment.'}
+        </p>
       </div>
     );
   }
-
-  const favoriteFiltered = showFavoritesOnly ? items.filter((annonce) => isFavorite(annonce.id)) : items;
 
   // ORA-173 : "Meilleures affaires" — le tri serveur (prix_m2 asc) est déjà
   // une bonne approximation ; avec une référence quartier disponible (scan en
@@ -263,7 +280,7 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
   // autres types restent en fin de liste, à leur ordre de tri serveur.
   const displayedItems =
     sortValue === 'meilleures-affaires' && Number.isFinite(referencePrixM2) && referencePrixM2 > 0
-      ? [...favoriteFiltered].sort((a, b) => {
+      ? [...items].sort((a, b) => {
           const ecart = (item) => {
             if (referenceType && referenceType !== 'Tout' && getTypeCategory(item.titre, item.surface) !== referenceType) return Infinity;
             return Number.isFinite(item.prix) && Number.isFinite(item.surface) && item.surface > 0
@@ -272,24 +289,18 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
           };
           return ecart(a) - ecart(b);
         })
-      : favoriteFiltered;
+      : items;
 
   return (
     <div className={compact ? 'max-h-72 overflow-y-auto pr-1' : ''}>
       {quartierFilterControl}
       {sortControl}
       {favoritesToggleControl}
-      {displayedItems.length === 0 ? (
-        <p className="text-xs text-slate-500 text-center py-4">
-          Aucun favori pour le moment sur cette page.
-        </p>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
-          {displayedItems.map((annonce) => (
-            <AnnonceCard key={annonce.id} annonce={annonce} referencePrixM2={referencePrixM2} referenceType={referenceType} onOpenDetail={onSelectAnnonce} />
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+        {displayedItems.map((annonce) => (
+          <AnnonceCard key={annonce.id} annonce={annonce} referencePrixM2={referencePrixM2} referenceType={referenceType} onOpenDetail={onSelectAnnonce} />
+        ))}
+      </div>
 
       {totalPages > 1 && (
         <div className="mt-3 flex items-center justify-center gap-3">
