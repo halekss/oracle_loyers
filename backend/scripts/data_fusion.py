@@ -93,15 +93,44 @@ def resolve_seloger_lieu(lieu, infos, default_cp):
     return None
 
 
-def extract_type(text):
-    """Détermine le type de bien (Maison, Appartement, Studio, Coloc)."""
-    if pd.isna(text): return "Appartement"
+# ORA-192 : types non-logement exclus du master par clean_immo. Détection
+# volontairement étroite : « T2 avec cave et parking » doit rester un
+# Appartement (555 annonces du master citent ces mots), seul le bien lui-même
+# compte — en tête de texte, ou suivi de sa surface (« Stationnement 15 m2 »).
+_MOTS_PARKING = r'(stationnement|parking|garage|box|cave|grenier)'
+_MOTS_LOCAL = r'(local|bureaux?)'
+_EN_TETE = r'^\W*(?:location\s+|à louer\s+)?'
+_PAS_ACCESSOIRE = r'(?<!avec )(?<!et )(?<!\+ )'
+# Suivi de sa surface (Orpi « Stationnement 15 m2 ») ou de « à louer »
+# (Century 21 « Appartement Local à louer »).
+_SUFFIXE_BIEN = r'\s+(?:\d+(?:[.,]\d+)?\s*m|à louer)'
+_PARKING_RE = re.compile(rf'{_EN_TETE}{_MOTS_PARKING}\b|{_PAS_ACCESSOIRE}\b{_MOTS_PARKING}{_SUFFIXE_BIEN}')
+_LOCAL_RE = re.compile(rf'{_EN_TETE}{_MOTS_LOCAL}\b|{_PAS_ACCESSOIRE}\b{_MOTS_LOCAL}(?:\s+commercial|{_SUFFIXE_BIEN})')
+# Orpi encode le type de bien dans l'URL (annonce-location-stationnement-…) :
+# signal le plus fiable, prioritaire sur le texte.
+_URL_TYPE_RE = re.compile(r'annonce-location-([a-z]+)-')
+_URL_TYPES = {
+    'stationnement': 'Parking', 'parking': 'Parking', 'garage': 'Parking', 'box': 'Parking', 'cave': 'Parking',
+    'local': 'Local/Bureau', 'bureau': 'Local/Bureau', 'commerce': 'Local/Bureau',
+    'maison': 'Maison',
+}
+
+
+def extract_type(text, url=None, detail=None):
+    """Détermine le type de bien (Maison, Appartement, Studio, Coloc, Parking,
+    Local/Bureau) à partir de l'URL (Orpi), du texte de carte, puis du début
+    de la description détaillée (« Grenier 20 m2… », ORA-192)."""
+    match_url = _URL_TYPE_RE.search(str(url or ''))
+    if match_url and match_url.group(1) in _URL_TYPES:
+        return _URL_TYPES[match_url.group(1)]
+    if pd.isna(text): text = ''
     text = str(text).lower()
+    detail = '' if pd.isna(detail) else str(detail).lower()
     if 'colocation' in text: return 'Colocation'
     if 'maison' in text or 'villa' in text: return 'Maison'
     if 'studio' in text: return 'Studio'
-    if 'parking' in text or 'garage' in text or 'box' in text: return 'Parking'
-    if 'local' in text or 'bureau' in text or 'commercial' in text: return 'Local/Bureau'
+    if _PARKING_RE.search(text) or re.match(rf'{_EN_TETE}{_MOTS_PARKING}\b', detail): return 'Parking'
+    if _LOCAL_RE.search(text) or re.match(rf'{_EN_TETE}{_MOTS_LOCAL}\b', detail): return 'Local/Bureau'
     return 'Appartement'
 
 def format_description(text):
@@ -279,7 +308,7 @@ def run_fusion(ville_slug=None, sites=None):
                 # scrapée : Orpi, Vizzit) ; distincte de `description`, qui reste le
                 # texte de carte nettoyé servant à la classification.
                 new_df['description_detail'] = df['Description'].fillna('') if 'Description' in df.columns else ''
-                new_df['type'] = full_desc.apply(extract_type)
+                new_df['type'] = [extract_type(t, u, d) for t, u, d in zip(full_desc, new_df['url'], new_df['description_detail'])]
 
                 if config['site'] == 'Orpi':
                     new_df['surface'] = full_desc.apply(clean_surface)
@@ -343,7 +372,7 @@ def run_fusion(ville_slug=None, sites=None):
                     v_df['description_detail'] = df_v['Lien'].map(detail['Description']).fillna('')
                 if 'Image' in detail.columns:
                     v_df['image'] = df_v['Lien'].map(detail['Image']).fillna(v_df['image'])
-            v_df['type'] = df_v['Details'].apply(extract_type)
+            v_df['type'] = [extract_type(t, u, dd) for t, u, dd in zip(df_v['Details'], v_df['url'], v_df['description_detail'])]
             v_df['surface'] = df_v['Details'].apply(clean_surface)
             v_df['code_postal'] = df_v['Lieu'].apply(lambda t: extract_postal_code(t, default_cp))
             v_df['ville'] = ville_nom

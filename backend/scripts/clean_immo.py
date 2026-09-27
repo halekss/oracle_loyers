@@ -303,6 +303,29 @@ def _vu_au_dernier_scrape(df):
     return scan == dernier
 
 
+# ORA-192 : types détectés par data_fusion.extract_type qui ne sont pas des
+# logements — hors master, hors archive des prix, hors entraînement du modèle.
+TYPES_NON_LOGEMENT = {'Parking', 'Local/Bureau'}
+# En dessous, un loyer mensuel est suspect (parking non détecté, location à la
+# journée…) : signalé pour revue, jamais supprimé automatiquement.
+LOYER_SUSPECT_MAX = 150
+
+
+def step_exclure_non_logement(df):
+    """Retire les annonces de type non-logement (tracées dans le log) et signale
+    les loyers < LOYER_SUSPECT_MAX € sans les supprimer (ORA-192)."""
+    print("\n🚗 ETAPE 0 : Exclusion des biens non-logement (parkings, locaux)...")
+    exclues = df['type'].isin(TYPES_NON_LOGEMENT) if 'type' in df.columns else pd.Series(False, index=df.index)
+    for _, row in df[exclues].iterrows():
+        print(f"   🚫 {row['type']} exclu : {row.get('site')} {row.get('prix')} € — {row.get('url')}")
+    df = df[~exclues].reset_index(drop=True)
+    suspects = df[pd.to_numeric(df['prix'], errors='coerce') < LOYER_SUSPECT_MAX]
+    for _, row in suspects.iterrows():
+        print(f"   ⚠️  Loyer suspect (< {LOYER_SUSPECT_MAX} €) à revoir : {row.get('site')} {row.get('prix')} € — {row.get('url')}")
+    print(f"   ✅ {int(exclues.sum())} annonce(s) non-logement exclue(s), {len(suspects)} loyer(s) suspect(s) signalé(s).")
+    return df
+
+
 def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=None):
     """Fusionne `df` (résultat frais de data_fusion.py) avec le `master_immo_final.csv`
     du run précédent pour calculer/préserver la colonne `statut` (ORA-134 bis).
@@ -1114,6 +1137,7 @@ def main():
     df_cavaliers = load_cavaliers(CAVALIERS_CSV)
 
     # 2. Exécution séquentielle en mémoire (orchestration pure, pas de logique métier ici)
+    df = step_exclure_non_logement(df)
     df = step_flag_expired(df)
     df, df_sortantes = step_archive_hors_master(df)
     df = step_geocoding(df, CAVALIERS_CSV)

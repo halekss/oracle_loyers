@@ -143,6 +143,37 @@ class ExtractTypeTest(unittest.TestCase):
     def test_defaults_to_appartement_for_nan(self):
         self.assertEqual(extract_type(pd.NA), "Appartement")
 
+    # --- ORA-192 : parkings, caves, greniers et locaux ---
+
+    def test_orpi_stationnement_url_is_parking(self):
+        url = "https://www.orpi.com/annonce-location-stationnement-lyon-3-69003-4cd53631/"
+        self.assertEqual(extract_type("Stationnement 14 m2 110 €par mois LOCATION", url), "Parking")
+
+    def test_orpi_url_wins_over_a_card_text_without_the_word(self):
+        url = "https://www.orpi.com/annonce-location-stationnement-lyon-7-69007-54ea3e8d/"
+        self.assertEqual(extract_type("15 m2 Debourg", url), "Parking")
+
+    def test_orpi_appartement_url_keeps_studio_detection(self):
+        url = "https://www.orpi.com/annonce-location-appartement-lyon-7-69007-abc/"
+        self.assertEqual(extract_type("Studio meublé", url), "Studio")
+
+    def test_flat_with_cave_and_parking_stays_appartement(self):
+        self.assertEqual(extract_type("T2 avec cave et parking"), "Appartement")
+        self.assertEqual(extract_type("Appartement 45 m2, cave + parking 12 m2"), "Appartement")
+
+    def test_grenier_is_detected_from_the_start_of_the_detail(self):
+        self.assertEqual(extract_type("1 pièce - 20 m²", detail="Grenier 20 m2 situé à Lyon 7 60€ mensuel"), "Parking")
+
+    def test_a_detail_merely_mentioning_a_parking_is_not_a_parking(self):
+        detail = "Bel appartement lumineux, parking en sous-sol inclus."
+        self.assertEqual(extract_type("T3 - 65 m²", detail=detail), "Appartement")
+
+    def test_century21_local_a_louer_title_is_local(self):
+        self.assertEqual(extract_type("Appartement Local à louer LYON 69003 72 m2, 2 pièces"), "Local/Bureau")
+
+    def test_localisation_is_not_a_local(self):
+        self.assertEqual(extract_type("T2 excellente localisation, coin bureau"), "Appartement")
+
 
 class FormatDescriptionTest(unittest.TestCase):
     def test_extracts_room_count_prefix(self):
