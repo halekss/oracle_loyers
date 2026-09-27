@@ -492,6 +492,92 @@ class StepSyncAnnoncesStoreTest(unittest.TestCase):
             self.assertEqual(annonces["total"], 1)
 
 
+class SyncDeactivatesHorsMasterTest(unittest.TestCase):
+    """ORA-193 : après la sync, le store ne liste (active/a_verifier) que les
+    urls du master ; le reste passe inactive, sans suppression."""
+
+    def setUp(self):
+        import tempfile
+
+        from services import annonces_store
+
+        self.store = annonces_store
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.db_path = os.path.join(self.tmp_dir.name, "annonces.db")
+        annonces_store.init_db(self.db_path)
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
+    def seed(self, url, statut="active"):
+        self.store.upsert_annonce(url=url, ville="Lyon", statut=statut, db_path=self.db_path)
+
+    def statut(self, url):
+        return self.store.get_annonce_by_url(url, db_path=self.db_path)["statut"]
+
+    def master_df(self, urls, statut="active"):
+        return pd.DataFrame([
+            {"type_local": "T2", "quartier": "Ainay", "prix": 800, "surface": 40,
+             "ville": "Lyon", "url": u, "image": None, "statut": statut}
+            for u in urls
+        ])
+
+    def test_deactivates_every_url_outside_the_master_without_deleting(self):
+        self.seed("https://seloger.example/old", "active")          # source retirée de sites_actifs
+        self.seed("https://vizzit.example/archivee", "a_verifier")  # sortie du master
+        master = ["https://vizzit.example/1", "https://vizzit.example/2"]
+
+        clean_immo.step_sync_annonces_store(self.master_df(master), db_path=self.db_path, master_urls=set(master))
+
+        self.assertEqual(self.statut("https://seloger.example/old"), "inactive")
+        self.assertEqual(self.statut("https://vizzit.example/archivee"), "inactive")
+        self.assertEqual(self.statut("https://vizzit.example/1"), "active")
+        listed = {a["url"] for a in self.store.list_annonces(per_page=100, db_path=self.db_path)["items"]}
+        self.assertEqual(listed, set(master))
+        # Historique conservé : 4 lignes en base.
+        self.assertEqual(self.store.list_annonces(statut="inactive", db_path=self.db_path)["total"], 2)
+
+    def test_keeps_a_verifier_for_a_master_url(self):
+        master = ["https://vizzit.example/1", "https://vizzit.example/2"]
+
+        clean_immo.step_sync_annonces_store(self.master_df(master, statut="a_verifier"), db_path=self.db_path, master_urls=set(master))
+
+        self.assertEqual(self.statut("https://vizzit.example/1"), "a_verifier")
+
+    def test_an_annonce_back_in_the_master_is_reactivated(self):
+        self.seed("https://vizzit.example/revenue", "inactive")
+        master = ["https://vizzit.example/revenue", "https://vizzit.example/2"]
+
+        clean_immo.step_sync_annonces_store(self.master_df(master), db_path=self.db_path, master_urls=set(master))
+
+        self.assertEqual(self.statut("https://vizzit.example/revenue"), "active")
+
+    def test_empty_master_deactivates_nothing(self):
+        self.seed("https://vizzit.example/1")
+
+        desactivees = clean_immo.deactivate_hors_master(set(), db_path=self.db_path)
+
+        self.assertEqual(desactivees, 0)
+        self.assertEqual(self.statut("https://vizzit.example/1"), "active")
+
+    def test_truncated_master_deactivates_nothing(self):
+        for i in range(10):
+            self.seed(f"https://vizzit.example/{i}")
+
+        # 2 urls pour 10 actives : sous le seuil de 50 %, run suspect.
+        desactivees = clean_immo.deactivate_hors_master({"https://vizzit.example/0", "https://vizzit.example/1"}, db_path=self.db_path)
+
+        self.assertEqual(desactivees, 0)
+        self.assertEqual(self.store.list_annonces(statut="active", db_path=self.db_path)["total"], 10)
+
+    def test_without_master_urls_the_sync_deactivates_nothing(self):
+        self.seed("https://seloger.example/old")
+
+        clean_immo.step_sync_annonces_store(self.master_df(["https://vizzit.example/1"]), db_path=self.db_path)
+
+        self.assertEqual(self.statut("https://seloger.example/old"), "active")
+
+
 class BuildTitreTest(unittest.TestCase):
     def test_combines_type_local_and_quartier(self):
         row = pd.Series({"type_local": "T3", "quartier": "Croix-Rousse", "description": ""})

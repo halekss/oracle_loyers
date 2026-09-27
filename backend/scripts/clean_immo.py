@@ -1001,13 +1001,17 @@ def build_titre(row):
     return type_local or quartier or str(row.get('description') or '').strip()[:80] or None
 
 
-def step_sync_annonces_store(df, db_path=ANNONCES_DB_PATH):
+def step_sync_annonces_store(df, db_path=ANNONCES_DB_PATH, master_urls=None):
     """Alimente la table SQLite `annonces` (services/annonces_store.py) à partir
     du dataframe final, pour que `/api/annonces` (liste "Annonces récentes",
     tracking de clics) ait réellement des données à servir — jusqu'ici cette
     table n'était peuplée que par les tests unitaires, jamais par le pipeline
     (ORA-112). `upsert_annonce` dédoublonne par `url` (contrainte UNIQUE),
     donc rejouer cette étape sur les mêmes annonces les met juste à jour.
+
+    `master_urls` (ORA-193) : urls du master. Si fourni, toute annonce du store
+    hors de cet ensemble passe `inactive` (archivée ou source retirée de
+    `sites_actifs`) — sans ça elle gardait indéfiniment son ancien statut.
     """
     print("\n🗃️  ETAPE 6 : Synchronisation du store annonces (SQLite)...")
     annonces_store.init_db(db_path)
@@ -1062,7 +1066,30 @@ def step_sync_annonces_store(df, db_path=ANNONCES_DB_PATH):
     skipped = skipped_url + skipped_autre
     print(f"   ✅ {synced} annonces synchronisées, {skipped} ignorées "
           f"({skipped_url} url manquante, {skipped_autre} autre erreur).")
+
+    if master_urls is not None:
+        deactivate_hors_master(master_urls, db_path)
     return df
+
+
+# Garde-fou ORA-193 : un master sous ce ratio des annonces `active` actuelles
+# ressemble à un run raté (scraper cassé, CSV tronqué), pas à un vrai marché.
+MIN_MASTER_RATIO = 0.5
+
+
+def deactivate_hors_master(master_urls, db_path=ANNONCES_DB_PATH):
+    """Passe `inactive` les annonces du store absentes du master (ORA-193),
+    sauf si le master est vide ou anormalement petit. Renvoie le nombre de
+    lignes désactivées (0 si le garde-fou a bloqué)."""
+    master_urls = {u for u in master_urls if isinstance(u, str) and u.strip()}
+    actives = annonces_store.list_annonces(statut='active', per_page=1, db_path=db_path)['total']
+    if not master_urls or len(master_urls) < MIN_MASTER_RATIO * actives:
+        print(f"   ⚠️  Master suspect ({len(master_urls)} url(s) pour {actives} annonces actives) : "
+              f"aucune désactivation hors master.")
+        return 0
+    desactivees = annonces_store.deactivate_annonces_not_in(master_urls, db_path=db_path)
+    print(f"   🧹 {desactivees} annonce(s) hors master passée(s) inactive.")
+    return desactivees
 
 # =============================================================================
 # MAIN PIPELINE
@@ -1101,9 +1128,13 @@ def main():
     print("✨ TERMINÉ ! Le fichier master est prêt.")
 
     # 4. Synchronisation du store SQLite consommé par /api/annonces (ORA-112)
-    # Les annonces archivées sont synchronisées aussi (statut a_verifier/inactive) : sans ça,
-    # annonces.db continuerait de servir comme « active » une annonce sortie du master.
-    step_sync_annonces_store(pd.concat([df, df_sortantes], ignore_index=True, sort=False))
+    # Les annonces archivées sont synchronisées aussi (données à jour pour l'historique),
+    # puis tout ce qui n'est pas dans le master passe inactive (ORA-193) : sortantes,
+    # mais aussi les annonces de sources retirées de sites_actifs, jamais revues.
+    step_sync_annonces_store(
+        pd.concat([df, df_sortantes], ignore_index=True, sort=False),
+        master_urls=set(df['url'].dropna()),
+    )
 
 if __name__ == "__main__":
     main()

@@ -28,6 +28,7 @@ __all__ = [
     "count_clicks",
     "delete_annonce",
     "update_statut",
+    "deactivate_annonces_not_in",
 ]
 
 STATUTS_VALIDES = {"active", "a_verifier", "inactive"}
@@ -375,6 +376,31 @@ def update_statut(url=None, annonce_id=None, statut=None, derniere_verification=
             )
         conn.commit()
         return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def deactivate_annonces_not_in(urls, derniere_verification=None, db_path=DEFAULT_DB_PATH):
+    """Passe en `inactive` toute annonce non inactive dont l'url n'est pas dans
+    `urls` (ORA-193 : hors master = plus revue en ligne ou source désactivée).
+    Aucune suppression : l'historique reste en base. Renvoie le nombre de
+    lignes désactivées. Le garde-fou « master vide/tronqué » est à l'appelant."""
+    derniere_verification = derniere_verification or datetime.now(timezone.utc).isoformat()
+    conn = get_connection(db_path)
+    try:
+        # Table temporaire plutôt qu'un IN (?, ?, …) : le master dépasse la
+        # limite de variables SQLite sur les vieilles versions.
+        conn.execute("CREATE TEMP TABLE garder (url TEXT PRIMARY KEY)")
+        conn.executemany("INSERT OR IGNORE INTO garder (url) VALUES (?)", ((u,) for u in urls))
+        cursor = conn.execute(
+            """
+            UPDATE annonces SET statut = 'inactive', derniere_verification = ?
+            WHERE statut != 'inactive' AND url NOT IN (SELECT url FROM garder)
+            """,
+            (derniere_verification,),
+        )
+        conn.commit()
+        return cursor.rowcount
     finally:
         conn.close()
 
