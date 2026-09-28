@@ -67,6 +67,11 @@ async def check_url_status_async(url, session, timeout=DEFAULT_TIMEOUT_SECONDS):
             allow_redirects=True,
         ) as response:
             if response.status in DEAD_STATUS_CODES:
+                # Vizzit répond 410 sur des fiches encore en ligne (382 faux
+                # « morts » le 2026-09-28) : sa disparition est détectée par
+                # le scraper (archive_stale_rows), pas par ce code HTTP.
+                if "vizzit.fr" in url:
+                    return None
                 return True
             if response.status == 200:
                 text = await response.text()
