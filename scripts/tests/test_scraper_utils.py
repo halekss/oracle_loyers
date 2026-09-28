@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -152,6 +153,20 @@ class LoadSiteConfigTest(unittest.TestCase):
         self.assertEqual(config["ville_slug"], "lyon")
         self.assertEqual(config["base_url"], "https://example.test/lyon/page-{}/")
         self.assertIsNone(config["page_query_param"])
+
+    def test_scraping_ville_env_overrides_ville_active(self):
+        # run_scrapers.sh enchaîne les villes sans réécrire scraping_config.json.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = self._write_config(tmp_dir)
+            with open(path, encoding="utf-8") as f:
+                config = json.load(f)
+            config["villes"]["lille"] = {"nom": "Lille", "slug": "lille", "century21": {"base_url": "https://example.test/lille/"}}
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(config, f)
+            with mock.patch.dict(os.environ, {"SCRAPING_VILLE": "lille"}):
+                site = load_site_config("century21", config_path=path)
+
+        self.assertEqual(site["ville_slug"], "lille")
 
     def test_page_query_param_is_present_when_configured(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -61,7 +61,7 @@ describe('ChatOracle', () => {
     api.sendChatMessage.mockResolvedValue({ response: 'Gerland tourne autour de 780 EUR pour un T2.' });
     const user = userEvent.setup();
 
-    render(<ChatOracle />);
+    render(<ChatOracle ville="lyon" />);
 
     const input = screen.getByPlaceholderText('Prix, surface, quartier...');
     await user.type(input, 'Quel prix a Gerland ?');
@@ -71,7 +71,8 @@ describe('ChatOracle', () => {
     await waitFor(() => {
       expect(screen.getByText(/780 EUR pour un T2/)).toBeInTheDocument();
     });
-    expect(api.sendChatMessage).toHaveBeenCalledWith('Quel prix a Gerland ?', expect.anything());
+    // Borne Immotep à la ville affichée (sinon « Perrache » partait sur Lille).
+    expect(api.sendChatMessage).toHaveBeenCalledWith('Quel prix a Gerland ?', expect.anything(), 'lyon');
   });
 
   it('shows a themed message when the request is rate-limited', async () => {
@@ -158,7 +159,7 @@ describe('ChatOracle', () => {
     });
 
     expect(api.sendChatMessage).toHaveBeenCalledTimes(2);
-    expect(api.sendChatMessage).toHaveBeenNthCalledWith(2, 'Quel prix a Gerland ?', expect.anything());
+    expect(api.sendChatMessage).toHaveBeenNthCalledWith(2, 'Quel prix a Gerland ?', expect.anything(), undefined);
     // Une seule bulle utilisateur : le message n'a pas été dupliqué
     expect(screen.getAllByText('Quel prix a Gerland ?')).toHaveLength(1);
     expect(screen.queryByTestId('retry-button')).not.toBeInTheDocument();
@@ -268,7 +269,7 @@ describe('ChatOracle', () => {
       await user.click(chip);
 
       await waitFor(() => expect(screen.getByText('Et voici pour un T3.')).toBeInTheDocument());
-      expect(api.sendChatMessage).toHaveBeenLastCalledWith('Et en T3 ?', expect.anything());
+      expect(api.sendChatMessage).toHaveBeenLastCalledWith('Et en T3 ?', expect.anything(), undefined);
     });
 
     it('does not show a suggestion chip when the response has no specific type', async () => {

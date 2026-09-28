@@ -259,10 +259,11 @@ export const api = {
   },
 
   // Chatbot Immotep
-  sendChatMessage: async (message, context = null) => {
+  sendChatMessage: async (message, context = null, ville = undefined) => {
     try {
       const payload = { message };
       if (context) payload.context = context;
+      if (ville) payload.ville = ville;
 
       const response = await fetchWithClassification(`${API_URL}/chat`, {
         ...apiFetchOptions(payload),

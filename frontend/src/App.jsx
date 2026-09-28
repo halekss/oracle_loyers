@@ -727,6 +727,7 @@ function App() {
                   analysis={result?.analysis}
                   context={chatContext}
                   quartier={result?.quartier}
+                  ville={ville}
                   onListAnnonces={(quartier) => handleViewAnnonces(quartier)}
                   onInsight={(insight) => {
                     if (insight?.map_focus?.lat && insight?.map_focus?.lng) {
@@ -801,6 +802,7 @@ function App() {
                 analysis={result?.analysis}
                 context={chatContext}
                 quartier={result?.quartier}
+                ville={ville}
                 onListAnnonces={(quartier) => {
                   handleViewAnnonces(quartier);
                   setIsChatOpen(false);

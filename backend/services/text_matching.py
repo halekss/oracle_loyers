@@ -10,6 +10,11 @@ DEFAULT_MATCH_SCORE_CUTOFF = 75
 DEFAULT_SUGGESTION_SCORE_CUTOFF = 50
 DEFAULT_MAX_SUGGESTIONS = 3
 
+# Lieux connus des utilisateurs mais absents des quartiers du dataset :
+# rattachés au quartier le plus proche. Ignorés si ce quartier n'est pas
+# dans `known_quartiers` (ex: recherche bornée à une autre ville).
+QUARTIER_ALIASES = {"perrache": "Confluence"}
+
 
 def normalize_text(value):
     normalized = unicodedata.normalize("NFKD", str(value or ""))
@@ -45,6 +50,10 @@ def match_quartier(
 
     if not normalized_query or not candidates:
         return {"found": False, "match": None, "score": None, "suggestions": []}
+
+    for alias, target in QUARTIER_ALIASES.items():
+        if target in candidates and re.search(rf"\b{alias}\b", normalized_query):
+            return {"found": True, "match": target, "score": 100.0, "suggestions": []}
 
     ranked = process.extract(normalized_query, candidates, scorer=fuzz.WRatio, limit=max_suggestions)
     ranked.sort(key=lambda item: item[1], reverse=True)

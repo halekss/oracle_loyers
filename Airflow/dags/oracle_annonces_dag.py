@@ -4,9 +4,9 @@ L'Oracle des Loyers — DAG Annonces (scraping + modèle)
 Fusionne les annonces immobilières scrapées (6 sites), calcule les features
 de distance aux POI, ré-entraîne le modèle et régénère la carte statique.
 
-ORA-153 : la fusion (data_fusion.py) est scindée par ville — chacune tourne
-indépendamment pour chaque ville déclarée dans scraping_config.json, sans
-dépendance forcée aux autres. `clean_immo` reste un step PARTAGÉ, unique
+ORA-153 : la fusion (data_fusion.py) est scindée par ville — une tâche par
+ville déclarée dans scraping_config.json, exécutées EN SÉRIE car toutes
+réécrivent le même fichier combiné. `clean_immo` reste un step PARTAGÉ, unique
 pour toutes les villes (il calcule les features sur le fichier combiné en
 une passe). `train_model` et `generate_map`, en revanche, sont scindés par
 ville (ORA-154 : un modèle XGBoost distinct par ville plutôt qu'un modèle
@@ -23,7 +23,7 @@ rester bloqué par la lenteur/flakiness de l'API Overpass externe.
 (merge_cavaliers_villes.py) — pas de dépendance inter-DAG directe, juste le
 fichier le plus récent sur disque au moment du run.
 
-Architecture : [data_fusion_<ville> pour chaque ville] → clean_immo →
+Architecture : data_fusion_<ville1> → data_fusion_<ville2> → … → clean_immo →
                [train_model_<ville> → generate_map_<ville> pour chaque ville]
 """
 
@@ -32,6 +32,7 @@ from datetime import timedelta
 
 import pendulum
 from airflow import DAG
+from airflow.models.baseoperator import chain
 from airflow.operators.bash import BashOperator
 
 SCRIPTS = "/opt/airflow/backend/scripts"
@@ -108,6 +109,10 @@ with DAG(
         for slug in VILLES
     }
 
-    steps_fusion >> step_features
+    # Fusions en série, jamais en parallèle : chacune relit puis réécrit tout
+    # base_de_donnees_immo_complet.csv. En parallèle (LocalExecutor), les deux
+    # écritures se mélangeaient (CSV corrompu, UnicodeDecodeError dans
+    # clean_immo le 2026-09-28) ou la dernière écrasait la ville de l'autre.
+    chain(*steps_fusion, step_features)
     for slug in VILLES:
         step_features >> steps_train[slug] >> steps_generate_map[slug]
