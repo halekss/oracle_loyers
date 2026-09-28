@@ -6,7 +6,16 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.cavaliers_factors import detail_cavaliers, list_poi_types, summarize_cavaliers
+from services.cavaliers_factors import (
+    ABSENCE_PHRASES,
+    GENERIC_PHRASES,
+    POI_PHRASES,
+    absence_phrase_for,
+    detail_cavaliers,
+    list_poi_types,
+    phrase_for,
+    summarize_cavaliers,
+)
 
 
 def _row(**overrides):
@@ -120,6 +129,74 @@ class SummarizeCavaliersTest(unittest.TestCase):
 
         vice_factor = next(f for f in factors if f['categorie'] == 'Vice')
         self.assertIn("1000m", vice_factor['phrase'])
+
+
+class PhraseVariationTest(unittest.TestCase):
+    """ORA-189 : chaque gabarit a >= 3 variantes, choisies de façon
+    déterministe (même quartier -> même phrase) et suffisamment variées
+    d'un quartier à l'autre pour qu'un rapport PDF ne se ressemble pas
+    systématiquement d'un quartier à l'autre."""
+
+    LILLE_QUARTIERS = [
+        "Wazemmes", "Vieux-Lille", "Bois-Blancs", "Fives", "Moulins",
+        "Lille-Centre", "Vauban", "Saint-Maurice", "Lille-Sud", "Fort-de-Mons",
+    ]
+
+    def test_every_gabarit_has_at_least_three_variants(self):
+        for key, variants in {**POI_PHRASES, **{("__generic__", c): v for c, v in GENERIC_PHRASES.items()}}.items():
+            self.assertGreaterEqual(len(variants), 3, msg=f"{key} a moins de 3 variantes")
+        for category, variants in ABSENCE_PHRASES.items():
+            self.assertGreaterEqual(len(variants), 3, msg=f"absence/{category} a moins de 3 variantes")
+
+    def test_same_quartier_and_inputs_yield_the_same_phrase(self):
+        first = phrase_for('vice', 'bar', 4, 120, quartier="Wazemmes")
+        second = phrase_for('vice', 'bar', 4, 120, quartier="Wazemmes")
+
+        self.assertEqual(first, second)
+
+    def test_same_quartier_yields_the_same_absence_phrase(self):
+        first = absence_phrase_for('vice', quartier="Wazemmes")
+        second = absence_phrase_for('vice', quartier="Wazemmes")
+
+        self.assertEqual(first, second)
+
+    def test_no_quartier_keeps_the_pre_ora_189_phrase(self):
+        """Non-régression : les appelants qui ne connaissent pas de quartier
+        (cavaliers_radius.py, anciens tests) gardent la formulation d'avant
+        ORA-189."""
+        self.assertEqual(
+            phrase_for('vice', 'bar', 4, 120),
+            "4 bar(s) à moins de 500m — parfait pour un verre, moins pour dormir.",
+        )
+        self.assertEqual(
+            absence_phrase_for('vice'),
+            "Aucune tentation (bar, kebab, casino...) à moins de 500m — un quartier sage.",
+        )
+
+    def test_ten_lille_quartiers_yield_at_least_two_formulations_for_vice(self):
+        phrases = {
+            phrase_for('vice', 'bar', 4, 120, quartier=quartier)
+            for quartier in self.LILLE_QUARTIERS
+        }
+
+        self.assertGreaterEqual(len(phrases), 2)
+
+    def test_ten_lille_quartiers_yield_at_least_two_absence_formulations(self):
+        phrases = {
+            absence_phrase_for('nuisance', quartier=quartier)
+            for quartier in self.LILLE_QUARTIERS
+        }
+
+        self.assertGreaterEqual(len(phrases), 2)
+
+    def test_closer_or_denser_poi_tends_to_pick_a_more_emphatic_variant(self):
+        """`_intensity_tier` décale l'index de variante : un POI juste au
+        seuil de présence (loin, peu dense) ne doit pas retomber sur la même
+        variante qu'un POI très proche/dense pour le même quartier."""
+        faible = phrase_for('vice', 'sex-shop', 1, 450, quartier="Wazemmes")
+        forte = phrase_for('vice', 'sex-shop', 1, 50, quartier="Wazemmes")
+
+        self.assertNotEqual(faible, forte)
 
 
 class DetailCavaliersTest(unittest.TestCase):
