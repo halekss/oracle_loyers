@@ -47,6 +47,30 @@ def merge_cavaliers(df_old, df_new):
     df_combined = pd.concat([df_old, df_new])
     return df_combined.drop_duplicates(subset=DEDUP_KEY_COLUMNS, keep='last')
 
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Attentes entre essais (s) : 4 essais au total. Les miroirs de secours
+# (kumi.systems, openstreetmap.fr) ont été retirés le 2026-09-28 : l'un ne
+# répondait plus (chaque essai bloquait jusqu'au timeout), l'autre n'avait
+# plus de DNS — le DAG Lille dépassait ses 45 min à cause d'eux.
+RETRY_DELAYS = (15, 30, 60)
+
+
+def fetch_elements(query, get=r.get, sleep=time.sleep):
+    """Éléments Overpass de `query`, ou None si les 4 essais échouent
+    (429/504 = serveur saturé, fréquents : on attend de plus en plus)."""
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        try:
+            reponse = get(OVERPASS_URL, params={'data': query}, headers={'User-Agent': 'OracleLoyers/Extracteur'}, timeout=90)
+            if reponse.status_code == 200:
+                return reponse.json().get('elements', [])
+            print(f"⚠️ ({reponse.status_code})", end=" ")
+        except Exception:
+            print("⚠️ (Err)", end=" ")
+        if attempt < len(RETRY_DELAYS):
+            sleep(RETRY_DELAYS[attempt])
+    return None
+
+
 def get_cavaliers_data(city_name="Lyon"):
     """
     Récupère la liste complète des lieux pour chaque catégorie
@@ -86,12 +110,6 @@ def get_cavaliers_data(city_name="Lyon"):
     }
 
     # 2. Liste de serveurs robustes
-    serveurs = [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
-        "https://api.openstreetmap.fr/oapi/interpreter"
-    ]
-
     all_data = []
     print(f"🚀 Démarrage de l'extraction massive pour {city_name}...")
     
@@ -100,7 +118,7 @@ def get_cavaliers_data(city_name="Lyon"):
         print(f"\n🔎 Recherche : {category}...", end=" ")
         
         query = f"""
-        [out:json][timeout:180];
+        [out:json][timeout:80];
         area["name"="{city_name}"]["admin_level"="8"]->.searchArea;
         (
           node["{key}"="{value}"](area.searchArea);
@@ -110,48 +128,30 @@ def get_cavaliers_data(city_name="Lyon"):
         out center tags;
         """
         
-        success = False
-        
-        for url in serveurs:
-            if success: break
-            
-            try:
-                reponse = r.get(url, params={'data': query}, headers={'User-Agent': 'OracleLoyers/Extracteur'}, timeout=190)
-                
-                if reponse.status_code == 200:
-                    data = reponse.json().get('elements', [])
-                    count = 0
-                    
-                    for item in data:
-                        lat, lon = None, None
-                        if 'lat' in item:
-                            lat, lon = item['lat'], item['lon']
-                        elif 'center' in item:
-                            lat, lon = item['center']['lat'], item['center']['lon']
-                        
-                        if lat and lon:
-                            name = item.get('tags', {}).get('name', 'Inconnu')
-                            all_data.append({
-                                'categorie_cavalier': category,
-                                'type_osm': value,
-                                'nom_lieu': name,
-                                'latitude': lat,
-                                'longitude': lon
-                            })
-                            count += 1
-                    
-                    print(f"✅ {count} lieux trouvés.", end="")
-                    success = True
-                    time.sleep(1)
-                
-                elif reponse.status_code == 429:
-                    print(f"⚠️ (429)", end=" ")
-                    time.sleep(2)
-                elif reponse.status_code == 504:
-                    print(f"⚠️ (504)", end=" ")
-            
-            except Exception as e:
-                print(f"⚠️ (Err)", end=" ")
+        data = fetch_elements(query)
+        success = data is not None
+        if success:
+            count = 0
+            for item in data:
+                lat, lon = None, None
+                if 'lat' in item:
+                    lat, lon = item['lat'], item['lon']
+                elif 'center' in item:
+                    lat, lon = item['center']['lat'], item['center']['lon']
+
+                if lat and lon:
+                    name = item.get('tags', {}).get('name', 'Inconnu')
+                    all_data.append({
+                        'categorie_cavalier': category,
+                        'type_osm': value,
+                        'nom_lieu': name,
+                        'latitude': lat,
+                        'longitude': lon
+                    })
+                    count += 1
+
+            print(f"✅ {count} lieux trouvés.", end="")
+            time.sleep(1)
 
         if not success:
             print("❌ ÉCHEC.")
