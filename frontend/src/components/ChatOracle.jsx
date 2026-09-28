@@ -38,7 +38,7 @@ const ALL_TYPES = ['T1', 'T2', 'T3', 'T4+'];
 // le parent (App.jsx) bascule vers la liste des annonces sur ce quartier.
 // Filtrer la liste par type/budget précis dépasse le périmètre de ce ticket
 // (AnnoncesList n'accepte aujourd'hui qu'un filtre quartier, cf. ORA-115).
-export default function ChatOracle({ analysis, context, quartier, onInsight, onListAnnonces }) {
+export default function ChatOracle({ analysis, context, quartier, ville, onInsight, onListAnnonces }) {
   // ORA-117 : restaure l'historique de la session (sessionStorage) au
   // montage — vide dans un nouvel onglet, conservé au refresh de page.
   const [messages, setMessages] = useState(() => loadChatHistory() || DEFAULT_MESSAGES);
@@ -75,7 +75,7 @@ export default function ChatOracle({ analysis, context, quartier, onInsight, onL
 
     try {
       // Envoie le message + le contexte (prix, quartier...) au Backend
-      const oracleResponse = await api.sendChatMessage(userMsg, buildChatContext(context, latestInsight));
+      const oracleResponse = await api.sendChatMessage(userMsg, buildChatContext(context, latestInsight), ville);
       const responseText = typeof oracleResponse === 'string' ? oracleResponse : oracleResponse.response;
 
       // ORA-175 : la bulle garde les données structurées de sa réponse

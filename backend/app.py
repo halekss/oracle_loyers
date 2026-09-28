@@ -1001,6 +1001,10 @@ def chat():
 
         # On récupère le DataFrame complet
         df = data_loader.get_data()
+        # Bornage à la ville affichée côté front : sans lui, une question sur
+        # un lieu lyonnais inconnu recommandait des annonces de Lille.
+        if payload.ville and 'ville' in df.columns:
+            df = df[df['ville'].str.lower() == payload.ville.strip().lower()]
 
         # On appelle le service dédié qui gère le prompt, le parsing et Gemini
         result_immotep = chat_service.get_chat_result(user_msg, context, df)

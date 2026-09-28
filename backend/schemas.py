@@ -24,6 +24,7 @@ __all__ = [
 class ChatRequestSchema(BaseModel):
     message: str
     context: Optional[str] = ""
+    ville: Optional[str] = None
 
     @field_validator("message")
     @classmethod
