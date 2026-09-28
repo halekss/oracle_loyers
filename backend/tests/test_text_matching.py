@@ -97,3 +97,13 @@ class ResolveQuartierTest(unittest.TestCase):
 
     def test_returns_none_for_an_empty_query(self):
         self.assertIsNone(resolve_quartier("", self.KNOWN_QUARTIERS))
+
+
+class QuartierAliasTest(unittest.TestCase):
+    def test_perrache_resolves_to_confluence(self):
+        result = match_quartier("fais moi une analyse sur Perrache", ["Ainay", "Confluence"])
+        self.assertEqual(result["match"], "Confluence")
+
+    def test_alias_ignored_when_target_not_in_scope(self):
+        result = match_quartier("analyse sur perrache", ["Vieux-Lille", "Wazemmes"])
+        self.assertFalse(result["found"])
