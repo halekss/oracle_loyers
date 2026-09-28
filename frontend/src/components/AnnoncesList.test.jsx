@@ -57,8 +57,8 @@ describe('AnnoncesList', () => {
     render(<AnnoncesList ville="lyon" />);
 
     await waitFor(() => expect(api.getAnnonces).toHaveBeenCalledWith(expect.objectContaining({ ville: 'lyon' })));
-    expect(await screen.findByRole('option', { name: 'Gerland' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Wazemmes' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Gerland · 1' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Wazemmes/ })).not.toBeInTheDocument();
   });
 
   it('renders a loading skeleton while fetching', () => {
@@ -147,7 +147,19 @@ describe('AnnoncesList', () => {
     await waitFor(() => expect(screen.getByLabelText(/quartier/i)).toBeInTheDocument());
     const select = screen.getByLabelText(/quartier/i);
     const optionLabels = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
-    expect(optionLabels).toEqual(['Tous les quartiers', 'Confluence', 'Gerland', 'Vieux Lyon']);
+    expect(optionLabels).toEqual(['Tous les quartiers · 4', 'Confluence · 1', 'Gerland · 2', 'Vieux Lyon · 1']);
+  });
+
+  it('shows a visible "Quartier" and "Trier par" label above each control, not just a screen-reader one (ORA-187)', async () => {
+    api.getAnnonces.mockResolvedValue({ items: [makeAnnonce(1)], page: 1, total_pages: 1 });
+
+    render(<AnnoncesList />);
+
+    const quartierLabel = await screen.findByText('Quartier');
+    const sortLabel = screen.getByText('Trier par');
+
+    expect(quartierLabel.className).not.toMatch(/sr-only/);
+    expect(sortLabel.className).not.toMatch(/sr-only/);
   });
 
   it('refetches with the selected quartier and resets to page 1 (ORA-115)', async () => {

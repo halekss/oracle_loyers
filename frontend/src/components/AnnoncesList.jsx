@@ -56,6 +56,8 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
   // ORA-115 : options dérivées de /api/listings (même liste de quartiers
   // canoniques que celle écrite dans annonces.db par clean_immo.py) —
   // annonces.db n'a pas d'endpoint dédié pour lister les quartiers connus.
+  // ORA-187 : `[{ name, count }]` plutôt qu'une simple liste de noms — le
+  // nombre d'annonces par quartier est affiché dans le sélecteur.
   const [quartierOptions, setQuartierOptions] = useState([]);
   // ORA-132 : filtre additif "Mes favoris". ORA-183 : les ids favoris sont
   // envoyés au serveur (`ids`) pour que tri, filtre quartier et pagination
@@ -80,8 +82,16 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
       .then((data) => {
         if (cancelled) return;
         const inVille = (item) => !ville || String(item.ville || '').toLowerCase() === ville.toLowerCase();
-        const uniqueSorted = [...new Set((data || []).filter(inVille).map((item) => item.quartier).filter(Boolean))].sort();
-        setQuartierOptions(uniqueSorted);
+        // ORA-187 : compte d'annonces par quartier ("Wazemmes · 42"), affiché
+        // dans le sélecteur pour distinguer d'un coup d'œil un quartier bien
+        // couvert d'un quartier anecdotique.
+        const counts = new Map();
+        for (const item of (data || []).filter(inVille)) {
+          if (!item.quartier) continue;
+          counts.set(item.quartier, (counts.get(item.quartier) || 0) + 1);
+        }
+        const sortedEntries = [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
+        setQuartierOptions(sortedEntries.map(([name, count]) => ({ name, count })));
       })
       .catch((err) => console.error("Quartiers indisponibles pour le filtre AnnoncesList :", err));
 
@@ -163,18 +173,25 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
   const filterId = compact ? 'annonces-quartier-filter-compact' : 'annonces-quartier-filter';
   const sortId = compact ? 'annonces-sort-compact' : 'annonces-sort';
 
+  // ORA-187 : libellé visible + hauteur/style partagés par les deux contrôles
+  // (design tokens ORA-163) — auparavant seul un <label> sr-only les décrivait,
+  // leur rôle n'étant lisible que via le texte de l'option sélectionnée.
+  const controlLabelClass = 'block text-[9px] uppercase text-slate-500 font-bold tracking-widest mb-1';
+  const controlSelectClass = 'w-full h-8 bg-slate-900 border border-slate-700 text-slate-300 text-[10px] uppercase tracking-widest font-bold px-2 rounded-lg focus:outline-none focus:border-purple-500';
+  const totalQuartierCount = quartierOptions.reduce((sum, q) => sum + q.count, 0);
+
   const quartierFilterControl = quartierOptions.length > 0 && (
     <div className="mb-2">
-      <label htmlFor={filterId} className="sr-only">Filtrer par quartier</label>
+      <label htmlFor={filterId} className={controlLabelClass}>Quartier</label>
       <select
         id={filterId}
         value={quartierFilter}
         onChange={handleQuartierChange}
-        className="w-full bg-slate-900 border border-slate-700 text-slate-300 text-[10px] uppercase tracking-widest font-bold px-2 py-1.5 rounded-lg focus:outline-none focus:border-purple-500"
+        className={controlSelectClass}
       >
-        <option value="">Tous les quartiers</option>
+        <option value="">Tous les quartiers · {totalQuartierCount}</option>
         {quartierOptions.map((q) => (
-          <option key={q} value={q}>{q}</option>
+          <option key={q.name} value={q.name}>{q.name} · {q.count}</option>
         ))}
       </select>
     </div>
@@ -184,12 +201,12 @@ export default function AnnoncesList({ compact = false, ville, onItemsChange, fo
   // connus contrairement au filtre ci-dessus).
   const sortControl = (
     <div className="mb-2">
-      <label htmlFor={sortId} className="sr-only">Trier les annonces</label>
+      <label htmlFor={sortId} className={controlLabelClass}>Trier par</label>
       <select
         id={sortId}
         value={sortValue}
         onChange={handleSortChange}
-        className="w-full bg-slate-900 border border-slate-700 text-slate-300 text-[10px] uppercase tracking-widest font-bold px-2 py-1.5 rounded-lg focus:outline-none focus:border-purple-500"
+        className={controlSelectClass}
       >
         {SORT_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
