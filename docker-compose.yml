@@ -180,6 +180,11 @@ services:
       # à un chemin relatif à backend/scripts/../../scripts/ : sans ce mount,
       # FileNotFoundError (bug préexistant, jamais fonctionné en conteneur).
       - ./scripts:/opt/airflow/scripts:ro
+      # generate_map.py (tâches generate_map_<ville>, exécutées par le
+      # scheduler en LocalExecutor) lit la config des calques et écrit les
+      # cartes dans frontend/ : sans ces mounts, FileNotFoundError (2026-09-28).
+      - ./frontend/src/config:/opt/airflow/frontend/src/config:ro
+      - ./frontend/public/data:/opt/airflow/frontend/public/data
     command: scheduler
     restart: unless-stopped
     healthcheck:

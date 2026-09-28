@@ -105,6 +105,10 @@ with DAG(
         slug: BashOperator(
             task_id=f"generate_map_{slug}",
             bash_command=f"cd {SCRIPTS} && python generate_map.py --ville {slug}",
+            # Carte régénérée même si train_model a échoué : un modèle rejeté
+            # par le garde-fou de promotion (sortie 1) laisse le modèle actif en
+            # place, la carte reste donc à jour avec lui. Le run reste en échec.
+            trigger_rule="all_done",
         )
         for slug in VILLES
     }
