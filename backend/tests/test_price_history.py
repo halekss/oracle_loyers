@@ -7,7 +7,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.price_history import compute_price_history
+from services.price_history import compute_price_history, compute_price_history_from_listings
 
 
 def _write_manifest(snapshots_dir, rows):
@@ -171,6 +171,148 @@ class ComputePriceHistoryTest(unittest.TestCase):
             self.assertEqual(len(historique), 2)
             for point in historique:
                 self.assertEqual(point["count"], 1)
+
+
+class ComputePriceHistoryFromListingsTest(unittest.TestCase):
+    """ORA-182 : historique depuis master + archive plutôt que les snapshots
+    périodiques — un point par date `date_dernier_scan` distincte."""
+
+    def _write(self, path, rows):
+        pd.DataFrame(rows).to_csv(path, index=False)
+
+    def test_reports_insufficient_history_when_only_one_date_matches(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            master_path = os.path.join(tmp_dir, "master.csv")
+            archive_path = os.path.join(tmp_dir, "archive.csv")
+            self._write(master_path, {
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [900], 'surface': [45],
+                'prix_m2': [20], 'type_local': ['T2'], 'date_dernier_scan': ['2026-09-26'],
+            })
+            self._write(archive_path, {
+                'ville': [], 'quartier': [], 'prix': [], 'surface': [],
+                'prix_m2': [], 'type_local': [], 'date_dernier_scan': [],
+            })
+
+            historique, status = compute_price_history_from_listings("Gerland", "Tout", master_path, archive_path)
+
+            self.assertEqual(status, "insufficient_history")
+            self.assertEqual(historique, [])
+
+    def test_reports_insufficient_history_when_files_are_missing(self):
+        historique, status = compute_price_history_from_listings(
+            "Gerland", "Tout", "/no/such/master.csv", "/no/such/archive.csv",
+        )
+
+        self.assertEqual(status, "insufficient_history")
+        self.assertEqual(historique, [])
+
+    def test_combines_master_and_archive_into_one_chronological_history(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            master_path = os.path.join(tmp_dir, "master.csv")
+            archive_path = os.path.join(tmp_dir, "archive.csv")
+            # Archive : deux dates plus anciennes (annonces sorties du master).
+            self._write(archive_path, {
+                'ville': ['Lyon', 'Lyon', 'Lyon'],
+                'quartier': ['Gerland', 'Gerland', 'Gerland'],
+                'prix': [800, 850, 900],
+                'surface': [40, 40, 45],
+                'prix_m2': [20, 21.25, 20],
+                'type_local': ['T2', 'T2', 'T2'],
+                'date_dernier_scan': ['2026-08-12', '2026-08-12', '2026-09-24'],
+            })
+            # Master : dernier run seulement, une seule date (toujours la plus récente).
+            self._write(master_path, {
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [1000], 'surface': [45],
+                'prix_m2': [22.2], 'type_local': ['T2'], 'date_dernier_scan': ['2026-09-26'],
+            })
+
+            historique, status = compute_price_history_from_listings("Gerland", "Tout", master_path, archive_path)
+
+            self.assertEqual(status, "ok")
+            self.assertEqual([p["date"] for p in historique], ["2026-08-12", "2026-09-24", "2026-09-26"])
+            self.assertEqual(historique[0]["count"], 2)
+            self.assertEqual(historique[0]["prix_m2_moyen"], round((20 + 21.25) / 2, 0))
+            self.assertEqual(historique[2]["count"], 1)
+            self.assertEqual(historique[2]["prix_m2_moyen"], 22)
+
+    def test_skips_dates_without_any_matching_quartier(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            master_path = os.path.join(tmp_dir, "master.csv")
+            archive_path = os.path.join(tmp_dir, "archive.csv")
+            self._write(archive_path, {
+                'ville': ['Lyon', 'Lyon'], 'quartier': ['Confluence', 'Gerland'],
+                'prix': [800, 900], 'surface': [40, 45], 'prix_m2': [20, 20],
+                'type_local': ['T2', 'T2'], 'date_dernier_scan': ['2026-08-12', '2026-09-24'],
+            })
+            self._write(master_path, {
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [1000], 'surface': [45],
+                'prix_m2': [22.2], 'type_local': ['T2'], 'date_dernier_scan': ['2026-09-26'],
+            })
+
+            historique, status = compute_price_history_from_listings("Gerland", "Tout", master_path, archive_path)
+
+            self.assertEqual(status, "ok")
+            self.assertEqual([p["date"] for p in historique], ["2026-09-24", "2026-09-26"])
+
+    def test_filters_by_type_local(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            master_path = os.path.join(tmp_dir, "master.csv")
+            archive_path = os.path.join(tmp_dir, "archive.csv")
+            self._write(archive_path, {
+                'ville': ['Lyon', 'Lyon'], 'quartier': ['Gerland', 'Gerland'],
+                'prix': [800, 1500], 'surface': [40, 70], 'prix_m2': [20, 21.4],
+                'type_local': ['T2', 'T4'], 'date_dernier_scan': ['2026-08-12', '2026-08-12'],
+            })
+            self._write(master_path, {
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [900], 'surface': [45],
+                'prix_m2': [20], 'type_local': ['T2'], 'date_dernier_scan': ['2026-09-26'],
+            })
+
+            historique, status = compute_price_history_from_listings("Gerland", "T2", master_path, archive_path)
+
+            self.assertEqual(status, "ok")
+            self.assertEqual(len(historique), 2)
+            for point in historique:
+                self.assertEqual(point["count"], 1)
+
+    def test_scopes_quartier_search_to_the_given_ville(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            master_path = os.path.join(tmp_dir, "master.csv")
+            archive_path = os.path.join(tmp_dir, "archive.csv")
+            self._write(archive_path, {
+                'ville': ['Lyon'], 'quartier': ['Ainay'], 'prix': [800], 'surface': [40],
+                'prix_m2': [20], 'type_local': ['T2'], 'date_dernier_scan': ['2026-08-12'],
+            })
+            self._write(master_path, {
+                'ville': ['Lyon'], 'quartier': ['Ainay'], 'prix': [900], 'surface': [45],
+                'prix_m2': [20], 'type_local': ['T2'], 'date_dernier_scan': ['2026-09-26'],
+            })
+
+            historique, status = compute_price_history_from_listings(
+                "Ainay", "Tout", master_path, archive_path, ville="lille",
+            )
+
+            self.assertEqual(status, "ok")
+            self.assertEqual(historique, [])
+
+    def test_uses_prix_over_surface_when_prix_m2_column_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            master_path = os.path.join(tmp_dir, "master.csv")
+            archive_path = os.path.join(tmp_dir, "archive.csv")
+            self._write(archive_path, {
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [800], 'surface': [40],
+                'type_local': ['T2'], 'date_dernier_scan': ['2026-08-12'],
+            })
+            self._write(master_path, {
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [900], 'surface': [45],
+                'type_local': ['T2'], 'date_dernier_scan': ['2026-09-26'],
+            })
+
+            historique, status = compute_price_history_from_listings("Gerland", "Tout", master_path, archive_path)
+
+            self.assertEqual(status, "ok")
+            self.assertEqual(historique[0]["prix_m2_moyen"], 20)
+            self.assertEqual(historique[1]["prix_m2_moyen"], 20)
 
 
 if __name__ == "__main__":

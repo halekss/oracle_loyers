@@ -15,7 +15,7 @@ from services.predictor import build_feature_row, estimate_confidence, is_physic
 from services.annonce_detail import enrich_annonce_detail
 from services.cavaliers_factors import detail_cavaliers, summarize_cavaliers
 from services.cavaliers_radius import CavaliersRadiusService
-from services.price_history import compute_price_history
+from services.price_history import compute_price_history, compute_price_history_from_listings
 from services.quartier_search import resolve_quartier_filter
 from services.pdf_report import render_estimation_pdf
 from services import annonces_store, tile_proxy
@@ -192,6 +192,8 @@ def get_request_json():
 # Configuration des chemins
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'master_immo_final.csv')
+# ORA-182 : source alternative de /api/quartier-historique (source=listings).
+ARCHIVE_PATH = os.path.join(BASE_DIR, 'data', 'master_archive.csv')
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 SCRAPING_CONFIG_PATH = os.path.join(BASE_DIR, '..', 'scripts', 'scraping_config.json')
 CAVALIERS_PATH = os.path.join(BASE_DIR, 'data', 'cavaliers_all.csv')
@@ -748,10 +750,15 @@ def get_cavaliers():
 @app.route('/api/quartier-historique', methods=['POST'])
 def get_quartier_historique():
     """
-    Évolution du prix moyen/m² pour un quartier à travers les snapshots de
-    données enregistrés (ORA-72). Avec un seul snapshot (pas assez de recul
-    pour une tendance), renvoie status="insufficient_history" plutôt qu'un
-    historique trompeur à un seul point.
+    Évolution du prix moyen/m² pour un quartier, depuis les snapshots de
+    données enregistrés (ORA-72, défaut) ou depuis master + archive
+    (`source="listings"`, ORA-182 : plus dense car un point par date de scan
+    distincte plutôt que par snapshot périodique, mais sans visibilité sur
+    les variations de prix d'une annonce qui reste active dans le master —
+    cf. price_history.compute_price_history_from_listings). Dans les deux
+    cas, moins de 2 points de données au total renvoie
+    status="insufficient_history" plutôt qu'un historique trompeur à un seul
+    point.
     ---
     tags:
       - Quartier
@@ -771,6 +778,10 @@ def get_quartier_historique():
               type: string
               example: T2
               default: Tout
+            source:
+              type: string
+              enum: [snapshots, listings]
+              default: snapshots
     responses:
       200:
         description: >
@@ -792,22 +803,32 @@ def get_quartier_historique():
     quartier_input = payload.quartier.strip()
     type_filter = payload.type_local
 
-    historique, status = compute_price_history(
-        quartier_input, type_filter, SNAPSHOTS_DIR, SNAPSHOTS_MANIFEST_PATH, payload.ville
-    )
+    if payload.source == "listings":
+        historique, status = compute_price_history_from_listings(
+            quartier_input, type_filter, DATA_PATH, ARCHIVE_PATH, payload.ville
+        )
+    else:
+        historique, status = compute_price_history(
+            quartier_input, type_filter, SNAPSHOTS_DIR, SNAPSHOTS_MANIFEST_PATH, payload.ville
+        )
 
     if status == "insufficient_history":
+        # ORA-129 : cadence honnête, pas garantie — un nouveau snapshot est écrit
+        # à chaque run réussi du pipeline (visé hebdomadaire, voir README section
+        # "Versioning des snapshots de données"), mais rien n'alerte si un run est
+        # sauté, d'où "généralement" plutôt qu'une promesse ferme de délai. Même
+        # logique côté "listings" (ORA-182) : la profondeur vient des dates
+        # distinctes déjà archivées, pas d'un snapshot dédié.
+        detail = (
+            "un seul snapshot enregistré à ce jour" if payload.source != "listings"
+            else "une seule date de scan enregistrée à ce jour dans master/archive"
+        )
         return jsonify({
             "found": True,
             "status": "insufficient_history",
-            # ORA-129 : cadence honnête, pas garantie — un nouveau snapshot est écrit
-            # à chaque run réussi du pipeline (visé hebdomadaire, voir README section
-            # "Versioning des snapshots de données"), mais rien n'alerte si un run est
-            # sauté, d'où "généralement" plutôt qu'une promesse ferme de délai.
             "message": (
-                "Pas encore assez d'historique de données pour observer une tendance "
-                "(un seul snapshot enregistré à ce jour). De nouvelles données sont "
-                "généralement ajoutées chaque semaine."
+                f"Pas encore assez d'historique de données pour observer une tendance "
+                f"({detail}). De nouvelles données sont généralement ajoutées chaque semaine."
             ),
             "historique": [],
         })

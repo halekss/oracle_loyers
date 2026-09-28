@@ -30,6 +30,27 @@ class QuartierHistoriqueRouteTest(unittest.TestCase):
             self.assertIn("prix_m2_moyen", point)
             self.assertIn("count", point)
 
+    def test_route_returns_price_history_from_master_and_archive_when_source_is_listings(self):
+        """ORA-182 : source alternative aux snapshots — état actuel réel du
+        projet (master_immo_final.csv + master_archive.csv couvrent déjà
+        plusieurs dates de scan distinctes), assez de recul pour une tendance."""
+        client = app.app.test_client()
+
+        response = client.post(
+            "/api/quartier-historique",
+            json={"quartier": "Gerland", "type_local": "T2", "source": "listings"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["found"])
+        self.assertEqual(data["status"], "ok")
+        self.assertGreaterEqual(len(data["historique"]), 1)
+        for point in data["historique"]:
+            self.assertIn("date", point)
+            self.assertIn("prix_m2_moyen", point)
+            self.assertIn("count", point)
+
     def test_route_rejects_blank_quartier_with_400(self):
         client = app.app.test_client()
 

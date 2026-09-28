@@ -190,9 +190,12 @@ export const api = {
   },
 
   // Historique du prix moyen/m² par quartier — /api/quartier-historique
-  getQuartierHistorique: async (quartierName, typeLocal = 'Tout', ville = undefined) => {
+  // `source` (ORA-182) : "listings" (défaut, master + archive — un point par
+  // date de scan distincte) ou "snapshots" (ORA-72, périodiques mais parfois
+  // espacés de plusieurs semaines, cf. backend/data/snapshots/manifest.csv).
+  getQuartierHistorique: async (quartierName, typeLocal = 'Tout', ville = undefined, source = 'listings') => {
     try {
-      const payload = { quartier: quartierName, type_local: typeLocal };
+      const payload = { quartier: quartierName, type_local: typeLocal, source };
       if (ville) payload.ville = ville;
       const response = await fetchWithClassification(`${API_URL}/quartier-historique`, {
         ...apiFetchOptions(payload),
