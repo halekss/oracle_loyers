@@ -391,6 +391,11 @@ function App() {
       if (data.center?.lat && data.center?.lng) {
         setMapCenter([data.center.lat, data.center.lng, 15]);
       }
+      // ORA-186 : présélectionne le filtre quartier d'AnnoncesList sur le
+      // quartier scanné (même mécanisme que handleViewAnnonces/ORA-127), sans
+      // changer de vue cette fois — la liste est déjà filtrée quand
+      // l'utilisateur ouvre lui-même la vue Annonces.
+      setFocusedQuartier({ quartier: data.quartier_detecte, token: Date.now() });
 
       // Non bloquant : un échec ici ne doit pas gâcher un scan par ailleurs réussi.
       try {
