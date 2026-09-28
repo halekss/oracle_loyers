@@ -5,7 +5,12 @@
 // propre palette existante (ink-900/950) — seul le chrome de la feuille
 // elle-même adopte la nouvelle palette du rail, pour ne pas reskinner des
 // composants déjà stables/testés pour un gain visuel marginal.
-export default function PanelSheet({ id, overline, title, actions, children }) {
+// `titleRef` (ORA-196, optionnel) : permet à l'appelant de déplacer le focus
+// clavier sur le titre à l'ouverture d'une vue (ex. Fiche annonce) — le titre
+// est rendu focusable (`tabIndex={-1}`, jamais un arrêt naturel de tabulation)
+// uniquement quand `titleRef` est fourni, pour ne rien changer aux vues qui
+// n'en ont pas besoin.
+export default function PanelSheet({ id, overline, title, actions, children, titleRef }) {
   return (
     <section
       id={id}
@@ -20,7 +25,15 @@ export default function PanelSheet({ id, overline, title, actions, children }) {
                 {overline}
               </p>
             )}
-            {title && <h2 className="text-lg font-black mt-0.5 truncate text-ink">{title}</h2>}
+            {title && (
+              <h2
+                ref={titleRef}
+                tabIndex={titleRef ? -1 : undefined}
+                className="text-lg font-black mt-0.5 truncate text-ink focus:outline-none"
+              >
+                {title}
+              </h2>
+            )}
           </div>
           {actions && <div className="shrink-0 flex items-center gap-2">{actions}</div>}
         </header>

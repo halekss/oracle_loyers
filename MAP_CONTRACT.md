@@ -1,6 +1,6 @@
 # Contrat postMessage — Carte (React ↔ HTML généré)
 
-Ce document est la source de vérité des messages échangés via `postMessage` entre `frontend/src/components/MapComponent.jsx` (React) et la carte Folium statique embarquée en iframe (`frontend/public/data/map_pings_lyon_calques.html`, générée par `backend/scripts/generate_map.py`). Le contrat est **bidirectionnel** : React → iframe (piloter la carte : `FLY_TO`, `FLY_TO_BOUNDS`, `TOGGLE_LAYER`) et iframe → React (notifier une interaction utilisateur sur la carte : `ANNONCE_SELECT`). Tout nouveau type de message doit être ajouté ici, dans `MapComponent.jsx` **et** dans `generate_map.build_bridge_message_script` (React → iframe) ou dans le script de clic généré (iframe → React).
+Ce document est la source de vérité des messages échangés via `postMessage` entre `frontend/src/components/MapComponent.jsx` (React) et la carte Folium statique embarquée en iframe (`frontend/public/data/map_pings_lyon_calques.html`, générée par `backend/scripts/generate_map.py`). Le contrat est **bidirectionnel** : React → iframe (piloter la carte : `FLY_TO`, `FLY_TO_BOUNDS`, `TOGGLE_LAYER`, `HIGHLIGHT_LISTING`/`CLEAR_HIGHLIGHT`) et iframe → React (notifier une interaction utilisateur sur la carte : `LISTING_SELECTED`, `ANNONCE_CLICK`). Tout nouveau type de message doit être ajouté ici, dans `MapComponent.jsx` **et** dans `generate_map.build_bridge_message_script` (React → iframe) ou dans le popup/script de clic générés (iframe → React).
 
 L'iframe est servie depuis la même origine que l'application React (fichier statique de `frontend/public/data/`) : c'est un prérequis du contrat, pas un détail d'implémentation — c'est ce qui permet une vérification d'origine simple des deux côtés (voir Sécurité ci-dessous).
 
@@ -9,7 +9,7 @@ L'iframe est servie depuis la même origine que l'application React (fichier sta
 ## Sécurité (ORA-125)
 
 * **React → iframe** : `MapComponent.jsx` cible `window.location.origin` plutôt que `'*'` sur chaque `postMessage` ; `generate_map.build_bridge_message_script` (iframe) ignore tout message dont `e.origin !== window.location.origin`, avant même de lire `e.data.type`.
-* **iframe → React** : le script de clic généré (`build_immo_markers_click_script`) cible `window.location.origin` sur son `postMessage` ; `MapComponent.jsx` valide de même `e.origin === window.location.origin` avant de traiter un message reçu (`ANNONCE_SELECT`).
+* **iframe → React** : le popup (`build_immo_popup_html`) et le script de clic généré (`build_immo_markers_click_script`) ciblent `window.location.origin` sur leurs `postMessage` respectifs ; `MapComponent.jsx` valide `e.origin === window.location.origin` **et** `e.source === iframeRef.current.contentWindow` avant de traiter un message reçu (`LISTING_SELECTED`, `ANNONCE_CLICK`).
 
 Sans ces deux garde-fous, n'importe quelle page tierce capable d'obtenir une référence vers l'iframe (ou l'iframe elle-même si elle naviguait vers un contenu hostile) pourrait piloter la carte (recentrage, activation de calques) — surface d'attaque mineure ici, mais le principe reste : ne jamais faire confiance à un message sans vérifier son origine.
 
@@ -138,25 +138,57 @@ Les deux côtés lisent maintenant le même fichier JSON, source de vérité uni
 
 **Ajouter un calque** : ajouter une entrée dans `mapLayers.config.json` (les deux côtés la découvrent automatiquement — pas de section entièrement nouvelle du panneau nécessaire pour rester dans `transports`/`contexte`/`immobilier`) ; côté Python, il reste nécessaire d'écrire le code qui peuple ce `FeatureGroup`/`GeoJson` avec les données réelles du calque (`generate_map.py` ne peut pas deviner cette logique depuis la config).
 
-### `ANNONCE_SELECT` (iframe → React, ORA-185, remplace `ANNONCE_CLICK`/ORA-107)
+### `LISTING_SELECTED` (iframe → React, ORA-196, remplace `ANNONCE_SELECT`/ORA-185)
 
-Notifie React qu'un utilisateur a cliqué sur un marker d'annonce, pour ouvrir sa fiche dans le panneau droit (vue "Fiche" du rail) — sans jamais ouvrir d'onglet externe depuis la carte. Le clic n'est plus lié à un lien "Voir l'annonce" dans un popup (retiré, `build_immo_popup_html` supprimé) : ce lien vit désormais uniquement dans la fiche React (`AnnonceDetailContent.jsx`), avec son propre tracking (`useAnnonceDetail.js`, `api.logAnnonceClick`) indépendant de ce message — cliquer sur un marker n'est donc plus un clic sortant tracké, juste une sélection.
+Notifie React qu'un utilisateur a cliqué sur un marker d'annonce, pour ouvrir sa fiche dans le panneau droit (vue "Fiche" du rail) **en plus** du popup natif Leaflet de ce marker (`build_immo_popup_html`, ci-dessous) — les deux s'ouvrent sur le même clic, aucun des deux ne bloque l'autre.
 
-**Émis par** : `build_immo_markers_click_script`, un listener `click` Leaflet attaché à chaque `CircleMarker` d'annonce après le chargement de la page (même mécanisme que `build_cavalier_markers_script` pour référencer les variables Folium `circle_marker_xxx`), uniquement si l'id SQLite (`annonces.db`) de l'annonce a pu être résolu par URL (`annonces_store.get_annonce_by_url`) au moment de la génération de la carte — silencieux sinon (pas de régression bloquante si le store n'est pas encore synchronisé pour cette annonce).
+> ⚠️ **Historique (ORA-185/ORA-196)** : ORA-185 avait retiré le popup au clic (`build_immo_popup_html` supprimé) au profit de ce seul message — régression signalée (ORA-196) : l'ouverture de la fiche dépend de la résolution d'un id SQLite (`annonces.db`), qui échoue silencieusement pour une annonce pas encore synchronisée (dans les faits, la majorité du master à un instant donné). Sans popup de repli, cliquer sur ces markers ne produisait alors plus aucun effet visible. ORA-196 restaure le popup (qui, lui, ne dépend d'aucun id) et garde ce message en complément, pas en remplacement.
+
+**Émis par** : `build_immo_markers_click_script`, un listener `click` Leaflet attaché à chaque `CircleMarker` d'annonce après le chargement de la page (même mécanisme que `build_cavalier_markers_script` pour référencer les variables Folium `circle_marker_xxx`), uniquement si l'id SQLite (`annonces.db`) de l'annonce a pu être résolu par URL (`annonces_store.get_annonce_by_url`) au moment de la génération de la carte — silencieux sinon (le popup reste utilisable, seule l'ouverture de la fiche est indisponible pour ce marker). Le même script alimente `window.oracleImmoMarkersById` (id → marker Leaflet), utilisé par `HIGHLIGHT_LISTING` ci-dessous.
 
 ```json
-{ "type": "ANNONCE_SELECT", "id": 42 }
+{ "type": "LISTING_SELECTED", "id": 42 }
 ```
 
 * `id` : id SQLite de l'annonce dans `annonces.db`.
 
-**Traité par** : `MapComponent.jsx`, un listener `message` dédié (distinct du contrat React → iframe ci-dessus) qui appelle `onAnnonceClick(id)` (prop remontée par `App.jsx` vers `handleSelectAnnonce`, qui bascule la vue "Fiche" du rail) — aucun appel API depuis ce listener, la fiche se charge elle-même via `useAnnonceDetail(id)`.
+**Traité par** : `MapComponent.jsx`, un listener `message` dédié qui valide `e.origin === window.location.origin` **et** `e.source === iframeRef.current.contentWindow` (pas seulement l'origine — une iframe tierce de même origine ne devrait normalement pas exister ici, mais la vérification est gratuite) et que `e.data.id` est un entier positif, puis appelle `onAnnonceClick(id)` (prop remontée par `App.jsx` vers `handleSelectAnnonce`, qui bascule la vue "Fiche" du rail) — aucun appel API depuis ce listener, la fiche se charge elle-même via `useAnnonceDetail(id)`.
+
+### `ANNONCE_CLICK` (iframe → React, ORA-107)
+
+Notifie React qu'un utilisateur a cliqué sur le lien "Voir l'annonce" du popup d'un marker (ci-dessous), pour tracker le clic exactement comme `AnnonceCard.jsx` (`api.logAnnonceClick`). Le HTML statique généré par `generate_map.py` n'a pas connaissance de l'URL du backend (pas de build Vite, donc pas de `VITE_API_URL`) : plutôt que de dupliquer cette configuration dans du Python généré, la carte délègue l'appel API à React via ce message. Indépendant de `LISTING_SELECTED` ci-dessus : deux cibles DOM différentes du même marker (le lien du popup vs le marker lui-même), jamais déclenchés par le même clic physique.
+
+**Émis par** : l'attribut `onclick` du lien généré par `build_immo_popup_html`, uniquement si l'id SQLite de l'annonce a pu être résolu par URL au moment de la génération de la carte — silencieux sinon.
+
+```json
+{ "type": "ANNONCE_CLICK", "id": 42 }
+```
+
+* `id` : id SQLite de l'annonce dans `annonces.db`.
+
+**Traité par** : `MapComponent.jsx`, qui appelle `api.logAnnonceClick(id)` — même fonction que `AnnonceCard.jsx`, donc même comportement (fire-and-forget, ne bloque jamais la navigation vers l'annonce qui s'ouvre via le `<a href>` natif du popup, indépendant de ce message).
+
+### `HIGHLIGHT_LISTING` / `CLEAR_HIGHLIGHT` (React → iframe, ORA-196)
+
+Met en évidence (anneau blanc, 2px) le marker de l'annonce actuellement sélectionnée (vue "Fiche" ouverte) — que la sélection vienne d'un clic sur la carte (`LISTING_SELECTED` ci-dessus) ou d'un clic "Détails" dans la liste de l'onglet Annonces (`AnnoncesList.jsx`/`AnnonceCard.jsx`) : un seul état `selectedAnnonceId` (`App.jsx`), la carte n'est qu'un des deux déclencheurs possibles. `CLEAR_HIGHLIGHT` restaure le style normal — envoyé quand la fiche se ferme (retour à la vue précédente) ou change de vue, pas seulement quand `selectedAnnonceId` redevient `null`.
+
+**Émis par** : `MapComponent.jsx`, un `useEffect` sur la prop `highlightedAnnonceId` (calculée par `App.jsx` : `selectedAnnonceId` uniquement quand `activeView === 'fiche'`, sinon `null`).
+
+```json
+{ "type": "HIGHLIGHT_LISTING", "id": 42 }
+```
+
+```json
+{ "type": "CLEAR_HIGHLIGHT" }
+```
+
+**Traité par** : `build_bridge_message_script` → cherche `id` dans `window.oracleImmoMarkersById` (alimenté par `build_immo_markers_click_script`, donc uniquement pour les markers dont l'id a pu être résolu) et lui applique `setStyle({color: '#ffffff', weight: 2})` + `bringToFront()`, après avoir restauré le style par défaut (`COLORS['Immo']`, `weight: 1`) du marker précédemment mis en évidence (`window.__oracleHighlightedMarker`, un seul à la fois — même schéma que `window.__oracleFocusCircle` pour `SET_FOCUS`). Ne déplace jamais la carte (pas de `flyTo`/`panTo`) : la colonne carte (60% desktop) et le panneau droit (40%) sont deux colonnes côte à côte, jamais superposées dans la mise en page actuelle — rien ne recouvre jamais un marker à mettre en évidence.
 
 ## Rendu de la carte : légende, échelle, noms (ORA-165/166/183)
 
 Conventions visuelles de la carte générée — sans nouveau type de message `postMessage` :
 
-* **Annonces** : simples points verts (un `CircleMarker` par annonce, tooltip prix au survol, clic → `ANNONCE_SELECT` ci-dessus). Une version « pastille prix colorée par écart au loyer médian » avec regroupement des annonces à même adresse a été livrée puis retirée : la carte reste volontairement en points. Le popup au clic (type/prix/quartier/photo + lien "Voir l'annonce") a lui aussi été retiré (ORA-185) : cette fiche complète vit désormais dans le panneau droit React.
+* **Annonces** : simples points verts (un `CircleMarker` par annonce, tooltip prix au survol, clic → popup natif Leaflet type/prix/quartier/photo + lien "Voir l'annonce" **et** `LISTING_SELECTED` ci-dessus, qui ouvre en plus la fiche complète dans le panneau droit React). Une version « pastille prix colorée par écart au loyer médian » avec regroupement des annonces à même adresse a été livrée puis retirée : la carte reste volontairement en points. Le marker sélectionné (fiche ouverte) reste mis en évidence par un anneau blanc (`HIGHLIGHT_LISTING`/`CLEAR_HIGHLIGHT`).
 * **Légende** : entièrement React désormais (`frontend/src/components/MapLegend.jsx`, monté par `MapComponent.jsx`) — sections Annonces/Métro/Cavaliers/Rayon, une seule affichée par calque réellement actif, repliable. L'ancienne légende côté Folium (`build_legend_html`/`build_legend_and_scale_script`, groupes Annonces/Métro/Cavaliers & quartiers injectés dans le HTML généré) a été supprimée (ORA-183/v3) : elle se superposait à la légende React et masquait l'échelle métrique. `generate_map.py` n'injecte donc plus qu'un script d'échelle (`build_scale_script`), rien côté légende.
 * **Échelle** métrique (`L.control.scale`, `build_scale_script`) et classes `oracle-z13`/`oracle-z14` sur `<body>` : les labels de quartiers (capitales, centre des annonces du quartier) apparaissent dès le zoom 13, les noms de stations de métro dès le zoom 14.
 

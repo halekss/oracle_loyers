@@ -1,5 +1,12 @@
+import AnnonceIllustration from './AnnonceIllustration';
+
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
 const formatM2 = (p) => (p != null ? p.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) : '--');
+const formatDate = (d) => {
+  if (!d) return null;
+  const parsed = new Date(d);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
 
 const CATEGORY_STYLES = {
   Vice: 'text-red-400',
@@ -18,17 +25,22 @@ export default function AnnonceDetailContent({
   safeUrl, source, favorite, prixM2, ecart,
   onToggleFavorite, onVoirAnnonce, onExportPdf,
 }) {
+  // ORA-196 : photo réelle de l'annonce (hotlink, décision légale révisée —
+  // voir LEGAL_DECISIONS.md, ORA-94/ORA-133/ORA-196), repli automatique sur
+  // un pictogramme générique via AnnonceIllustration si absente/cassée.
+  const illustrationAlt = annonce
+    ? `Photo de l'annonce ${[annonce.type_local, annonce.quartier || annonce.ville].filter(Boolean).join(' à ')}`.trim()
+    : '';
+
   return (
     <>
-      {/* ORA-133/légal : pictogramme générique, jamais une photo du bien */}
-      <div className="h-32 flex flex-col items-center justify-center gap-1.5 bg-ink-800 text-slate-600 border-b border-ink-700">
-        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-          <circle cx="9" cy="9" r="2"></circle>
-          <path d="m21 15-5-5L5 21"></path>
-        </svg>
-        <span className="text-[10px] uppercase tracking-widest font-bold">Photo de l'annonce</span>
-      </div>
+      <AnnonceIllustration
+        titre={annonce?.titre}
+        surface={annonce?.surface}
+        image={annonce?.images?.[0]}
+        alt={illustrationAlt}
+        className="w-full aspect-video border-b border-ink-700"
+      />
 
       <div className="p-4 space-y-3">
         {loading && (
@@ -59,8 +71,9 @@ export default function AnnonceDetailContent({
             </div>
 
             <p className="text-xs text-slate-500">
-              Appartement · {annonce.ville}{annonce.quartier ? ` · ${annonce.quartier}` : ''}
+              {annonce.type_local || 'Bien'} · {annonce.ville}{annonce.quartier ? ` · ${annonce.quartier}` : ''}
               {source ? ` · publié sur ${source}` : ''}
+              {formatDate(annonce.date_scraping) ? ` · vu le ${formatDate(annonce.date_scraping)}` : ''}
             </p>
 
             <div className="grid grid-cols-3 gap-2 pt-1">

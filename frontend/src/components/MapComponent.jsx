@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getApiBaseUrl } from "../services/api";
+import { api, getApiBaseUrl } from "../services/api";
 import { layersByGroup } from "../services/mapLayers";
 import { useLayerCounts } from "../hooks/useLayerCounts";
 import MapLegend from "./MapLegend";
@@ -87,6 +87,11 @@ function MapComponent({
   onToggleLayer,
   onAnnonceClick,
   focus,
+  // ORA-196 : id de l'annonce à mettre en évidence (anneau blanc) sur la
+  // carte — calculé par App.jsx (selectedAnnonceId uniquement quand la vue
+  // "Fiche" est active), `null` sinon. Un seul état `selectedAnnonceId` côté
+  // App : ce composant ne fait qu'appliquer l'anneau, jamais ne le décide.
+  highlightedAnnonceId = null,
 }) {
   const [mapUrl, setMapUrl] = useState(
     () => `/data/map_pings_${ville}_calques.html?t=${Date.now()}`,
@@ -164,22 +169,58 @@ function MapComponent({
     );
   }, [bounds, ville]);
 
-  // ORA-185 : réception du seul message iframe → React du contrat
-  // (ANNONCE_SELECT, MAP_CONTRACT.md) — clic sur un marker carte, ouvre la
-  // fiche du panneau droit (onAnnonceClick -> App.handleSelectAnnonce). Ce
-  // n'est pas un clic sortant vers le site source (celui-ci ne part que du
-  // bouton "Voir l'annonce" de la fiche, déjà tracké par
-  // useAnnonceDetail.js) : pas d'appel api.logAnnonceClick ici.
+  // ORA-196 : réception des messages iframe → React du contrat
+  // (MAP_CONTRACT.md). Vérifie l'origine ET la source (`e.source` doit être
+  // la fenêtre de CETTE iframe précisément, pas seulement une iframe de même
+  // origine) avant de traiter quoi que ce soit — puis valide la forme du
+  // payload plutôt que de faire confiance à `e.data.id` tel quel.
+  // - LISTING_SELECTED (clic sur un marker carte) : ouvre la fiche du
+  //   panneau droit (onAnnonceClick -> App.handleSelectAnnonce). Pas un clic
+  //   sortant vers le site source (celui-ci ne part que du bouton "Voir
+  //   l'annonce" de la fiche ou du popup, cf. ANNONCE_CLICK ci-dessous) :
+  //   pas d'appel api.logAnnonceClick ici.
+  // - ANNONCE_CLICK (clic sur le lien "Voir l'annonce" du popup carte,
+  //   ORA-107, restauré en ORA-196) : tracké exactement comme AnnonceCard.jsx.
   useEffect(() => {
+    const isPositiveInteger = (value) => Number.isInteger(value) && value > 0;
+
     const handleMessage = (e) => {
       if (e.origin !== window.location.origin) return;
-      if (e.data?.type !== "ANNONCE_SELECT") return;
-      onAnnonceClick?.(e.data.id);
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
+      if (!isPositiveInteger(e.data?.id)) return;
+
+      if (e.data.type === "LISTING_SELECTED") {
+        onAnnonceClick?.(e.data.id);
+      } else if (e.data.type === "ANNONCE_CLICK") {
+        api.logAnnonceClick(e.data.id).catch((err) => {
+          console.error("❌ Erreur tracking clic annonce (carte) :", err);
+        });
+      }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ORA-196 : anneau blanc du marker sélectionné — suit `highlightedAnnonceId`
+  // (App.jsx), quelle que soit l'origine de la sélection (clic carte ou liste
+  // Annonces) : un seul état `selectedAnnonceId`, la carte n'est qu'un des
+  // deux déclencheurs possibles. `CLEAR_HIGHLIGHT` dès que l'id redevient
+  // `null` (fiche fermée ou vue changée, cf. App.jsx).
+  useEffect(() => {
+    if (!iframeRef.current || !iframeRef.current.contentWindow) return;
+    if (highlightedAnnonceId != null) {
+      iframeRef.current.contentWindow.postMessage(
+        { type: "HIGHLIGHT_LISTING", id: highlightedAnnonceId },
+        window.location.origin,
+      );
+    } else {
+      iframeRef.current.contentWindow.postMessage(
+        { type: "CLEAR_HIGHLIGHT" },
+        window.location.origin,
+      );
+    }
+  }, [highlightedAnnonceId]);
 
   const sendLayerCommand = (layerKey, show) => {
     if (iframeRef.current && iframeRef.current.contentWindow) {

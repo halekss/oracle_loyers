@@ -2,73 +2,12 @@ import React, { useState } from 'react';
 import { api } from '../services/api';
 import { sanitizeListingUrl } from '../services/sanitizeUrl';
 import AnnonceDetailModal from './AnnonceDetailModal';
+import AnnonceIllustration from './AnnonceIllustration';
 import { useFavorites } from '../hooks/useFavorites';
 import { BAND_BADGE_CLASSES, MARKET_BANDS, ecartPct, marketBand } from '../services/marketBand';
 import { getTypeCategory, deriveSource } from '../services/annonceType';
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : '--');
-
-const ILLUSTRATION_BY_CATEGORY = {
-  'Studio/T1': 'from-sky-900/50 to-slate-900 text-sky-400',
-  'T2': 'from-emerald-900/50 to-slate-900 text-emerald-400',
-  'T3': 'from-amber-900/50 to-slate-900 text-amber-400',
-  'Grand (T4+)': 'from-rose-900/50 to-slate-900 text-rose-400',
-};
-const DEFAULT_ILLUSTRATION_CLASSES = 'from-slate-800 to-slate-900 text-slate-500';
-
-// Photo de l'annonce en hotlink (URL du site source, jamais téléchargée ni
-// re-servie — même posture que les popups de la carte, cf. LEGAL_DECISIONS.md,
-// ORA-94/ORA-134), même hauteur que l'illustration. Repli sur l'illustration
-// générique (icône SVG maison) sans photo, avec une URL non http(s), ou si
-// l'image ne se charge pas.
-function AnnonceIllustration({ titre, surface, image }) {
-  const [broken, setBroken] = useState(false);
-  const category = getTypeCategory(titre, surface);
-  const classes = ILLUSTRATION_BY_CATEGORY[category] || DEFAULT_ILLUSTRATION_CLASSES;
-  const photo = broken ? null : sanitizeListingUrl(image);
-
-  if (photo) {
-    return (
-      <div className="relative h-20 bg-slate-900">
-        <img
-          src={photo}
-          alt=""
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setBroken(true)}
-          className="w-full h-full object-cover"
-        />
-        {category && (
-          <span className="absolute bottom-1 left-1 text-[8px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded bg-slate-900/75 text-white">
-            {category}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className={`h-20 flex flex-col items-center justify-center gap-1 bg-gradient-to-br ${classes}`}>
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="w-7 h-7"
-        aria-hidden="true"
-      >
-        <path d="M3 11.5 12 4l9 7.5" />
-        <path d="M5.5 10v9.5h13V10" />
-        <path d="M10 19.5v-6h4v6" />
-      </svg>
-      {category && (
-        <span className="text-[8px] uppercase tracking-widest font-bold opacity-80">{category}</span>
-      )}
-    </div>
-  );
-}
 
 // `referencePrixM2` (optionnel, ORA-173) : €/m² moyen du quartier scanné
 // (App.jsx, `result.quartierPrixM2` — ORA-171), pour le badge d'écart de la
