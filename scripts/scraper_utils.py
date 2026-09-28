@@ -71,7 +71,8 @@ def load_site_config(site_key, config_path=CONFIG_PATH):
     with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
 
-    ville_active = config["ville_active"]
+    # SCRAPING_VILLE (run_scrapers.sh) : enchaîner les villes sans réécrire la config.
+    ville_active = os.environ.get("SCRAPING_VILLE") or config["ville_active"]
     ville_config = config["villes"][ville_active]
     site_config = ville_config[site_key]
 
