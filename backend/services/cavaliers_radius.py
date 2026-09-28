@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from services.cavaliers_factors import ABSENCE_PHRASES, CATEGORY_LABELS, CATEGORY_ORDER, phrase_for
+from services.cavaliers_factors import CATEGORY_LABELS, CATEGORY_ORDER, absence_phrase_for, phrase_for
 from services.predictor import haversine_distance_m
 
 # Seuls rayons acceptés par /api/cavaliers — le sélecteur front (300 m/
@@ -145,7 +145,7 @@ class CavaliersRadiusService:
                 empty_message = (
                     f"Rien dans le rayon. {nearest_poi_display} les plus proches à {nearest_dist_m} m."
                 )
-                phrase = ABSENCE_PHRASES[category].format(rayon=radius_m)
+                phrase = absence_phrase_for(category, rayon=radius_m)
             else:
                 best = items[0]
                 phrase = phrase_for(category, best['poi_raw'], best['count'], best['dist_m'], rayon=radius_m)

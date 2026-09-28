@@ -657,7 +657,7 @@ def get_quartier_stats():
                 "max": round(float(filtered_df['prix'].max()), 0),
             },
             "center": center,
-            "facteurs": summarize_cavaliers(filtered_df),
+            "facteurs": summarize_cavaliers(filtered_df, quartier=nom_officiel),
             # ORA-172 : détail complet (tous les sous-types, pas juste le plus
             # présent) pour le panneau "Les 4 Cavaliers · rayon 500 m".
             "cavaliers_detail": detail_cavaliers(filtered_df),
