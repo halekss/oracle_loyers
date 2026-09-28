@@ -1,8 +1,11 @@
 import React from "react";
 
-// ORA-72 : évolution du prix moyen/m² par quartier à travers les snapshots
-// de données disponibles (backend/data/snapshots/). Tant qu'il n'y a pas
-// assez d'historique (un seul snapshot enregistré), le backend renvoie
+// ORA-72/ORA-182 : évolution du prix moyen/m² par quartier, un point par
+// date de scan distincte trouvée dans master + archive par défaut (plus
+// dense), ou par snapshot périodique (backend/data/snapshots/) si l'appelant
+// passe `source: 'snapshots'` à api.getQuartierHistorique — ce composant
+// affiche `historique`/`status` tels quels, sans connaître la source. Tant
+// qu'il n'y a pas assez d'historique (moins de 2 points), le backend renvoie
 // status="insufficient_history" plutôt qu'une fausse tendance à un point —
 // affiché honnêtement ici plutôt que masqué.
 //

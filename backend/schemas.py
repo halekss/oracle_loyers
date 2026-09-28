@@ -41,6 +41,12 @@ class QuartierStatsRequestSchema(BaseModel):
     # borner la recherche à cette ville et permettre une recherche par nom
     # de ville entière plutôt que par quartier (cf. app.py get_quartier_stats).
     ville: Optional[str] = None
+    # ORA-182 : source de l'historique pour /api/quartier-historique
+    # uniquement (ignoré par /api/quartier-stats) — "snapshots" (défaut,
+    # ORA-72) ou "listings" (master + archive, plus dense mais sans visibilité
+    # sur les variations de prix d'une annonce qui reste active, cf.
+    # price_history.compute_price_history_from_listings).
+    source: Optional[str] = "snapshots"
 
     @field_validator("quartier")
     @classmethod
