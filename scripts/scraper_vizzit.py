@@ -54,9 +54,6 @@ DETAIL_SELECTORS = [
     "span[class*='detail']",
     "[class*='feature']",
 ]
-# Vérifié sur le DOM réel (2026-09) : `.description-text` porte la description ; les anciens
-# `p.description__text` et `[class*='desc']` (qui captait `feature-desc` = "France Lille") sont retirés.
-DESC_SELECTORS = [".description-text", ".main-description"]
 # Vérifié sur le DOM réel (2026-09) : les photos de l'annonce sont sous `/Photos/` ; `picture img`
 # et `img` seuls captaient le logo Vizzit (ou un pixel base64) -> retirés, pas de repli générique.
 IMAGE_SELECTORS = [
