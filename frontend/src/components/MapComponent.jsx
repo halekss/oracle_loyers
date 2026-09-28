@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { api, getApiBaseUrl } from "../services/api";
+import { getApiBaseUrl } from "../services/api";
 import { layersByGroup } from "../services/mapLayers";
 import { useLayerCounts } from "../hooks/useLayerCounts";
 import MapLegend from "./MapLegend";
@@ -164,16 +164,16 @@ function MapComponent({
     );
   }, [bounds, ville]);
 
-  // ORA-107 : réception du seul message iframe → React du contrat
-  // (ANNONCE_CLICK, MAP_CONTRACT.md) — clic sur un marker carte, tracké
-  // exactement comme AnnonceCard.jsx (même api.logAnnonceClick).
+  // ORA-185 : réception du seul message iframe → React du contrat
+  // (ANNONCE_SELECT, MAP_CONTRACT.md) — clic sur un marker carte, ouvre la
+  // fiche du panneau droit (onAnnonceClick -> App.handleSelectAnnonce). Ce
+  // n'est pas un clic sortant vers le site source (celui-ci ne part que du
+  // bouton "Voir l'annonce" de la fiche, déjà tracké par
+  // useAnnonceDetail.js) : pas d'appel api.logAnnonceClick ici.
   useEffect(() => {
     const handleMessage = (e) => {
       if (e.origin !== window.location.origin) return;
-      if (e.data?.type !== "ANNONCE_CLICK") return;
-      api.logAnnonceClick(e.data.id).catch((err) => {
-        console.error("❌ Erreur tracking clic annonce (carte) :", err);
-      });
+      if (e.data?.type !== "ANNONCE_SELECT") return;
       onAnnonceClick?.(e.data.id);
     };
     window.addEventListener("message", handleMessage);

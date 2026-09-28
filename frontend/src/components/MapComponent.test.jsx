@@ -3,15 +3,6 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../services/api', async () => {
-  const actual = await vi.importActual('../services/api');
-  return {
-    ...actual,
-    api: { logAnnonceClick: vi.fn() },
-  };
-});
-
-import { api } from '../services/api';
 import MapComponent from './MapComponent';
 import mapLayersConfig from '../config/mapLayers.config.json';
 import { defaultLayerVisibility } from '../services/mapLayers';
@@ -33,7 +24,6 @@ function ControlledMapComponent(props) {
 describe('MapComponent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.logAnnonceClick.mockResolvedValue({ logged: true, views: 1 });
   });
 
   it('renders an iframe pointing to the static generated map', () => {
@@ -255,26 +245,28 @@ describe('MapComponent', () => {
     );
   });
 
-  it('logs the click when the iframe reports an ANNONCE_CLICK from the same origin (ORA-107)', () => {
-    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+  it('calls onAnnonceClick when the iframe reports an ANNONCE_SELECT from the same origin (ORA-185)', () => {
+    const onAnnonceClick = vi.fn();
+    render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'ANNONCE_CLICK', id: 42 },
+      data: { type: 'ANNONCE_SELECT', id: 42 },
       origin: window.location.origin,
     }));
 
-    expect(api.logAnnonceClick).toHaveBeenCalledWith(42);
+    expect(onAnnonceClick).toHaveBeenCalledWith(42);
   });
 
-  it('ignores an ANNONCE_CLICK message from a different origin (ORA-107)', () => {
-    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+  it('ignores an ANNONCE_SELECT message from a different origin (ORA-185)', () => {
+    const onAnnonceClick = vi.fn();
+    render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'ANNONCE_CLICK', id: 42 },
+      data: { type: 'ANNONCE_SELECT', id: 42 },
       origin: 'https://attacker.example.com',
     }));
 
-    expect(api.logAnnonceClick).not.toHaveBeenCalled();
+    expect(onAnnonceClick).not.toHaveBeenCalled();
   });
 
   it('renders one toggle per layer declared in the shared mapLayers.config.json (ORA-130)', () => {
@@ -312,14 +304,15 @@ describe('MapComponent', () => {
   });
 
   it('ignores unrelated message events', () => {
-    render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+    const onAnnonceClick = vi.fn();
+    render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
 
     window.dispatchEvent(new MessageEvent('message', {
       data: { type: 'SOME_OTHER_MESSAGE' },
       origin: window.location.origin,
     }));
 
-    expect(api.logAnnonceClick).not.toHaveBeenCalled();
+    expect(onAnnonceClick).not.toHaveBeenCalled();
   });
 
   describe('panneau "Les 4 Cavaliers" et compteurs (ORA-172)', () => {
@@ -408,17 +401,6 @@ describe('MapComponent', () => {
       );
     });
 
-    it('calls onAnnonceClick when the iframe reports an ANNONCE_CLICK, in addition to tracking it', () => {
-      const onAnnonceClick = vi.fn();
-      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
-
-      window.dispatchEvent(new MessageEvent('message', {
-        data: { type: 'ANNONCE_CLICK', id: 42 },
-        origin: window.location.origin,
-      }));
-
-      expect(onAnnonceClick).toHaveBeenCalledWith(42);
-    });
   });
 
   describe('focus rayon des cavaliers (vue "Calques", sélecteur de rayon)', () => {

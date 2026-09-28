@@ -129,68 +129,46 @@ class SanitizeListingUrlTest(unittest.TestCase):
         self.assertIsNone(generate_map.sanitize_listing_url("   "))
 
 
-class BuildImmoPopupHtmlTest(unittest.TestCase):
-    def test_includes_price_type_and_quartier(self):
-        html_out = generate_map.build_immo_popup_html(
-            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/6",
-        )
+class BuildImmoMarkersClickScriptTest(unittest.TestCase):
+    """ORA-185 : le clic sur un marker d'annonce n'ouvre plus un popup avec un
+    lien externe (ancien build_immo_popup_html, retiré) mais notifie React via
+    ANNONCE_SELECT pour ouvrir la fiche du panneau droit — même mécanisme que
+    build_cavalier_markers_script pour référencer les variables Folium."""
 
-        self.assertIn("T2", html_out)
-        self.assertIn("750", html_out)
-        self.assertIn("Perrache", html_out)
+    def test_binds_a_click_listener_per_entry_sending_annonce_select(self):
+        script = generate_map.build_immo_markers_click_script([
+            {"js_var": "circle_marker_abc", "id": 42},
+        ])
 
-    def test_renders_link_when_url_present(self):
-        html_out = generate_map.build_immo_popup_html(
-            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/7",
-        )
+        self.assertIn("circle_marker_abc.on('click'", script)
+        self.assertIn("ANNONCE_SELECT", script)
+        self.assertIn("id: 42", script)
+        self.assertIn("window.location.origin", script)
 
-        self.assertIn("https://example.com/annonce/7", html_out)
-        self.assertIn("<a ", html_out)
+    def test_binds_one_listener_per_entry(self):
+        script = generate_map.build_immo_markers_click_script([
+            {"js_var": "circle_marker_abc", "id": 1},
+            {"js_var": "circle_marker_def", "id": 2},
+        ])
 
-    def test_never_renders_an_image_tag(self):
-        # Décision légale ORA-94 (LEGAL_DECISIONS.md) : aucune photo scrapée ne
-        # doit jamais être reproduite, même si les données en fournissaient une.
-        html_out = generate_map.build_immo_popup_html(
-            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/7",
-        )
+        self.assertIn("circle_marker_abc.on('click'", script)
+        self.assertIn("circle_marker_def.on('click'", script)
 
-        self.assertNotIn("<img", html_out)
+    def test_returns_empty_string_for_no_entries(self):
+        script = generate_map.build_immo_markers_click_script([])
 
-    def test_omits_link_when_no_url(self):
-        html_out = generate_map.build_immo_popup_html(
-            type_local="T2", prix="750", quartier="Perrache", listing_url=None,
-        )
+        self.assertEqual(script, "")
 
-        self.assertNotIn("<a ", html_out)
+    def test_never_opens_an_external_tab(self):
+        """Le popup retiré ouvrait le site source dans un nouvel onglet
+        (`<a target='_blank'>`) en plus de basculer la vue Fiche — ce script
+        ne fait plus que notifier React, sans jamais naviguer lui-même."""
+        script = generate_map.build_immo_markers_click_script([
+            {"js_var": "circle_marker_abc", "id": 42},
+        ])
 
-    def test_escapes_hostile_quartier_value(self):
-        html_out = generate_map.build_immo_popup_html(
-            type_local="T2", prix="750", quartier="<script>alert(1)</script>", listing_url=None,
-        )
-
-        self.assertNotIn("<script>alert(1)</script>", html_out)
-
-    def test_tracks_the_click_via_postmessage_when_annonce_id_is_known(self):
-        """ORA-107 : parité avec AnnonceCard.jsx (api.logAnnonceClick), sans
-        dupliquer la connaissance de l'URL backend dans le HTML statique
-        généré — la carte notifie le parent React via le contrat postMessage
-        (ORA-125/126), qui appelle le même api.logAnnonceClick que React."""
-        html_out = generate_map.build_immo_popup_html(
-            type_local="T2", prix="750", quartier="Perrache",
-            listing_url="https://example.com/annonce/7", annonce_id=42,
-        )
-
-        self.assertIn("ANNONCE_CLICK", html_out)
-        self.assertIn("id: 42", html_out)
-        self.assertIn("window.location.origin", html_out)
-
-    def test_omits_click_tracking_when_annonce_id_is_unknown(self):
-        html_out = generate_map.build_immo_popup_html(
-            type_local="T2", prix="750", quartier="Perrache",
-            listing_url="https://example.com/annonce/7", annonce_id=None,
-        )
-
-        self.assertNotIn("ANNONCE_CLICK", html_out)
+        self.assertNotIn("target=", script)
+        self.assertNotIn("<a ", script)
 
 
 class BuildMetroStationPopupHtmlTest(unittest.TestCase):
