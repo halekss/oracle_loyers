@@ -1,6 +1,6 @@
 # Contrat postMessage — Carte (React ↔ HTML généré)
 
-Ce document est la source de vérité des messages échangés via `postMessage` entre `frontend/src/components/MapComponent.jsx` (React) et la carte Folium statique embarquée en iframe (`frontend/public/data/map_pings_lyon_calques.html`, générée par `backend/scripts/generate_map.py`). Le contrat est **bidirectionnel** : React → iframe (piloter la carte : `FLY_TO`, `FLY_TO_BOUNDS`, `TOGGLE_LAYER`) et iframe → React (notifier une interaction utilisateur sur la carte : `ANNONCE_CLICK`). Tout nouveau type de message doit être ajouté ici, dans `MapComponent.jsx` **et** dans `generate_map.build_bridge_message_script` (React → iframe) ou dans le popup HTML généré (iframe → React).
+Ce document est la source de vérité des messages échangés via `postMessage` entre `frontend/src/components/MapComponent.jsx` (React) et la carte Folium statique embarquée en iframe (`frontend/public/data/map_pings_lyon_calques.html`, générée par `backend/scripts/generate_map.py`). Le contrat est **bidirectionnel** : React → iframe (piloter la carte : `FLY_TO`, `FLY_TO_BOUNDS`, `TOGGLE_LAYER`) et iframe → React (notifier une interaction utilisateur sur la carte : `ANNONCE_SELECT`). Tout nouveau type de message doit être ajouté ici, dans `MapComponent.jsx` **et** dans `generate_map.build_bridge_message_script` (React → iframe) ou dans le script de clic généré (iframe → React).
 
 L'iframe est servie depuis la même origine que l'application React (fichier statique de `frontend/public/data/`) : c'est un prérequis du contrat, pas un détail d'implémentation — c'est ce qui permet une vérification d'origine simple des deux côtés (voir Sécurité ci-dessous).
 
@@ -9,7 +9,7 @@ L'iframe est servie depuis la même origine que l'application React (fichier sta
 ## Sécurité (ORA-125)
 
 * **React → iframe** : `MapComponent.jsx` cible `window.location.origin` plutôt que `'*'` sur chaque `postMessage` ; `generate_map.build_bridge_message_script` (iframe) ignore tout message dont `e.origin !== window.location.origin`, avant même de lire `e.data.type`.
-* **iframe → React** : le popup HTML généré (`build_immo_popup_html`) cible `window.location.origin` sur son `postMessage` ; `MapComponent.jsx` valide de même `e.origin === window.location.origin` avant de traiter un message reçu (`ANNONCE_CLICK`).
+* **iframe → React** : le script de clic généré (`build_immo_markers_click_script`) cible `window.location.origin` sur son `postMessage` ; `MapComponent.jsx` valide de même `e.origin === window.location.origin` avant de traiter un message reçu (`ANNONCE_SELECT`).
 
 Sans ces deux garde-fous, n'importe quelle page tierce capable d'obtenir une référence vers l'iframe (ou l'iframe elle-même si elle naviguait vers un contenu hostile) pourrait piloter la carte (recentrage, activation de calques) — surface d'attaque mineure ici, mais le principe reste : ne jamais faire confiance à un message sans vérifier son origine.
 
@@ -138,25 +138,25 @@ Les deux côtés lisent maintenant le même fichier JSON, source de vérité uni
 
 **Ajouter un calque** : ajouter une entrée dans `mapLayers.config.json` (les deux côtés la découvrent automatiquement — pas de section entièrement nouvelle du panneau nécessaire pour rester dans `transports`/`contexte`/`immobilier`) ; côté Python, il reste nécessaire d'écrire le code qui peuple ce `FeatureGroup`/`GeoJson` avec les données réelles du calque (`generate_map.py` ne peut pas deviner cette logique depuis la config).
 
-### `ANNONCE_CLICK` (iframe → React, ORA-107)
+### `ANNONCE_SELECT` (iframe → React, ORA-185, remplace `ANNONCE_CLICK`/ORA-107)
 
-Notifie React qu'un utilisateur a cliqué sur le lien "Voir l'annonce" d'un popup marker, pour tracker le clic exactement comme `AnnonceCard.jsx` (`api.logAnnonceClick`). Le HTML statique généré par `generate_map.py` n'a pas connaissance de l'URL du backend (pas de build Vite, donc pas de `VITE_API_URL`) : plutôt que de dupliquer cette configuration dans du Python généré, la carte délègue l'appel API à React via ce message.
+Notifie React qu'un utilisateur a cliqué sur un marker d'annonce, pour ouvrir sa fiche dans le panneau droit (vue "Fiche" du rail) — sans jamais ouvrir d'onglet externe depuis la carte. Le clic n'est plus lié à un lien "Voir l'annonce" dans un popup (retiré, `build_immo_popup_html` supprimé) : ce lien vit désormais uniquement dans la fiche React (`AnnonceDetailContent.jsx`), avec son propre tracking (`useAnnonceDetail.js`, `api.logAnnonceClick`) indépendant de ce message — cliquer sur un marker n'est donc plus un clic sortant tracké, juste une sélection.
 
-**Émis par** : l'attribut `onclick` du lien généré par `build_immo_popup_html`, uniquement si l'id SQLite (`annonces.db`) de l'annonce a pu être résolu par URL (`annonces_store.get_annonce_by_url`) au moment de la génération de la carte — silencieux sinon (pas de régression bloquante si le store n'est pas encore synchronisé pour cette annonce).
+**Émis par** : `build_immo_markers_click_script`, un listener `click` Leaflet attaché à chaque `CircleMarker` d'annonce après le chargement de la page (même mécanisme que `build_cavalier_markers_script` pour référencer les variables Folium `circle_marker_xxx`), uniquement si l'id SQLite (`annonces.db`) de l'annonce a pu être résolu par URL (`annonces_store.get_annonce_by_url`) au moment de la génération de la carte — silencieux sinon (pas de régression bloquante si le store n'est pas encore synchronisé pour cette annonce).
 
 ```json
-{ "type": "ANNONCE_CLICK", "id": 42 }
+{ "type": "ANNONCE_SELECT", "id": 42 }
 ```
 
 * `id` : id SQLite de l'annonce dans `annonces.db`.
 
-**Traité par** : `MapComponent.jsx`, un listener `message` dédié (distinct du contrat React → iframe ci-dessus) qui appelle `api.logAnnonceClick(id)` — même fonction que `AnnonceCard.jsx`, donc même comportement (fire-and-forget, ne bloque jamais la navigation vers l'annonce qui s'ouvre via le `<a href>` natif du popup, indépendant de ce message).
+**Traité par** : `MapComponent.jsx`, un listener `message` dédié (distinct du contrat React → iframe ci-dessus) qui appelle `onAnnonceClick(id)` (prop remontée par `App.jsx` vers `handleSelectAnnonce`, qui bascule la vue "Fiche" du rail) — aucun appel API depuis ce listener, la fiche se charge elle-même via `useAnnonceDetail(id)`.
 
 ## Rendu de la carte : légende, échelle, noms (ORA-165/166/183)
 
 Conventions visuelles de la carte générée — sans nouveau type de message `postMessage` :
 
-* **Annonces** : simples points verts (un `CircleMarker` par annonce, popup au clic, tooltip au survol). Une version « pastille prix colorée par écart au loyer médian » avec regroupement des annonces à même adresse a été livrée puis retirée : la carte reste volontairement en points.
+* **Annonces** : simples points verts (un `CircleMarker` par annonce, tooltip prix au survol, clic → `ANNONCE_SELECT` ci-dessus). Une version « pastille prix colorée par écart au loyer médian » avec regroupement des annonces à même adresse a été livrée puis retirée : la carte reste volontairement en points. Le popup au clic (type/prix/quartier/photo + lien "Voir l'annonce") a lui aussi été retiré (ORA-185) : cette fiche complète vit désormais dans le panneau droit React.
 * **Légende** : entièrement React désormais (`frontend/src/components/MapLegend.jsx`, monté par `MapComponent.jsx`) — sections Annonces/Métro/Cavaliers/Rayon, une seule affichée par calque réellement actif, repliable. L'ancienne légende côté Folium (`build_legend_html`/`build_legend_and_scale_script`, groupes Annonces/Métro/Cavaliers & quartiers injectés dans le HTML généré) a été supprimée (ORA-183/v3) : elle se superposait à la légende React et masquait l'échelle métrique. `generate_map.py` n'injecte donc plus qu'un script d'échelle (`build_scale_script`), rien côté légende.
 * **Échelle** métrique (`L.control.scale`, `build_scale_script`) et classes `oracle-z13`/`oracle-z14` sur `<body>` : les labels de quartiers (capitales, centre des annonces du quartier) apparaissent dès le zoom 13, les noms de stations de métro dès le zoom 14.
 

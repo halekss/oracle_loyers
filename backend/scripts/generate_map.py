@@ -216,29 +216,16 @@ def sanitize_listing_url(url):
     return None
 
 
-def sanitize_image_url(url):
-    """Ne garde que les URL http(s) valides pour l'attribut src de l'image (même
-    logique que `sanitize_listing_url`) : évite d'interpoler un `javascript:`/
-    `data:` arbitraire venu du scraping dans le HTML généré."""
-    if not isinstance(url, str):
-        return None
-    candidate = url.strip()
-    if not candidate:
-        return None
-    lowered = candidate.lower()
-    if lowered.startswith('http://') or lowered.startswith('https://'):
-        return candidate
-    return None
-
-
 def build_immo_tooltip_html(type_local, prix):
-    """Aperçu léger affiché au survol d'un marker d'annonce (ORA-99).
+    """Aperçu affiché au survol d'un marker d'annonce (ORA-99).
 
     Volontairement sans lien ni action : un tooltip Leaflet (quel que soit son
     mode, sticky ou non) se ferme au `mouseout` du marker, pas selon si la
     souris est sur le tooltip lui-même — impossible d'y héberger un lien
-    cliquable de façon fiable. Le lien reste réservé au popup au clic
-    (cf. build_immo_popup_html)."""
+    cliquable de façon fiable. Depuis ORA-185, c'est aussi le seul aperçu du
+    marker : l'ancien popup au clic (type/prix/quartier/photo + lien "Voir
+    l'annonce") est retiré, le clic ouvrant directement la fiche complète du
+    panneau droit (`build_immo_markers_click_script`, ANNONCE_SELECT)."""
     safe_type = html.escape(str(type_local))
     safe_prix = html.escape(str(prix))
 
@@ -249,58 +236,29 @@ def build_immo_tooltip_html(type_local, prix):
     """
 
 
-def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_url=None, annonce_id=None):
-    """Contenu du popup affiché au clic sur un marker d'annonce (ORA-90).
+def build_immo_markers_click_script(entries):
+    """JS attaché après coup (ORA-185) au clic de chaque marker d'annonce dont
+    l'id SQLite (`annonces.db`) a pu être résolu par URL au moment de la
+    génération de la carte (`annonces_store.get_annonce_by_url` dans main()) —
+    silencieux sinon (pas de régression bloquante si le store n'est pas encore
+    synchronisé pour cette annonce, même convention que l'ancien ANNONCE_CLICK).
 
-    Affiche la photo d'annonce scrapée telle quelle (hotlink direct vers le
-    site source, jamais téléchargée ni re-hébergée sur notre infra) : décision
-    ORA-94 (LEGAL_DECISIONS.md) explicitement révisée pour autoriser ce mode
-    d'affichage, cf. section "SUPERSEDED" du document.
+    Notifie React via `postMessage` (contrat ANNONCE_SELECT, MAP_CONTRACT.md)
+    plutôt que d'ouvrir un popup avec un lien externe : la fiche complète
+    (photo, prix, quartier, lien "Voir l'annonce" tracké) vit désormais dans
+    le panneau droit React, pas dans ce HTML statique.
 
-    `annonce_id` (id SQLite dans annonces.db, résolu par url dans main() via
-    annonces_store.get_annonce_by_url) : si connu, le clic sur le lien
-    notifie le parent React via postMessage (contrat ANNONCE_CLICK,
-    MAP_CONTRACT.md) plutôt que d'appeler directement l'API backend depuis ce
-    HTML statique, qui n'a pas connaissance de son URL (ORA-107/ORA-126) —
-    React appelle ensuite le même api.logAnnonceClick que AnnonceCard.jsx.
-    """
-    safe_type = html.escape(str(type_local))
-    safe_prix = html.escape(str(prix))
-    safe_quartier = html.escape(str(quartier))
-
-    link_html = ""
-    if listing_url:
-        safe_link_url = html.escape(listing_url, quote=True)
-        onclick_html = ""
-        if annonce_id is not None:
-            onclick_html = (
-                " onclick=\"parent.postMessage({type: 'ANNONCE_CLICK', "
-                f"id: {int(annonce_id)}}}, window.location.origin)\""
-            )
-        link_html = (
-            f"<a href='{safe_link_url}' target='_blank' rel='noopener noreferrer'{onclick_html} "
-            "style='display:block; font-size:12px; color:#22c55e; margin-top:4px;'>Voir l'annonce &#8599;</a>"
-        )
-
-    image_html = ""
-    safe_image_url = sanitize_image_url(image_url)
-    if safe_image_url:
-        safe_image_url = html.escape(safe_image_url, quote=True)
-        image_html = (
-            f"<img src='{safe_image_url}' loading='lazy' referrerpolicy='no-referrer' "
-            "style='display:block; width:100%; height:90px; object-fit:cover; border-radius:6px; "
-            "margin-bottom:6px;' onerror=\"this.style.display='none'\">"
-        )
-
-    return f"""
-    <div style='font-family:sans-serif; min-width:160px; max-width:200px;'>
-        {image_html}
-        <h4 style='margin:0 0 5px 0; color:#22c55e; border-bottom:1px solid #334155; padding-bottom:3px;'>{safe_type}</h4>
-        <div style='font-size:15px; font-weight:bold; margin-bottom:5px;'>{safe_prix} €</div>
-        <div style='color:#94a3b8; font-size:12px;'>{safe_quartier}</div>
-        {link_html}
-    </div>
-    """
+    `entries` : [{"js_var", "id"}, ...]. Même raison que
+    `build_cavalier_markers_script` pour ne référencer les variables
+    `circle_marker_xxx` (rendues par Folium après `</body>`) qu'une fois
+    qu'elles existent réellement (exécuté dans `window.addEventListener('load', ...)`)."""
+    bindings = "".join(
+        f"{entry['js_var']}.on('click', function(e) {{"
+        f"parent.postMessage({{type: 'ANNONCE_SELECT', id: {int(entry['id'])}}}, window.location.origin);"
+        "});"
+        for entry in entries
+    )
+    return bindings
 
 
 def build_metro_station_popup_html(nom_station, ligne):
@@ -630,6 +588,9 @@ def main(ville='lyon'):
     fg_superstition = folium.FeatureGroup(name=layer_by_key['Superstition']['name'], show=layer_by_key['Superstition']['defaultVisible'])
 
     # --- 5. GENERATION POINTS IMMO ---
+    # ORA-185 : (js_var, annonce_id) de chaque marker dont l'id a pu être
+    # résolu, pour le script de clic généré plus bas (build_immo_markers_click_script).
+    immo_marker_entries = []
     for _, row in df_immo.iterrows():
         if pd.notnull(row.get('latitude')) and pd.notnull(row.get('longitude')):
             lat = row['latitude'] + random.uniform(-0.0001, 0.0001)
@@ -638,12 +599,12 @@ def main(ville='lyon'):
             type_local = str(row.get('type_local', '')).strip()
             prix = str(row.get('prix', '?')).replace('.0', '')
             listing_url = sanitize_listing_url(row.get('url'))
-            image_url = row.get('image')
 
             # ORA-107 : résout l'id SQLite (annonces.db) à partir de l'URL pour
-            # que le clic sur le marker puisse être tracké (via ANNONCE_CLICK/
-            # React), comme AnnonceCard.jsx. None si l'annonce n'y est pas
-            # encore synchronisée (store pas encore peuplé pour ce run).
+            # que le clic sur le marker puisse ouvrir sa fiche (ANNONCE_SELECT,
+            # ORA-185). None si l'annonce n'y est pas encore synchronisée
+            # (store pas encore peuplé pour ce run) : le marker reste alors
+            # sans action au clic (tooltip au survol seul).
             annonce_id = None
             if listing_url:
                 existing = annonces_store.get_annonce_by_url(listing_url, db_path=ANNONCES_DB_PATH)
@@ -651,9 +612,6 @@ def main(ville='lyon'):
                     annonce_id = existing['id']
 
             txt_tooltip = build_immo_tooltip_html(type_local, prix)
-            txt_popup = build_immo_popup_html(
-                type_local, prix, row.get('quartier', ville.capitalize()), listing_url, image_url, annonce_id,
-            )
 
             target_group = None
             if type_local == 'Studio/T1': target_group = fg_studio
@@ -662,17 +620,20 @@ def main(ville='lyon'):
             elif type_local == 'Grand (T4+)': target_group = fg_t4
 
             if target_group:
-                # Popup (pas Tooltip) : reste ouvert au clic au lieu de disparaître
-                # dès que la souris quitte le marker, ce qui rendait le lien "Voir
-                # l'annonce" à l'intérieur impossible à atteindre (ORA-134). Le
-                # tooltip au survol reste utilisé en parallèle pour un aperçu
-                # rapide sans lien (ORA-99, build_immo_tooltip_html).
+                # ORA-185 : plus de Popup au clic (type/prix/quartier/photo +
+                # lien "Voir l'annonce", qui ouvrait un onglet externe tout en
+                # basculant la vue Fiche via le contrat ANNONCE_CLICK) — le
+                # clic ouvre directement la fiche complète du panneau droit
+                # (build_immo_markers_click_script, ANNONCE_SELECT). Le
+                # tooltip au survol reste le seul aperçu sur la carte elle-même
+                # (ORA-99, build_immo_tooltip_html).
                 marker = folium.CircleMarker(
                     [lat, lon], radius=5, color=COLORS['Immo'], weight=1, fill=True, fill_color=COLORS['Immo'], fill_opacity=0.8,
                     tooltip=folium.Tooltip(txt_tooltip, class_name='oracle-popup'),
-                    popup=folium.Popup(txt_popup, max_width=220, className='oracle-popup'),
                 )
                 marker.add_to(target_group)
+                if annonce_id is not None:
+                    immo_marker_entries.append({'js_var': marker.get_name(), 'id': annonce_id})
 
     # --- 6. GESTION DU MÉTRO VIA JSON (LIGNES + STATIONS) ---
     if os.path.exists(paths['metro_json']):
@@ -874,6 +835,7 @@ def main(ville='lyon'):
         // bugs #1/#2/#3/#5/#8).
         {build_cavalier_markers_script(cavalier_marker_entries)}
         {build_layer_groups_script(layer_group_js_vars)}
+        {build_immo_markers_click_script(immo_marker_entries)}
     }});
     </script>
     </body>

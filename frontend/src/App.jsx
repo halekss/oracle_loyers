@@ -107,7 +107,7 @@ function App() {
   // uniquement — mobile garde ses 3 onglets historiques ci-dessus, `activeTab`).
   const [activeView, setActiveView] = useState('accueil');
   // ORA-178 : annonce sélectionnée (clic "Détails" dans la liste, ou clic sur
-  // un marker de la carte via ANNONCE_CLICK) — alimente la vue "Fiche".
+  // un marker de la carte via ANNONCE_SELECT, ORA-185) — alimente la vue "Fiche".
   const [selectedAnnonceId, setSelectedAnnonceId] = useState(null);
   // ORA-167/179 : "+ Surface" (ResultCard, `onAddSurface`) — bascule sur la
   // vue Recherche et demande à SearchForm de focus directement le champ
@@ -252,8 +252,8 @@ function App() {
   };
 
   // ORA-178 : sélection d'une annonce (bouton "Détails" de la liste, ou clic
-  // sur un marker de la carte via le contrat postMessage ANNONCE_CLICK) —
-  // bascule sur la vue "Fiche" du rail, qui affiche son détail complet.
+  // sur un marker de la carte via le contrat postMessage ANNONCE_SELECT,
+  // ORA-185) — bascule sur la vue "Fiche" du rail, qui affiche son détail complet.
   const handleSelectAnnonce = (id) => {
     setSelectedAnnonceId(id);
     setActiveView('fiche');
