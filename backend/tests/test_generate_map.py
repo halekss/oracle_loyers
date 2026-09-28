@@ -193,6 +193,23 @@ class BuildImmoPopupHtmlTest(unittest.TestCase):
         self.assertNotIn("ANNONCE_CLICK", html_out)
 
 
+class BuildMetroStationPopupHtmlTest(unittest.TestCase):
+    """ORA-188 : la pastille DivIcon 24x24 avec la lettre de ligne est
+    retirée (surchargeait la carte) au profit d'un CircleMarker ; ce texte
+    reste le seul moyen de retrouver le nom/la ligne d'une station."""
+
+    def test_includes_station_name_and_line(self):
+        html_out = generate_map.build_metro_station_popup_html("Wazemmes", "A")
+
+        self.assertIn("Wazemmes", html_out)
+        self.assertIn("Ligne A", html_out)
+
+    def test_escapes_hostile_station_name(self):
+        html_out = generate_map.build_metro_station_popup_html("<script>alert(1)</script>", "F1")
+
+        self.assertNotIn("<script>alert(1)</script>", html_out)
+
+
 class BuildBridgeMessageScriptTest(unittest.TestCase):
     """Contrat postMessage carte (ORA-125) : la carte générée ne doit traiter
     un message que s'il provient de la même origine que la page qui l'embarque,

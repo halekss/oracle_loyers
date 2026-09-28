@@ -303,6 +303,15 @@ def build_immo_popup_html(type_local, prix, quartier, listing_url=None, image_ur
     """
 
 
+def build_metro_station_popup_html(nom_station, ligne):
+    """Texte affiché au survol/clic d'une station de métro ou de funiculaire
+    (ORA-188) : nom + ligne, seule information que portait la pastille
+    DivIcon retirée pour désencombrer la carte."""
+    safe_nom = html.escape(str(nom_station))
+    safe_ligne = html.escape(str(ligne))
+    return f"<b>Station {safe_nom}</b><br>Ligne {safe_ligne}"
+
+
 # --- ORA-166 : échelle métrique ---
 # ORA-183 (v3) : l'ancienne légende Folium (build_legend_html, groupes
 # Annonces/Métro/Cavaliers & quartiers) est supprimée — elle se superposait à
@@ -693,34 +702,21 @@ def main(ville='lyon'):
 
                     # Style
                     color = METRO_COLORS.get(ligne, '#888888')
-                    popup_txt = f"<b>Station {nom_station}</b><br>Ligne {ligne}"
-
-                    # Icone HTML
-                    icon_html = f"""
-                    <div style="
-                        width: 24px; height: 24px;
-                        background: white; border-radius: 50%;
-                        display: flex; align-items: center; justify-content: center;
-                        box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-                        border: 2px solid white;
-                    ">
-                        <div style="
-                            width: 18px; height: 18px;
-                            background: {color}; border-radius: 50%;
-                            display: flex; align-items: center; justify-content: center;
-                            font-family: sans-serif; font-weight: bold; font-size: 10px; color: white;
-                        ">{ligne}</div>
-                    </div>
-                    """
+                    popup_txt = build_metro_station_popup_html(nom_station, ligne)
 
                     # ORA-172 : une ligne "F..." (F1/F2) est un funiculaire, pas
                     # le métro — groupe distinct si le calque existe (sinon repli
                     # sur fg_metro, ex. config plus ancienne sans "Funicular").
                     target_group = fg_funicular if ligne.startswith('F') and fg_funicular is not None else fg_metro
 
-                    folium.Marker(
-                        [lat, lon],
-                        icon=folium.DivIcon(html=icon_html, icon_size=(24, 24), icon_anchor=(12, 12)),
+                    # ORA-188 : pastille DivIcon 24x24 avec la lettre de ligne retirée
+                    # (surchargeait la carte, se confondait avec les marqueurs d'annonces) ;
+                    # les lignes restent identifiables par couleur (PolyLine) + légende. Un
+                    # simple CircleMarker garde le nom/la ligne au survol et au clic.
+                    folium.CircleMarker(
+                        [lat, lon], radius=4, color='white', weight=1,
+                        fill=True, fill_color=color, fill_opacity=0.9,
+                        tooltip=folium.Tooltip(popup_txt, class_name='oracle-popup'),
                         popup=folium.Popup(popup_txt, max_width=200, className='oracle-popup'),
                     ).add_to(target_group)
                     count_stations += 1
