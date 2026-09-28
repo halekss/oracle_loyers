@@ -160,6 +160,22 @@ class CheckUrlStatusAsyncTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result)
 
+    async def test_vizzit_410_is_ambiguous_not_dead(self):
+        # Vizzit renvoie 410 sur des fiches encore en ligne (382 faux « morts »
+        # le 2026-09-28) : sa disparition est détectée par le scraper.
+        session = MagicMock()
+        response = AsyncMock()
+        response.status = 410
+        response.__aenter__.return_value = response
+        response.__aexit__.return_value = False
+        session.get.return_value = response
+
+        result = await verify_annonces_async.check_url_status_async(
+            "https://www.vizzit.fr/fr/property/appartement/lille/A3hfljd9c7klbnkj", session
+        )
+
+        self.assertIsNone(result)
+
     async def test_returns_true_on_soft_404_text(self):
         session = MagicMock()
         response = AsyncMock()
