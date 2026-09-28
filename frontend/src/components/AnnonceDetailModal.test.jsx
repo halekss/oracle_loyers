@@ -58,7 +58,7 @@ describe('AnnonceDetailModal', () => {
     await waitFor(() => expect(screen.getByText('850 €')).toBeInTheDocument());
     expect(screen.getByText('T2 · Gerland')).toBeInTheDocument();
     expect(screen.getByText('45 m²')).toBeInTheDocument();
-    expect(screen.getByText(/Appartement · Lyon · Gerland/)).toBeInTheDocument();
+    expect(screen.getByText(/T2 · Lyon · Gerland/)).toBeInTheDocument();
   });
 
   it('shows an error message when the fetch fails', async () => {
@@ -161,13 +161,38 @@ describe('AnnonceDetailModal', () => {
     openSpy.mockRestore();
   });
 
-  it('does not render an image, only a generic pictogram (ORA-133 : pas de photo tierce)', async () => {
-    api.getAnnonceDetail.mockResolvedValue(detail);
-    const { container } = render(<AnnonceDetailModal annonceId={42} onClose={() => {}} />);
-    await waitFor(() => expect(screen.getByText('850 €')).toBeInTheDocument());
+  describe('photo de l\'annonce (ORA-196, hotlink — révise ORA-133)', () => {
+    it('renders the real photo (hotlink) when the annonce has one', async () => {
+      api.getAnnonceDetail.mockResolvedValue({ ...detail, images: ['https://example.com/photo.jpg'] });
+      render(<AnnonceDetailModal annonceId={42} onClose={() => {}} />);
+      await waitFor(() => expect(screen.getByText('850 €')).toBeInTheDocument());
 
-    expect(container.querySelector('img')).not.toBeInTheDocument();
-    expect(screen.getByText("Photo de l'annonce")).toBeInTheDocument();
+      // AnnonceDetailModal rend via un portail (document.body) : `screen`
+      // cherche tout le document, contrairement à `container` (scope local).
+      const img = screen.getByRole('img');
+      expect(img).toHaveAttribute('src', 'https://example.com/photo.jpg');
+      expect(img).toHaveAttribute('loading', 'lazy');
+      expect(img).toHaveAttribute('alt', expect.stringContaining('T2'));
+    });
+
+    it('falls back to the generic pictogram (no <img>) when the annonce has no photo', async () => {
+      api.getAnnonceDetail.mockResolvedValue(detail);
+      render(<AnnonceDetailModal annonceId={42} onClose={() => {}} />);
+      await waitFor(() => expect(screen.getByText('850 €')).toBeInTheDocument());
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
+    it('falls back to the generic pictogram when the photo fails to load (never a broken image on screen)', async () => {
+      api.getAnnonceDetail.mockResolvedValue({ ...detail, images: ['https://example.com/photo.jpg'] });
+      render(<AnnonceDetailModal annonceId={42} onClose={() => {}} />);
+      await waitFor(() => expect(screen.getByText('850 €')).toBeInTheDocument());
+
+      const img = screen.getByRole('img');
+      img.dispatchEvent(new Event('error'));
+
+      await waitFor(() => expect(screen.queryByRole('img')).not.toBeInTheDocument());
+    });
   });
 
   describe('écart vs médiane et cavaliers autour (ORA-174)', () => {

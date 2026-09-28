@@ -13,6 +13,8 @@ vi.mock('./services/api', async () => {
       getQuartierStats: vi.fn(),
       getQuartierHistorique: vi.fn(),
       getAnnonces: vi.fn(),
+      getAnnonceDetail: vi.fn(),
+      logAnnonceClick: vi.fn(),
     },
   };
 });
@@ -24,11 +26,11 @@ import App from './App';
 // minimal, `matches: false` sans incidence ici : la colonne rail desktop est
 // toujours présente dans le DOM (visibilité purement CSS, `hidden md:flex`),
 // jamais démontée selon isDesktop.
-function mockMatchMedia() {
+function mockMatchMedia(matches = false) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation((query) => ({
-      matches: false,
+      matches,
       media: query,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
@@ -83,5 +85,107 @@ describe('App — scan puis vue Annonces (ORA-186)', () => {
     await waitFor(() => {
       expect(document.getElementById('annonces-quartier-filter')).toHaveValue('Wazemmes');
     });
+  });
+});
+
+describe('App — sélection d\'une annonce et navigation de la Fiche (ORA-196)', () => {
+  const annonceSummary = {
+    id: 7, titre: 'T2 Wazemmes', prix: 780, surface: 42, ville: 'Lyon', quartier: 'Wazemmes',
+    url: 'https://example.com/annonce-7', images: [],
+  };
+  const annonceDetail = { ...annonceSummary, type_local: 'T2', prix_m2: 18.6, cavaliers_detail: [] };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Desktop (matches: true) : nécessaire pour que la carte (iframe) soit
+    // montée (`shouldMountMap = isDesktop || activeTab === 'carte'`,
+    // App.jsx) — la dernière annonce de ce bloc envoie LISTING_SELECTED
+    // depuis cette iframe.
+    mockMatchMedia(true);
+    api.getListings.mockResolvedValue([]);
+    api.getHealth.mockResolvedValue(null);
+    api.getQuartierHistorique.mockResolvedValue(null);
+    api.getAnnonces.mockResolvedValue({ items: [annonceSummary], total: 1, total_pages: 1 });
+    api.getAnnonceDetail.mockResolvedValue(annonceDetail);
+    api.logAnnonceClick.mockResolvedValue({ logged: true, views: 1 });
+  });
+
+  // Le rail ("Annonces") et l'aperçu compact d'autres vues (Scan, colonne
+  // mobile) sont tous montés en permanence (CSS hidden, cf. MapComponent/
+  // App) : le même item mocké s'y affiche donc plusieurs fois. `getAllBy*`
+  // plutôt que `getBy*`, cliquer le premier suffit (même annonce, même id).
+  const openAnnoncesView = async (user) => {
+    await user.click(screen.getByRole('button', { name: /^Annonces/ }));
+    await screen.findAllByText('T2 Wazemmes');
+  };
+
+  const clickFirstDetailsButton = async (user) => {
+    const [button] = await screen.findAllByRole('button', { name: /détails/i });
+    await user.click(button);
+  };
+
+  it('disables the Fiche tab until an annonce is selected', async () => {
+    render(<App />);
+
+    expect(screen.getByRole('button', { name: 'Fiche' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('selecting "Détails" in the Annonces list opens the Fiche with that annonce, and enables the tab', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openAnnoncesView(user);
+    await clickFirstDetailsButton(user);
+
+    expect(await screen.findByText('Fiche annonce')).toBeInTheDocument();
+    await waitFor(() => expect(api.getAnnonceDetail).toHaveBeenCalledWith(7));
+    // Le prix apparaît aussi dans la colonne Oracle mobile (AnnoncesList
+    // toujours montée, cachée en CSS) : on scope à la feuille du rail
+    // (#panel-sheet) où vit la Fiche pour lever l'ambiguïté.
+    const panelSheet = document.getElementById('panel-sheet');
+    expect(await within(panelSheet).findByText(/780/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fiche' })).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('"← Retour" returns to the view the Fiche was opened from', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openAnnoncesView(user);
+    await clickFirstDetailsButton(user);
+    await screen.findByText('Fiche annonce');
+
+    await user.click(screen.getByRole('button', { name: /retour/i }));
+
+    expect(await screen.findAllByText('T2 Wazemmes')).not.toHaveLength(0);
+    expect(screen.queryByText('Fiche annonce')).not.toBeInTheDocument();
+  });
+
+  it('Escape returns to the view the Fiche was opened from', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openAnnoncesView(user);
+    await clickFirstDetailsButton(user);
+    await screen.findByText('Fiche annonce');
+
+    await user.keyboard('{Escape}');
+
+    expect(await screen.findAllByText('T2 Wazemmes')).not.toHaveLength(0);
+    expect(screen.queryByText('Fiche annonce')).not.toBeInTheDocument();
+  });
+
+  it('a LISTING_SELECTED message from the map opens the Fiche with the same mechanism as the list', async () => {
+    render(<App />);
+    const iframe = screen.getByTitle('Carte Oracle');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'LISTING_SELECTED', id: 7 },
+      origin: window.location.origin,
+      source: iframe.contentWindow,
+    }));
+
+    expect(await screen.findByText('Fiche annonce')).toBeInTheDocument();
+    await waitFor(() => expect(api.getAnnonceDetail).toHaveBeenCalledWith(7));
   });
 });

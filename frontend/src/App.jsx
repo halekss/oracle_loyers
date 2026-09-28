@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import ResultCard from './components/ResultCard';
 import PriceHistory from './components/PriceHistory';
 import MapComponent from './components/MapComponent';
@@ -106,8 +106,15 @@ function App() {
   // ORA-178 : vue active du rail "classeur" du panneau droit (desktop
   // uniquement — mobile garde ses 3 onglets historiques ci-dessus, `activeTab`).
   const [activeView, setActiveView] = useState('accueil');
+  // ORA-196 : vue à retrouver via "← Retour"/Échap depuis la Fiche — capturée
+  // au moment où l'on ENTRE dans la Fiche (handleSelectAnnonce), pas mise à
+  // jour tant qu'on y reste (sélectionner une autre annonce depuis la Fiche
+  // elle-même ne doit pas écraser la vue d'origine).
+  const [previousView, setPreviousView] = useState('accueil');
   // ORA-178 : annonce sélectionnée (clic "Détails" dans la liste, ou clic sur
-  // un marker de la carte via ANNONCE_SELECT, ORA-185) — alimente la vue "Fiche".
+  // un marker de la carte via LISTING_SELECTED, ORA-196) — alimente la vue
+  // "Fiche". Source unique : ni la carte ni la liste ne gardent leur propre
+  // état de sélection.
   const [selectedAnnonceId, setSelectedAnnonceId] = useState(null);
   // ORA-167/179 : "+ Surface" (ResultCard, `onAddSurface`) — bascule sur la
   // vue Recherche et demande à SearchForm de focus directement le champ
@@ -158,6 +165,15 @@ function App() {
   // de `activeView` : la fiche reste en cache tant qu'une autre annonce n'a
   // pas été sélectionnée, même après avoir changé de vue.
   const ficheDetail = useAnnonceDetail(selectedAnnonceId);
+  // ORA-196 : focus clavier sur le titre de la feuille à l'ouverture de la
+  // Fiche (accessibilité) — voir l'effet plus bas, déclenché par le
+  // changement de vue/annonce, pas par ce ref lui-même.
+  const panelTitleRef = useRef(null);
+  useEffect(() => {
+    if (activeView === 'fiche' && selectedAnnonceId != null) {
+      panelTitleRef.current?.focus();
+    }
+  }, [activeView, selectedAnnonceId]);
   // Vue "Calques" : détail des 4 cavaliers pour `cavaliersRadiusM` — reprend
   // result.cavaliersDetail/facteurs (500 m, déjà fournis par le scan) sans
   // appel réseau, sauf si un autre rayon a été choisi (GET /api/cavaliers,
@@ -252,12 +268,46 @@ function App() {
   };
 
   // ORA-178 : sélection d'une annonce (bouton "Détails" de la liste, ou clic
-  // sur un marker de la carte via le contrat postMessage ANNONCE_SELECT,
-  // ORA-185) — bascule sur la vue "Fiche" du rail, qui affiche son détail complet.
+  // sur un marker de la carte via le contrat postMessage LISTING_SELECTED,
+  // ORA-196) — bascule sur la vue "Fiche" du rail, qui affiche son détail
+  // complet. Ne capture `previousView` que si on n'est pas déjà en Fiche :
+  // sélectionner une autre annonce depuis la Fiche elle-même garde la vue
+  // d'origine pour "← Retour"/Échap, plutôt que de la remplacer par "Fiche".
   const handleSelectAnnonce = (id) => {
+    if (activeView !== 'fiche') setPreviousView(activeView);
     setSelectedAnnonceId(id);
     setActiveView('fiche');
   };
+
+  // ORA-196 : "← Retour" (actions de panelSheetHeader) et touche Échap
+  // (ci-dessous) depuis la vue "Fiche" — ne désélectionne pas l'annonce (le
+  // nav rail "Fiche" doit rester activable pour y revenir), juste un
+  // changement de vue.
+  const handleFicheBack = () => {
+    setActiveView(previousView);
+  };
+
+  // ORA-196 : Échap ramène à la vue précédente depuis la Fiche — sauf si
+  // l'utilisateur est en train de saisir du texte ailleurs (jamais
+  // d'interception d'une frappe Échap légitime, ex. pour vider un champ),
+  // même garde que le raccourci "/" ci-dessus.
+  useEffect(() => {
+    if (activeView !== 'fiche') return;
+
+    const handleKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target;
+      const isTextInput = target instanceof HTMLElement && (
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+      );
+      if (isTextInput) return;
+      handleFicheBack();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, previousView]);
 
   // ORA-167/179 : "+ Surface" (ResultCard) — sur mobile, SearchForm est déjà
   // monté en permanence dans la colonne Oracle : on se contente de lui
@@ -634,6 +684,18 @@ function App() {
         return {
           overline: annonce?.type_local && annonce?.quartier ? `${annonce.type_local} · ${annonce.quartier}`.toUpperCase() : undefined,
           title: 'Fiche annonce',
+          // ORA-196 : "← Retour" ramène à la vue quittée pour ouvrir la
+          // Fiche (Échap fait de même, cf. l'effet keydown plus haut) — même
+          // style que le bouton "Réinitialiser" de la vue Calques ci-dessus.
+          actions: (
+            <button
+              type="button"
+              onClick={handleFicheBack}
+              className="shrink-0 min-h-[44px] px-2 flex items-center text-[10px] uppercase tracking-widest font-bold text-violet-400 hover:text-violet-300"
+            >
+              ← Retour
+            </button>
+          ),
         };
       }
       // ORA-179 : SearchForm porte déjà son propre en-tête ("Nouvelle
@@ -686,6 +748,12 @@ function App() {
                 layers={layerVisibility}
                 onToggleLayer={toggleLayer}
                 onAnnonceClick={handleSelectAnnonce}
+                // ORA-196 : anneau blanc du marker sélectionné — seulement
+                // pendant que la vue "Fiche" est réellement affichée (une
+                // sélection issue de la liste Annonces sans avoir ouvert la
+                // Fiche, ou après être revenu en arrière, n'a pas à laisser
+                // un anneau sur la carte).
+                highlightedAnnonceId={activeView === 'fiche' ? selectedAnnonceId : null}
                 focus={
                   // Rayon "Aucun" (ORA-183, v3) : `cavaliersRadiusM` vaut
                   // `null` — CLEAR_FOCUS (pas de cercle, pings au style
@@ -717,6 +785,7 @@ function App() {
               overline={activeView === 'immotep' ? undefined : sheetOverline}
               title={activeView === 'immotep' ? undefined : sheetTitle}
               actions={activeView === 'immotep' ? undefined : sheetActions}
+              titleRef={panelTitleRef}
             >
               {/* ORA-175/178 : Immotep reste monté en permanence (juste
                   masqué) pour ne jamais perdre l'historique de conversation

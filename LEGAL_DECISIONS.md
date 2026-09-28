@@ -28,9 +28,10 @@ et le commit `5a5a9c1`, 2026-08-03 — ce document ne les modifie pas, il s'appu
   > lisent désormais l'**URL** de la photo principale de chaque annonce (colonne `Image` des CSV,
   > puis `image` dans `master_immo_final.csv` et `annonces.db`) ; sur les sites actifs (Vizzit,
   > Orpi, Century 21), 1 221 annonces sur 1 230 en ont une. Seule l'URL est stockée : **aucun
-  > fichier image n'est téléchargé ni re-servi** depuis notre infrastructure. Elle n'est
-  > affichée qu'en hotlink, dans les cartes de l'onglet Annonces (`AnnonceCard.jsx`) — plus
-  > dans les popups de la carte, retirés depuis (ORA-185, cf. ORA-94 ci-dessous).
+  > fichier image n'est téléchargé ni re-servi** depuis notre infrastructure. Elle est affichée
+  > qu'en hotlink : dans les cartes de l'onglet Annonces (`AnnonceCard.jsx`), de nouveau dans le
+  > popup carte au clic sur un marker (ORA-196, cf. ORA-94 ci-dessous), et désormais aussi dans
+  > la fiche annonce du panneau droit (`AnnonceDetailContent.jsx`, ORA-196).
 
 ## ORA-94 — Héberger les photos des annonces, ou juste un lien + thumbnail ?
 
@@ -46,13 +47,23 @@ et le commit `5a5a9c1`, 2026-08-03 — ce document ne les modifie pas, il s'appu
 > produit change. Le reste de cette section documente le raisonnement original, conservé pour
 > traçabilité.
 >
-> **Mise à jour (2026-09-28, suite à ORA-185)** : le popup au clic sur un marker (et sa photo
-> hotlinkée) est retiré — `build_immo_popup_html` a été supprimé. Le clic ouvre désormais la
-> fiche complète dans le panneau droit React (contrat `ANNONCE_SELECT`, `MAP_CONTRACT.md`), qui
-> n'affiche volontairement aucune photo (`AnnonceDetailContent.jsx`, pictogramme générique). La
-> carte n'est donc plus une surface de hotlink : seule `AnnonceCard.jsx` (onglet Annonces) en
-> affiche encore une, dans les mêmes conditions (`sanitizeListingUrl`/hotlink direct, jamais de
-> téléchargement) — voir `README.md`.
+> **Mise à jour (2026-09-28, ORA-185)** : le popup au clic sur un marker (et sa photo hotlinkée)
+> avait été retiré — `build_immo_popup_html` supprimé, remplacé par un clic qui ouvre la fiche
+> complète dans le panneau droit React (contrat `ANNONCE_SELECT`), sans photo
+> (`AnnonceDetailContent.jsx`, pictogramme générique).
+>
+> **Mise à jour (2026-09-28, ORA-196, même jour — régression corrigée)** : ce retrait s'est avéré
+> être une régression fonctionnelle (le clic sur un marker ne déclenchait plus rien pour la
+> majorité des annonces, cf. `MAP_CONTRACT.md#LISTING_SELECTED`) plutôt qu'une décision produit
+> durable. Le porteur du projet a demandé la restauration du popup avec sa photo **et** l'ajout
+> d'une photo dans la fiche annonce (`AnnonceDetailContent.jsx`) — décision explicite, prise en
+> connaissance du risque juridique déjà documenté ci-dessus (inchangé : hotlink direct
+> uniquement, jamais de téléchargement ni de re-service). La carte et la fiche redeviennent donc
+> toutes deux des surfaces de hotlink, aux mêmes conditions qu'`AnnonceCard.jsx`
+> (`sanitizeListingUrl`/`sanitize_image_url`, `referrerpolicy="no-referrer"`, repli sur un
+> pictogramme générique si l'image est absente ou ne charge pas — jamais d'image cassée à
+> l'écran). Le raisonnement juridique original reste inchangé, seule la posture produit varie une
+> nouvelle fois.
 
 **Décision originale (2026-08-03) : Option (B) — ne jamais héberger nous-mêmes les photos des annonces scrapées.**
 L'application affiche uniquement un lien direct (redirection) vers l'annonce sur le site

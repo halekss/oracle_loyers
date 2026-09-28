@@ -3,6 +3,15 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('../services/api', async () => {
+  const actual = await vi.importActual('../services/api');
+  return {
+    ...actual,
+    api: { logAnnonceClick: vi.fn() },
+  };
+});
+
+import { api } from '../services/api';
 import MapComponent from './MapComponent';
 import mapLayersConfig from '../config/mapLayers.config.json';
 import { defaultLayerVisibility } from '../services/mapLayers';
@@ -24,6 +33,7 @@ function ControlledMapComponent(props) {
 describe('MapComponent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.logAnnonceClick.mockResolvedValue({ logged: true, views: 1 });
   });
 
   it('renders an iframe pointing to the static generated map', () => {
@@ -245,28 +255,122 @@ describe('MapComponent', () => {
     );
   });
 
-  it('calls onAnnonceClick when the iframe reports an ANNONCE_SELECT from the same origin (ORA-185)', () => {
-    const onAnnonceClick = vi.fn();
-    render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+  describe('contrat LISTING_SELECTED / ANNONCE_CLICK (ORA-196)', () => {
+    it('calls onAnnonceClick when the iframe reports a LISTING_SELECTED from the same origin and source', () => {
+      const onAnnonceClick = vi.fn();
+      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+      const iframe = screen.getByTitle('Carte Oracle');
 
-    window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'ANNONCE_SELECT', id: 42 },
-      origin: window.location.origin,
-    }));
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'LISTING_SELECTED', id: 42 },
+        origin: window.location.origin,
+        source: iframe.contentWindow,
+      }));
 
-    expect(onAnnonceClick).toHaveBeenCalledWith(42);
+      expect(onAnnonceClick).toHaveBeenCalledWith(42);
+    });
+
+    it('ignores a LISTING_SELECTED message from a different origin', () => {
+      const onAnnonceClick = vi.fn();
+      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'LISTING_SELECTED', id: 42 },
+        origin: 'https://attacker.example.com',
+        source: iframe.contentWindow,
+      }));
+
+      expect(onAnnonceClick).not.toHaveBeenCalled();
+    });
+
+    it('ignores a LISTING_SELECTED message from a foreign source, even with the right origin (ORA-196)', () => {
+      const onAnnonceClick = vi.fn();
+      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'LISTING_SELECTED', id: 42 },
+        origin: window.location.origin,
+        source: window, // pas iframe.contentWindow
+      }));
+
+      expect(onAnnonceClick).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a non-integer id', 4.2],
+      ['a negative id', -1],
+      ['a zero id', 0],
+      ['a string id', '42'],
+      ['a missing id', undefined],
+    ])('ignores a LISTING_SELECTED message with %s (ORA-196)', (_label, badId) => {
+      const onAnnonceClick = vi.fn();
+      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'LISTING_SELECTED', id: badId },
+        origin: window.location.origin,
+        source: iframe.contentWindow,
+      }));
+
+      expect(onAnnonceClick).not.toHaveBeenCalled();
+    });
+
+    it('logs the click when the iframe reports an ANNONCE_CLICK from the same origin and source (ORA-107)', () => {
+      render(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'ANNONCE_CLICK', id: 42 },
+        origin: window.location.origin,
+        source: iframe.contentWindow,
+      }));
+
+      expect(api.logAnnonceClick).toHaveBeenCalledWith(42);
+    });
+
+    it('does not open the fiche when the iframe reports an ANNONCE_CLICK (distinct from LISTING_SELECTED)', () => {
+      const onAnnonceClick = vi.fn();
+      render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+      const iframe = screen.getByTitle('Carte Oracle');
+
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'ANNONCE_CLICK', id: 42 },
+        origin: window.location.origin,
+        source: iframe.contentWindow,
+      }));
+
+      expect(onAnnonceClick).not.toHaveBeenCalled();
+    });
   });
 
-  it('ignores an ANNONCE_SELECT message from a different origin (ORA-185)', () => {
-    const onAnnonceClick = vi.fn();
-    render(<MapComponent center={null} onAnnonceClick={onAnnonceClick} layers={defaultLayerVisibility()} onToggleLayer={noop} />);
+  describe('anneau de sélection (HIGHLIGHT_LISTING / CLEAR_HIGHLIGHT, ORA-196)', () => {
+    it('sends HIGHLIGHT_LISTING to the page origin when highlightedAnnonceId is set', () => {
+      const { rerender } = render(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} highlightedAnnonceId={null} />,
+      );
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
 
-    window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'ANNONCE_SELECT', id: 42 },
-      origin: 'https://attacker.example.com',
-    }));
+      rerender(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} highlightedAnnonceId={42} />);
 
-    expect(onAnnonceClick).not.toHaveBeenCalled();
+      expect(postMessage).toHaveBeenCalledWith({ type: 'HIGHLIGHT_LISTING', id: 42 }, window.location.origin);
+    });
+
+    it('sends CLEAR_HIGHLIGHT to the page origin when highlightedAnnonceId goes back to null', () => {
+      const { rerender } = render(
+        <MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} highlightedAnnonceId={42} />,
+      );
+      const iframe = screen.getByTitle('Carte Oracle');
+      const postMessage = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage }, configurable: true });
+
+      rerender(<MapComponent center={null} layers={defaultLayerVisibility()} onToggleLayer={noop} highlightedAnnonceId={null} />);
+
+      expect(postMessage).toHaveBeenCalledWith({ type: 'CLEAR_HIGHLIGHT' }, window.location.origin);
+    });
   });
 
   it('renders one toggle per layer declared in the shared mapLayers.config.json (ORA-130)', () => {

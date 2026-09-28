@@ -129,21 +129,117 @@ class SanitizeListingUrlTest(unittest.TestCase):
         self.assertIsNone(generate_map.sanitize_listing_url("   "))
 
 
+class BuildImmoPopupHtmlTest(unittest.TestCase):
+    """ORA-90, restauré en ORA-196 après son retrait accidentel en ORA-185
+    (régression : le clic sur un marker ne déclenchait plus rien pour la
+    majorité des annonces, faute d'id SQLite résolu)."""
+
+    def test_includes_price_type_and_quartier(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/6",
+        )
+
+        self.assertIn("T2", html_out)
+        self.assertIn("750", html_out)
+        self.assertIn("Perrache", html_out)
+
+    def test_renders_link_when_url_present(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/7",
+        )
+
+        self.assertIn("https://example.com/annonce/7", html_out)
+        self.assertIn("<a ", html_out)
+
+    def test_never_renders_an_image_tag_without_an_image_url(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache", listing_url="https://example.com/annonce/7",
+        )
+
+        self.assertNotIn("<img", html_out)
+
+    def test_renders_the_image_when_a_valid_image_url_is_given(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache",
+            listing_url="https://example.com/annonce/7", image_url="https://example.com/photo.jpg",
+        )
+
+        self.assertIn("<img", html_out)
+        self.assertIn("https://example.com/photo.jpg", html_out)
+        self.assertIn("loading='lazy'", html_out)
+        self.assertIn("onerror=", html_out)
+
+    def test_omits_link_when_no_url(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache", listing_url=None,
+        )
+
+        self.assertNotIn("<a ", html_out)
+
+    def test_escapes_hostile_quartier_value(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="<script>alert(1)</script>", listing_url=None,
+        )
+
+        self.assertNotIn("<script>alert(1)</script>", html_out)
+
+    def test_tracks_the_click_via_postmessage_when_annonce_id_is_known(self):
+        """ORA-107 : parité avec AnnonceCard.jsx (api.logAnnonceClick), sans
+        dupliquer la connaissance de l'URL backend dans le HTML statique
+        généré — la carte notifie le parent React via le contrat postMessage
+        (ORA-125/126), qui appelle le même api.logAnnonceClick que React."""
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache",
+            listing_url="https://example.com/annonce/7", annonce_id=42,
+        )
+
+        self.assertIn("ANNONCE_CLICK", html_out)
+        self.assertIn("id: 42", html_out)
+        self.assertIn("window.location.origin", html_out)
+
+    def test_omits_click_tracking_when_annonce_id_is_unknown(self):
+        html_out = generate_map.build_immo_popup_html(
+            type_local="T2", prix="750", quartier="Perrache",
+            listing_url="https://example.com/annonce/7", annonce_id=None,
+        )
+
+        self.assertNotIn("ANNONCE_CLICK", html_out)
+
+
+class SanitizeImageUrlTest(unittest.TestCase):
+    def test_accepts_http_and_https(self):
+        self.assertEqual(generate_map.sanitize_image_url("http://x.test/a.jpg"), "http://x.test/a.jpg")
+        self.assertEqual(generate_map.sanitize_image_url("https://x.test/a.jpg"), "https://x.test/a.jpg")
+
+    def test_rejects_non_http_schemes_and_non_strings(self):
+        self.assertIsNone(generate_map.sanitize_image_url("javascript:alert(1)"))
+        self.assertIsNone(generate_map.sanitize_image_url(None))
+        self.assertIsNone(generate_map.sanitize_image_url(float("nan")))
+
+
 class BuildImmoMarkersClickScriptTest(unittest.TestCase):
-    """ORA-185 : le clic sur un marker d'annonce n'ouvre plus un popup avec un
-    lien externe (ancien build_immo_popup_html, retiré) mais notifie React via
-    ANNONCE_SELECT pour ouvrir la fiche du panneau droit — même mécanisme que
+    """ORA-196 : le clic sur un marker d'annonce notifie React via
+    LISTING_SELECTED pour ouvrir la fiche du panneau droit, EN PLUS du popup
+    natif Leaflet (build_immo_popup_html) — même mécanisme que
     build_cavalier_markers_script pour référencer les variables Folium."""
 
-    def test_binds_a_click_listener_per_entry_sending_annonce_select(self):
+    def test_binds_a_click_listener_per_entry_sending_listing_selected(self):
         script = generate_map.build_immo_markers_click_script([
             {"js_var": "circle_marker_abc", "id": 42},
         ])
 
         self.assertIn("circle_marker_abc.on('click'", script)
-        self.assertIn("ANNONCE_SELECT", script)
+        self.assertIn("LISTING_SELECTED", script)
         self.assertIn("id: 42", script)
         self.assertIn("window.location.origin", script)
+
+    def test_indexes_each_marker_by_id_for_the_highlight_contract(self):
+        script = generate_map.build_immo_markers_click_script([
+            {"js_var": "circle_marker_abc", "id": 42},
+        ])
+
+        self.assertIn("window.oracleImmoMarkersById", script)
+        self.assertIn("oracleImmoMarkersById[42] = circle_marker_abc", script)
 
     def test_binds_one_listener_per_entry(self):
         script = generate_map.build_immo_markers_click_script([
@@ -154,15 +250,16 @@ class BuildImmoMarkersClickScriptTest(unittest.TestCase):
         self.assertIn("circle_marker_abc.on('click'", script)
         self.assertIn("circle_marker_def.on('click'", script)
 
-    def test_returns_empty_string_for_no_entries(self):
+    def test_declares_the_index_even_with_no_entries(self):
         script = generate_map.build_immo_markers_click_script([])
 
-        self.assertEqual(script, "")
+        self.assertIn("window.oracleImmoMarkersById = window.oracleImmoMarkersById || {}", script)
+        self.assertNotIn(".on('click'", script)
 
-    def test_never_opens_an_external_tab(self):
-        """Le popup retiré ouvrait le site source dans un nouvel onglet
-        (`<a target='_blank'>`) en plus de basculer la vue Fiche — ce script
-        ne fait plus que notifier React, sans jamais naviguer lui-même."""
+    def test_never_opens_an_external_tab_itself(self):
+        """Le lien "Voir l'annonce" (qui ouvre le site source) vit dans le
+        popup (build_immo_popup_html), pas dans ce script de clic — celui-ci
+        ne fait que notifier React et indexer le marker, jamais naviguer."""
         script = generate_map.build_immo_markers_click_script([
             {"js_var": "circle_marker_abc", "id": 42},
         ])
@@ -291,19 +388,58 @@ class BuildBridgeMessageScriptTest(unittest.TestCase):
         set_focus_branch = script.split("'SET_FOCUS'")[1].split("else if")[0]
         self.assertIn("removeLayer(", set_focus_branch)
 
+    def test_focus_circle_is_not_interactive(self):
+        """ORA-196 : un L.circle est interactif par défaut — son disque (même
+        à fillOpacity 0.06) captait les clics sur les CircleMarker d'annonces
+        situés dedans, régression sur "cliquer un ping en vue Calques"."""
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        set_focus_branch = script.split("'SET_FOCUS'")[1].split("else if")[0]
+        self.assertIn("interactive: false", set_focus_branch)
+
     def test_handles_clear_focus_by_restoring_full_opacity_and_removing_the_circle(self):
         script = generate_map.build_bridge_message_script("map_abc123")
 
         self.assertIn("CLEAR_FOCUS", script)
-        clear_focus_branch = script.split("'CLEAR_FOCUS'")[1]
+        clear_focus_branch = script.split("'CLEAR_FOCUS'")[1].split("else if")[0]
         self.assertIn("setOpacity(1)", clear_focus_branch)
         self.assertIn("map_abc123.removeLayer(", clear_focus_branch)
 
     def test_clear_focus_resets_the_marker_shape_scale_and_halo(self):
         script = generate_map.build_bridge_message_script("map_abc123")
 
-        clear_focus_branch = script.split("'CLEAR_FOCUS'")[1]
+        clear_focus_branch = script.split("'CLEAR_FOCUS'")[1].split("else if")[0]
         self.assertIn("oracle-cav-outer", clear_focus_branch)
+
+    def test_handles_highlight_listing_by_styling_the_indexed_marker_white(self):
+        """ORA-196 : anneau blanc de sélection — cherche le marker dans
+        `window.oracleImmoMarkersById` (alimenté par
+        build_immo_markers_click_script) et le passe au premier plan."""
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("HIGHLIGHT_LISTING", script)
+        highlight_branch = script.split("'HIGHLIGHT_LISTING'")[1].split("else if")[0]
+        self.assertIn("oracleImmoMarkersById", highlight_branch)
+        self.assertIn("e.data.id", highlight_branch)
+        self.assertIn("#ffffff", highlight_branch)
+        self.assertIn("bringToFront(", highlight_branch)
+
+    def test_highlight_listing_restores_the_previously_highlighted_marker_first(self):
+        """Un seul marker en avant à la fois — pas d'anneaux qui s'accumulent
+        si l'utilisateur sélectionne plusieurs annonces à la suite."""
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        highlight_branch = script.split("'HIGHLIGHT_LISTING'")[1].split("else if")[0]
+        self.assertIn("__oracleHighlightedMarker", highlight_branch)
+        self.assertIn(generate_map.COLORS["Immo"], highlight_branch)
+
+    def test_handles_clear_highlight_by_restoring_the_default_style(self):
+        script = generate_map.build_bridge_message_script("map_abc123")
+
+        self.assertIn("CLEAR_HIGHLIGHT", script)
+        clear_highlight_branch = script.split("'CLEAR_HIGHLIGHT'")[1]
+        self.assertIn("__oracleHighlightedMarker", clear_highlight_branch)
+        self.assertIn(generate_map.COLORS["Immo"], clear_highlight_branch)
 
 
 class FocusStyleConstantTest(unittest.TestCase):
@@ -706,6 +842,30 @@ class MainRegeneratesAWorkingLyonMapTest(unittest.TestCase):
 
     def test_the_metric_scale_is_still_present(self):
         self.assertIn("L.control.scale", self.html)
+
+    def test_immo_markers_carry_a_popup_with_the_voir_annonce_link(self):
+        """ORA-196 : régression réelle — le popup d'origine (ORA-90) avait été
+        retiré en ORA-185, laissant le clic sans aucun effet visible pour la
+        quasi-totalité des annonces (id SQLite non résolu). Vérifie sur la
+        carte réellement générée, pas seulement au niveau unitaire."""
+        self.assertIn("Voir l'annonce", self.html)
+        self.assertIn("oracle-popup", self.html)
+
+    def test_at_least_one_immo_marker_is_indexed_for_listing_selected(self):
+        """Au moins une annonce du jeu de données réel a un id SQLite résolu
+        (annonces.db) et porte donc le contrat LISTING_SELECTED complet."""
+        self.assertIn("oracleImmoMarkersById[", self.html)
+        self.assertIn("LISTING_SELECTED", self.html)
+
+    def test_focus_circle_is_not_interactive_in_the_generated_html(self):
+        self.assertIn("interactive: false", self.html)
+
+    def test_cavalier_markers_are_in_their_own_pane_below_overlay_pane(self):
+        """ORA-196 : les DivIcon cavaliers (markerPane, 600 par défaut)
+        recouvraient les CircleMarker d'annonces (overlayPane, 400) et
+        captaient leurs clics — pane dédiée sous les annonces."""
+        self.assertIn(f"'{generate_map.CAVALIERS_PANE}'", self.html.replace('"', "'"))
+        self.assertIn(str(generate_map.CAVALIERS_PANE_Z_INDEX), self.html)
 
 
 if __name__ == "__main__":
