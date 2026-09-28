@@ -41,7 +41,11 @@ def merge_all_villes(data_dir=DATA_DIR, output_file=OUTPUT_FILE):
         return
 
     merged = pd.concat(dfs, ignore_index=True)
-    merged.to_csv(output_file, index=False, encoding='utf-8-sig')
+    # Fichier temporaire + os.replace : chaque DAG cavaliers par ville réécrit
+    # ce fichier, et clean_immo le lit — jamais de CSV à moitié écrit.
+    temp_file = output_file + '.tmp'
+    merged.to_csv(temp_file, index=False, encoding='utf-8-sig')
+    os.replace(temp_file, output_file)
     print(f"🎉 {output_file} régénéré : {len(merged)} lignes ({len(dfs)} ville(s)).")
 
 

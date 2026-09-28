@@ -8,7 +8,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
-from api_overpass import merge_cavaliers, resolve_active_city_name, resolve_city_name
+from api_overpass import fetch_elements, merge_cavaliers, resolve_active_city_name, resolve_city_name
 
 
 def _row(lat, lon, type_osm, categorie, nom):
@@ -114,3 +114,41 @@ class ResolveCityNameTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _Resp:
+    def __init__(self, status, elements=None):
+        self.status_code = status
+        self._elements = elements or []
+
+    def json(self):
+        return {"elements": self._elements}
+
+
+class FetchElementsTest(unittest.TestCase):
+    """Overpass sature souvent (429/504) : on réessaie le serveur principal
+    avec une attente croissante au lieu de basculer sur des miroirs morts qui
+    bloquaient chacun jusqu'au timeout (DAG Lille tué à 45 min, 2026-09-28)."""
+
+    def _run(self, outcomes):
+        calls, sleeps = iter(outcomes), []
+
+        def get(*args, **kwargs):
+            outcome = next(calls)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        return fetch_elements("q", get=get, sleep=sleeps.append), sleeps
+
+    def test_retries_with_growing_backoff_until_success(self):
+        elements, sleeps = self._run([_Resp(429), OSError("timeout"), _Resp(200, [{"id": 1}])])
+
+        self.assertEqual(elements, [{"id": 1}])
+        self.assertEqual(sleeps, [15, 30])
+
+    def test_gives_up_after_four_attempts(self):
+        elements, sleeps = self._run([_Resp(504)] * 4)
+
+        self.assertIsNone(elements)
+        self.assertEqual(sleeps, [15, 30, 60])

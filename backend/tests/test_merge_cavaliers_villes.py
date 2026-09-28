@@ -41,6 +41,20 @@ class MergeAllVillesTest(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(set(result["nom_lieu"]), {"Le Zinc", "Chez Ali"})
 
+    def test_output_is_replaced_atomically(self):
+        # Les DAG cavaliers de chaque ville réécrivent ce fichier : un lecteur
+        # (clean_immo, l'autre DAG) ne doit jamais voir un CSV à moitié écrit.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pd.DataFrame([{"nom_lieu": "Le Zinc"}]).to_csv(os.path.join(tmp_dir, "cavaliers_lyon.csv"), index=False)
+            output_file = os.path.join(tmp_dir, "cavaliers_all.csv")
+
+            with patch.object(merge_cavaliers_villes, "load_declared_villes", return_value=self._declared_villes()), \
+                    patch.object(merge_cavaliers_villes.os, "replace", wraps=os.replace) as replace:
+                merge_all_villes(data_dir=tmp_dir, output_file=output_file)
+
+            replace.assert_called_once_with(output_file + ".tmp", output_file)
+            self.assertFalse(os.path.exists(output_file + ".tmp"))
+
     def test_ignores_a_ville_with_no_file_yet(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             pd.DataFrame([{"nom_lieu": "Le Zinc", "categorie_cavalier": "Vice - Bar"}]).to_csv(

@@ -50,7 +50,7 @@ default_args = {
 with open(SCRAPING_CONFIG_PATH, encoding="utf-8") as f:
     VILLES = json.load(f)["villes"]
 
-for slug, ville_config in VILLES.items():
+for jour, (slug, ville_config) in enumerate(VILLES.items(), start=1):
     ville_nom = ville_config["nom"]
 
     with DAG(
@@ -61,7 +61,9 @@ for slug, ville_config in VILLES.items():
         # héberge Airflow a le plus de chances d'être allumée. Timezone explicite
         # (pas juste un décalage UTC figé) pour rester correct malgré les
         # changements d'heure été/hiver.
-        schedule="0 22 1 * *",
+        # Une ville par jour (le 1er, le 2, …) : lancées ensemble, elles
+        # saturaient Overpass (429) et réécrivaient cavaliers_all.csv en même temps.
+        schedule=f"0 22 {jour} * *",
         start_date=pendulum.datetime(2026, 2, 18, tz="Europe/Paris"),
         catchup=False,
         tags=["oracle", "etl", "immo", "cavaliers", slug],
@@ -71,12 +73,11 @@ for slug, ville_config in VILLES.items():
         # Écrit : backend/data/cavaliers_<slug>.csv
         step_scrape = BashOperator(
             task_id="scrape_cavaliers_osm",
-            bash_command=f"cd {DATA} && python {SCRIPTS}/api_overpass.py --ville {slug}",
-            # 21 catégories × jusqu'à 3 miroirs Overpass, chacun pouvant retenter
-            # sur 429/504 : un run complet réussi a été mesuré à plus de 15 min en
-            # conditions réelles (2026-08-05), et les 504 récurrents des miroirs
-            # publics sur les catégories à fort volume peuvent dépasser cette
-            # marge même en cas de succès final. Portée à 45 min.
+            bash_command=f"cd {DATA} && python -u {SCRIPTS}/api_overpass.py --ville {slug}",
+            # 21 catégories, jusqu'à 4 essais chacune sur overpass-api.de
+            # (429/504 fréquents, cf. RETRY_DELAYS) : un run complet réussi a
+            # été mesuré à plus de 15 min en conditions réelles (2026-08-05).
+            # `python -u` : progression visible dans le log Airflow en direct.
             execution_timeout=timedelta(minutes=45),
         )
 
