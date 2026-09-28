@@ -2,10 +2,15 @@ import React, { useState, useEffect } from "react";
 import { api, describeApiError } from "../services/api";
 import { downloadBlob } from "../services/downloadBlob";
 import { BAND_BADGE_CLASSES, MARKET_BANDS, ecartPct, marketBand } from "../services/marketBand";
+import { computeVilleMedianPrice } from "../services/estimationChart";
 
 const VILLE_LABELS = { lyon: { nom: 'Lyon', gentile: 'lyonnaises' }, lille: { nom: 'Lille', gentile: 'lilloises' } };
-const SCENARIO_DELTAS = [-15, 0, 15];
-const MIN_SCENARIO_SURFACE = 9;
+// ORA-190 : bornes et debounce du slider de surface (panneau "Estimation
+// personnalisée") — remplace les 3 scénarios à delta fixe (-15/=/+15, ORA-171)
+// par un contrôle continu.
+const SLIDER_MIN_SURFACE = 10;
+const SLIDER_MAX_SURFACE = 150;
+const SLIDER_DEBOUNCE_MS = 300;
 
 const formatPrice = (p) => (p ? Math.round(p).toLocaleString('fr-FR') : "--");
 const formatM2 = (p) => (p ? p.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) : "--");
@@ -32,7 +37,10 @@ const RANGE_LABELS = [['min', 'Min'], ['p25', 'P25'], ['mediane', 'Médiane'], [
 // du modèle actif plutôt que des chiffres codés en dur.
 // `dataAsOf` (ORA-177) : badge "Données au" déjà calculé pour la Topbar,
 // repris tel quel dans l'en-tête du rapport PDF exporté.
-export default function ResultCard({ data, loading, priceHistory, onViewAnnonces, onAddSurface, ville, health, dataAsOf }) {
+// `listings` (ORA-190, optionnel) : payload brut de /api/listings, déjà
+// chargé par App.jsx — sert uniquement à calculer la médiane ville (même
+// type de bien) du bar chart d'estimation, sans nouvel appel réseau.
+export default function ResultCard({ data, loading, priceHistory, onViewAnnonces, onAddSurface, ville, health, dataAsOf, listings }) {
 
   const safeData = data || {};
   const stats = safeData.stats || {};
@@ -58,7 +66,13 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
 
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
-  const [scenarios, setScenarios] = useState(null);
+  // ORA-190 : slider de surface (remplace les 3 scénarios à delta fixe
+  // -15/=/+15 d'ORA-171) — `sliderSurface` piloté par l'utilisateur,
+  // `sliderEstimate` la dernière prédiction connue pour cette valeur.
+  const [sliderSurface, setSliderSurface] = useState(surface || SLIDER_MIN_SURFACE);
+  const [sliderEstimate, setSliderEstimate] = useState(null);
+  const [sliderLoading, setSliderLoading] = useState(false);
+  const [sliderError, setSliderError] = useState(null);
 
   const confidenceStyles = {
     'Élevée': 'bg-green-900/40 text-green-400 border-green-700/50',
@@ -66,35 +80,69 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
     'Faible': 'bg-red-900/40 text-red-400 border-red-700/50',
   };
 
-  // ORA-171 : "Et si la surface change ?" — 3 scénarios (surface -15/=/+15),
-  // chacun une vraie prédiction du modèle (sauf la surface courante, déjà
-  // disponible via `estimatedPrice`). Non bloquant : un scénario qui échoue
-  // est simplement omis plutôt que de casser tout le panneau.
+  // Un nouveau scan (nouvelle surface/quartier/type) remet le slider sur la
+  // surface réellement scannée plutôt que de garder la position précédente.
+  useEffect(() => {
+    if (hasModelEstimate) setSliderSurface(surface);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasModelEstimate, surface, quartier, safeData.type]);
+
+  // ORA-190 : au plus un appel `predict` par pause de saisie (debounce), et
+  // aucun appel pour la surface déjà connue (`estimatedPrice`, comme l'ancien
+  // mécanisme de scénarios ORA-171). Une prédiction en erreur ne casse pas le
+  // reste du panneau (pas de barre fantôme : `sliderEstimate` reste `null`
+  // tant qu'aucune valeur valide n'est connue pour la surface courante).
   useEffect(() => {
     if (!hasModelEstimate) {
-      setScenarios(null);
+      setSliderEstimate(null);
+      setSliderError(null);
       return;
     }
-    let cancelled = false;
-    const targets = [...new Set(SCENARIO_DELTAS.map((d) => Math.max(MIN_SCENARIO_SURFACE, Math.round(surface + d))))];
+    if (sliderSurface === surface) {
+      setSliderEstimate(estimatedPrice);
+      setSliderError(null);
+      setSliderLoading(false);
+      return;
+    }
 
-    Promise.all(
-      targets.map((s) =>
-        s === surface
-          ? Promise.resolve({ surface: s, estimated_price: estimatedPrice })
-          : api.predict({ surface: s, quartier, type_local: safeData.type })
-              .then((r) => (typeof r.estimated_price === 'number' ? { surface: s, estimated_price: r.estimated_price } : null))
-              .catch(() => null)
-      ),
-    ).then((results) => {
-      if (!cancelled) setScenarios(results.filter(Boolean));
-    });
+    let cancelled = false;
+    setSliderLoading(true);
+    setSliderError(null);
+
+    const timer = setTimeout(() => {
+      api.predict({ surface: sliderSurface, quartier, type_local: safeData.type })
+        .then((r) => {
+          if (cancelled) return;
+          if (typeof r.estimated_price === 'number') {
+            setSliderEstimate(r.estimated_price);
+          } else {
+            setSliderEstimate(null);
+            setSliderError("Estimation indisponible pour cette surface.");
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSliderEstimate(null);
+            setSliderError("Estimation indisponible pour cette surface.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setSliderLoading(false);
+        });
+    }, SLIDER_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasModelEstimate, surface, quartier, safeData.type]);
+  }, [hasModelEstimate, sliderSurface, surface, quartier, safeData.type]);
+
+  // ORA-190 : 3e repère du bar chart (médiane ville, même type de bien) —
+  // médiane quartier déjà fournie par prixStats (/api/quartier-stats).
+  const villeMedianPrice = hasModelEstimate
+    ? computeVilleMedianPrice(listings, ville, safeData.type)
+    : null;
 
   // ORA-121 : génération PDF côté serveur (WeasyPrint) + téléchargement
   // direct, plus de window.print()/sélecteur d'impression système.
@@ -142,8 +190,17 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
     const metrics = health?.models?.[villeInfo.nom]?.metrics;
     const mae = metrics?.mae;
     const datasetSize = metrics?.dataset_size;
-    const rangeLow = mae ? Math.max(0, Math.round(estimatedPrice - mae)) : null;
-    const rangeHigh = mae ? Math.round(estimatedPrice + mae) : null;
+
+    // ORA-190 : bar chart — estimation du modèle (surface courante du
+    // slider) vs médiane du quartier (même type, prixStats déjà fourni par
+    // /api/quartier-stats) vs médiane ville (même type, computeVilleMedianPrice).
+    // Un repère sans valeur connue est simplement omis (pas de barre fantôme).
+    const chartBars = [
+      { key: 'modele', label: 'Estimation modèle', value: sliderEstimate, color: '#eab308' },
+      { key: 'quartier', label: `Médiane ${safeData.type} · ${quartier}`, value: prixStats?.mediane ?? null, color: '#a78bfa' },
+      { key: 'ville', label: `Médiane ${safeData.type} · ${villeInfo.nom}`, value: villeMedianPrice, color: '#38bdf8' },
+    ].filter((bar) => bar.value != null);
+    const maxBarValue = chartBars.length > 0 ? Math.max(...chartBars.map((b) => b.value)) * 1.1 : 0;
 
     return (
       <div className="w-full animate-fade-in">
@@ -170,65 +227,97 @@ export default function ResultCard({ data, loading, priceHistory, onViewAnnonces
           </button>
         </div>
 
-        {/* Carte principale : estimation + prix/m² */}
-        <div className="grid grid-cols-2 gap-3 bg-ink-900 border border-ink-700 rounded-xl p-4">
-          <div>
-            <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-1">
-              Estimation modèle · {surface} m²
-            </p>
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-black text-white">{formatPrice(estimatedPrice)}</span>
-              <span className="text-base text-slate-500">€</span>
-            </div>
-            {mae != null && (
-              <p className="mt-1 text-[10px] text-slate-500">
-                ± {formatPrice(mae)} € (erreur moyenne du modèle XGBoost {villeInfo.nom})
+        {/* Carte principale : estimation + prix/m² pour la surface du slider */}
+        <div className="bg-ink-900 border border-ink-700 rounded-xl p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                Estimation modèle · {sliderSurface} m²
               </p>
-            )}
-          </div>
-          <div className="text-right">
-            <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-1">Prix m²</p>
-            <div className="text-xl font-black text-yellow-400">{formatM2(m2PriceRaw)} €</div>
-            {safeData.quartierPrixM2 != null && (
-              <p className="mt-1 text-[10px] text-slate-500">
-                médiane {safeData.type} : {formatM2(safeData.quartierPrixM2)} €
-              </p>
-            )}
-          </div>
-          {rangeLow != null && rangeHigh != null && (
-            <div className="col-span-2 mt-1">
-              <div className="relative h-1.5 bg-ink-800 rounded-full">
-                <div className="absolute inset-y-0 left-0 right-0 bg-violet-700/60 rounded-full" />
-                <div
-                  className="absolute -top-1 w-3.5 h-3.5 rounded-full bg-yellow-400 border-2 border-ink-900 -translate-x-1/2"
-                  style={{ left: '50%' }}
-                  title={`Estimation : ${formatPrice(estimatedPrice)} €`}
-                />
+              <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-black text-white" aria-live="polite">
+                  {sliderEstimate != null ? formatPrice(sliderEstimate) : (sliderLoading ? '…' : '--')}
+                </span>
+                <span className="text-base text-slate-500">€</span>
               </div>
-              <div className="flex justify-between mt-1 text-[9px] text-slate-500">
-                <span>{formatPrice(rangeLow)} €</span>
-                <span>{formatPrice(rangeHigh)} €</span>
-              </div>
+              {mae != null && sliderEstimate != null && (
+                <p className="mt-1 text-[10px] text-slate-500">
+                  ± {formatPrice(mae)} € (erreur moyenne du modèle XGBoost {villeInfo.nom})
+                </p>
+              )}
+              {sliderError && (
+                <p className="mt-1 text-[10px] text-red-400">{sliderError}</p>
+              )}
             </div>
-          )}
+            <div className="text-right">
+              <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-1">Prix m²</p>
+              <div className="text-xl font-black text-yellow-400">
+                {sliderEstimate != null ? formatM2(sliderEstimate / sliderSurface) : '--'} €
+              </div>
+              {safeData.quartierPrixM2 != null && (
+                <p className="mt-1 text-[10px] text-slate-500">
+                  médiane {safeData.type} : {formatM2(safeData.quartierPrixM2)} €
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* ORA-190 : slider continu (remplace les 3 scénarios -15/=/+15 d'ORA-171) */}
+          <div className="mt-3">
+            <label
+              htmlFor="estimation-surface-slider"
+              className="flex items-center justify-between text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-1.5"
+            >
+              <span>Simuler une autre surface</span>
+              <span className="text-slate-300 normal-case">{sliderSurface} m²</span>
+            </label>
+            <input
+              id="estimation-surface-slider"
+              type="range"
+              min={SLIDER_MIN_SURFACE}
+              max={SLIDER_MAX_SURFACE}
+              value={sliderSurface}
+              onChange={(e) => setSliderSurface(Number(e.target.value))}
+              className="w-full accent-violet-500"
+            />
+            <div className="flex justify-between text-[9px] text-slate-500">
+              <span>{SLIDER_MIN_SURFACE} m²</span>
+              <span>{SLIDER_MAX_SURFACE} m²</span>
+            </div>
+          </div>
         </div>
 
-        {/* Et si la surface change ? */}
-        {scenarios && scenarios.length > 1 && (
-          <div className="mt-3">
-            <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-1.5">
-              Et si la surface change ?
+        {/* ORA-190 : estimation vs médiane quartier vs médiane ville — un
+            repère toujours lisible en texte, avec ou sans la barre elle-même
+            (accessibilité, ORA-190). */}
+        {(chartBars.length > 0 || sliderLoading) && (
+          <div className="mt-3 bg-ink-900 border border-ink-700 rounded-xl p-3">
+            <p className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mb-2">
+              Estimation vs marché
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {scenarios.map((s) => (
-                <div
-                  key={s.surface}
-                  className={`rounded-lg p-2 text-center border ${
-                    s.surface === surface ? 'bg-violet-900/30 border-violet-600' : 'bg-ink-900 border-ink-700'
-                  }`}
-                >
-                  <p className="text-[10px] text-slate-500">{s.surface} m²</p>
-                  <p className="text-sm font-black text-white">{formatPrice(s.estimated_price)} €</p>
+            {chartBars.length === 0 && sliderLoading && (
+              <div className="animate-pulse space-y-1.5">
+                <div className="h-2 bg-ink-800 rounded-full w-full" />
+                <div className="h-2 bg-ink-800 rounded-full w-2/3" />
+              </div>
+            )}
+            <div className="space-y-2.5">
+              {chartBars.map((bar) => (
+                <div key={bar.key}>
+                  <div className="flex items-baseline justify-between gap-2 text-[10px] mb-1">
+                    <span className="text-slate-400 truncate">{bar.label}</span>
+                    <span className="shrink-0 font-bold text-slate-200">{formatPrice(bar.value)} €</span>
+                  </div>
+                  <div className="h-2 bg-ink-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-[width] duration-300"
+                      style={{
+                        width: `${maxBarValue > 0 ? (bar.value / maxBarValue) * 100 : 0}%`,
+                        backgroundColor: bar.color,
+                        opacity: bar.key === 'modele' && sliderLoading ? 0.5 : 1,
+                      }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>

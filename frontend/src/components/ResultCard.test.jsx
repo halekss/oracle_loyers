@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -292,22 +292,105 @@ describe('ResultCard', () => {
       expect(screen.getByText('Estimation Loyer')).toBeInTheDocument();
     });
 
-    it('fetches "et si la surface change" scenarios at surface -15/=/+15 via api.predict', async () => {
-      api.predict.mockImplementation(({ surface }) => Promise.resolve({ estimated_price: surface * 20 }));
+    describe('slider de surface + bar chart (ORA-190)', () => {
+      // Debounce réel (SLIDER_DEBOUNCE_MS = 300ms, ResultCard.jsx) : timers
+      // réels + `waitFor`/pauses courtes plutôt que des fake timers — plus
+      // simple et plus fiable ici que de synchroniser fake timers, promesses
+      // mockées et `act()` à la main pour un debounce aussi court.
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-      render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+      it('shows a keyboard-accessible slider bounded 10-150 m², initialized on the scanned surface', () => {
+        render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
 
-      await waitFor(() => {
-        expect(api.predict).toHaveBeenCalledWith(
-          expect.objectContaining({ surface: 30, quartier: 'Ainay', type_local: 'T2' }),
-        );
-        expect(api.predict).toHaveBeenCalledWith(
-          expect.objectContaining({ surface: 60, quartier: 'Ainay', type_local: 'T2' }),
-        );
+        const slider = screen.getByLabelText(/simuler une autre surface/i);
+        expect(slider).toHaveAttribute('type', 'range');
+        expect(slider).toHaveAttribute('min', '10');
+        expect(slider).toHaveAttribute('max', '150');
+        expect(slider).toHaveValue('45');
       });
-      // La surface courante (45) n'appelle pas l'API : déjà connue via `estimated_price`.
-      expect(api.predict).not.toHaveBeenCalledWith(expect.objectContaining({ surface: 45 }));
-      await waitFor(() => expect(screen.getByText('600 €')).toBeInTheDocument()); // 30 * 20
+
+      it('does not call api.predict for the surface already known from the scan', async () => {
+        render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+        fireEvent.change(screen.getByLabelText(/simuler une autre surface/i), { target: { value: '45' } });
+        await wait(350);
+
+        expect(api.predict).not.toHaveBeenCalled();
+      });
+
+      it('calls api.predict once, after a debounce, when the slider moves to a new surface', async () => {
+        api.predict.mockResolvedValue({ estimated_price: 1200 });
+        render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+        fireEvent.change(screen.getByLabelText(/simuler une autre surface/i), { target: { value: '60' } });
+        expect(api.predict).not.toHaveBeenCalled();
+
+        await waitFor(() => expect(api.predict).toHaveBeenCalledTimes(1), { timeout: 1000 });
+        expect(api.predict).toHaveBeenCalledWith({ surface: 60, quartier: 'Ainay', type_local: 'T2' });
+        await waitFor(() => expect(screen.getByText('1 200')).toBeInTheDocument());
+      });
+
+      it('collapses several rapid slider moves into a single api.predict call (at most 1 call per pause)', async () => {
+        api.predict.mockResolvedValue({ estimated_price: 1200 });
+        render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+        const slider = screen.getByLabelText(/simuler une autre surface/i);
+
+        fireEvent.change(slider, { target: { value: '50' } });
+        await wait(100);
+        fireEvent.change(slider, { target: { value: '55' } });
+        await wait(100);
+        fireEvent.change(slider, { target: { value: '60' } });
+
+        await waitFor(() => expect(api.predict).toHaveBeenCalledTimes(1), { timeout: 1000 });
+        expect(api.predict).toHaveBeenCalledWith(expect.objectContaining({ surface: 60 }));
+      });
+
+      it('shows an error message instead of a phantom bar when the prediction fails', async () => {
+        api.predict.mockRejectedValue(new Error('boom'));
+        render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+        fireEvent.change(screen.getByLabelText(/simuler une autre surface/i), { target: { value: '80' } });
+
+        await waitFor(
+          () => expect(screen.getByText(/estimation indisponible pour cette surface/i)).toBeInTheDocument(),
+          { timeout: 1000 },
+        );
+        // Rien à comparer sans estimation connue : pas de section fantôme.
+        expect(screen.queryByText('Estimation vs marché')).not.toBeInTheDocument();
+      });
+
+      it('renders a bar chart comparing the model estimate, the quartier median and the ville median', () => {
+        render(
+          <ResultCard
+            data={{ ...modelData, prixStats: { min: 700, p25: 850, mediane: 950, p75: 1050, max: 1200 } }}
+            loading={false}
+            ville="lyon"
+            health={health}
+            listings={[
+              { ville: 'Lyon', type_local: 'T2', prix: 800 },
+              { ville: 'Lyon', type_local: 'T2', prix: 1000 },
+              { ville: 'Lyon', type_local: 'T2', prix: 1200 },
+            ]}
+          />,
+        );
+
+        expect(screen.getByText('Estimation vs marché')).toBeInTheDocument();
+        expect(screen.getByText('Estimation modèle')).toBeInTheDocument();
+        expect(screen.getByText('Médiane T2 · Ainay')).toBeInTheDocument();
+        expect(screen.getByText('Médiane T2 · Lyon')).toBeInTheDocument();
+        // 1001 (estimation), 950 (médiane quartier), 1000 (médiane ville).
+        expect(screen.getByText('1 001 €')).toBeInTheDocument();
+        expect(screen.getByText('950 €')).toBeInTheDocument();
+        expect(screen.getByText('1 000 €')).toBeInTheDocument();
+      });
+
+      it('omits a bar rather than showing a phantom one when its reference value is unknown', () => {
+        // Ni prixStats ni listings fournis : seule l'estimation du modèle est connue.
+        render(<ResultCard data={modelData} loading={false} ville="lyon" health={health} />);
+
+        expect(screen.getByText('Estimation modèle')).toBeInTheDocument();
+        expect(screen.queryByText(/Médiane T2/)).not.toBeInTheDocument();
+      });
     });
 
     it('shows the écart % of each comparable against the model estimate for its surface', () => {

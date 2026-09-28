@@ -469,7 +469,7 @@ function App() {
       <>
         {renderSummaryChip()}
         <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
-          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} onAddSurface={handleAddSurface} ville={ville} health={health} dataAsOf={latestDataDate} />
+          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} onAddSurface={handleAddSurface} ville={ville} health={health} dataAsOf={latestDataDate} listings={listings} />
           {result && !(result.surface && result.confiance) && (
             <div className="mt-2 text-center text-[10px] text-ink-dim uppercase tracking-widest">
               Données réelles ({result.count} biens)
@@ -519,7 +519,7 @@ function App() {
       <>
         {renderSummaryChip()}
         <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
-          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} />
+          <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} ville={ville} health={health} dataAsOf={latestDataDate} listings={listings} />
         </div>
       </>
     );
@@ -878,7 +878,7 @@ function App() {
 
             {(result || loading) && (
             <div className="p-4 md:p-5 border-b border-ink-800 bg-ink-900/30">
-              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} onAddSurface={handleAddSurface} ville={ville} health={health} dataAsOf={latestDataDate} />
+              <ResultCard data={result} loading={loading} priceHistory={priceHistory} onViewAnnonces={handleViewAnnonces} onAddSurface={handleAddSurface} ville={ville} health={health} dataAsOf={latestDataDate} listings={listings} />
               {result && !(result.surface && result.confiance) && (
                 <div className="mt-2 text-center text-[10px] text-ink-dim uppercase tracking-widest">
                   Données réelles ({result.count} biens)
