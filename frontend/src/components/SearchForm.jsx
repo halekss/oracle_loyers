@@ -11,6 +11,11 @@ const TYPE_FILTERS = ['Tout', 'T1', 'T2', 'T3', 'T4+'];
 const MIN_QUARTIER_LENGTH = 2;
 const MAX_PALETTE_RESULTS = 8;
 const MAX_RECENT_DISPLAYED = 3;
+// ORA-196 : bornes réalistes pour un logement (studio à grande maison) —
+// au-delà, l'estimation du modèle XGBoost (entraîné sur ce segment) n'a plus
+// de sens et le champ n'est de toute façon qu'optionnel.
+const SURFACE_MIN = 9;
+const SURFACE_MAX = 300;
 
 function formatEuros(value) {
   if (value == null) return null;
@@ -60,7 +65,17 @@ export default function SearchForm({
   const inputRef = useRef(null);
   const listboxId = useId();
 
-  const canScan = quartier.trim().length >= MIN_QUARTIER_LENGTH;
+  // ORA-196 : "e"/"+"/"-"/"." passent la validation native de type="number"
+  // (notation scientifique HTML5) — on les filtre nous-mêmes à la saisie
+  // plutôt que de se fier uniquement au type de l'input.
+  const handleSurfaceChange = (e) => {
+    setSurface(e.target.value.replace(/[^0-9]/g, ''));
+  };
+
+  const surfaceNumber = surface === '' ? null : Number(surface);
+  const surfaceOutOfBounds = surfaceNumber != null && (surfaceNumber < SURFACE_MIN || surfaceNumber > SURFACE_MAX);
+
+  const canScan = quartier.trim().length >= MIN_QUARTIER_LENGTH && !surfaceOutOfBounds;
   const hasPalette = Array.isArray(quartierOptions);
 
   // ORA-176 : quartiers filtrés (recherche tolérante accents/casse, via la
@@ -328,14 +343,26 @@ export default function SearchForm({
               id="searchform-surface"
               autoFocus={autoFocusSurface}
               type="number"
-              min="1"
+              inputMode="numeric"
+              min={SURFACE_MIN}
+              max={SURFACE_MAX}
               value={surface}
-              onChange={(e) => setSurface(e.target.value)}
+              onChange={handleSurfaceChange}
+              onWheel={(e) => e.target.blur()}
               aria-label="Surface en m² (pour l'estimation IA)"
-              className="w-full min-h-[44px] bg-ink-900 border border-ink-700 text-slate-200 text-sm px-3 py-2.5 rounded-lg focus:outline-none focus:border-violet-500 placeholder-slate-500"
+              aria-invalid={surfaceOutOfBounds || undefined}
+              aria-describedby={surfaceOutOfBounds ? 'searchform-surface-error' : undefined}
+              className={`no-spinner w-full min-h-[44px] bg-ink-900 border text-slate-200 text-sm px-3 py-2.5 rounded-lg focus:outline-none focus:border-violet-500 placeholder-slate-500 ${
+                surfaceOutOfBounds ? 'border-rose-500' : 'border-ink-700'
+              }`}
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 pointer-events-none">m²</span>
           </div>
+          {surfaceOutOfBounds && (
+            <p id="searchform-surface-error" className="mt-1.5 text-[11px] text-rose-400">
+              Surface entre {SURFACE_MIN} et {SURFACE_MAX} m².
+            </p>
+          )}
         </div>
 
         <button
