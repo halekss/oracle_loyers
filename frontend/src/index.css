@@ -21,6 +21,21 @@
   background: #a855f7; /* Purple-500 au survol */
 }
 
+/* ORA-196 : masque les flèches +/- natives d'un <input type="number">
+   (Chrome/Safari via les pseudo-éléments ::-webkit-*, Firefox via
+   -moz-appearance) — le champ Surface reste un input number pour le
+   clavier numérique mobile, sans les spinners. */
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.no-spinner::-webkit-inner-spin-button,
+.no-spinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* Animation douce pour l'apparition des éléments */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -213,6 +213,86 @@ describe('SearchForm', () => {
       await user.type(screen.getByLabelText('Quartier à scanner'), 'Ainay');
 
       expect(await screen.findByText(/naviguer.*Entrée valider.*Échap fermer/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Champ Surface (ORA-196)', () => {
+    it('is numeric-only and carries the spinner-hiding class', () => {
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={() => {}} isLoading={false} autoFocus={false} />);
+      const input = screen.getByLabelText(/Surface en m²/);
+
+      expect(input).toHaveAttribute('inputMode', 'numeric');
+      expect(input.className).toMatch(/no-spinner/);
+    });
+
+    it('strips non-digit characters from the value (rejects "e"/"+"/"-"/".")', () => {
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={() => {}} isLoading={false} autoFocus={false} />);
+      const input = screen.getByLabelText(/Surface en m²/);
+
+      fireEvent.change(input, { target: { value: '12e5' } });
+
+      expect(input).toHaveValue(125);
+    });
+
+    it('blurs the field on wheel so scrolling can never change the value', async () => {
+      const user = userEvent.setup();
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={() => {}} isLoading={false} autoFocus={false} />);
+      const input = screen.getByLabelText(/Surface en m²/);
+
+      await user.click(input);
+      expect(input).toHaveFocus();
+      fireEvent.wheel(input);
+
+      expect(input).not.toHaveFocus();
+    });
+
+    it('shows an inline message and disables Scan when surface is below 9 m²', async () => {
+      const user = userEvent.setup();
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={() => {}} isLoading={false} autoFocus={false} />);
+
+      await user.type(screen.getByLabelText('Quartier à scanner'), 'Ainay');
+      await user.type(screen.getByLabelText(/Surface en m²/), '5');
+
+      expect(screen.getByText(/entre 9 et 300/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Scan' })).toBeDisabled();
+    });
+
+    it('shows an inline message and disables Scan when surface is above 300 m²', async () => {
+      const user = userEvent.setup();
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={() => {}} isLoading={false} autoFocus={false} />);
+
+      await user.type(screen.getByLabelText('Quartier à scanner'), 'Ainay');
+      await user.type(screen.getByLabelText(/Surface en m²/), '301');
+
+      expect(screen.getByText(/entre 9 et 300/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Scan' })).toBeDisabled();
+    });
+
+    it('hides the message and re-enables Scan once surface is back within bounds', async () => {
+      const user = userEvent.setup();
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={() => {}} isLoading={false} autoFocus={false} />);
+
+      await user.type(screen.getByLabelText('Quartier à scanner'), 'Ainay');
+      const surfaceInput = screen.getByLabelText(/Surface en m²/);
+      await user.type(surfaceInput, '5');
+      expect(screen.getByRole('button', { name: 'Scan' })).toBeDisabled();
+
+      await user.clear(surfaceInput);
+      await user.type(surfaceInput, '50');
+
+      expect(screen.queryByText(/entre 9 et 300/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Scan' })).not.toBeDisabled();
+    });
+
+    it('submits the scan on Enter from the surface field when the form is valid', async () => {
+      const onScan = vi.fn();
+      const user = userEvent.setup();
+      render(<SearchForm ville="lyon" onVilleChange={() => {}} onScan={onScan} isLoading={false} autoFocus={false} />);
+
+      await user.type(screen.getByLabelText('Quartier à scanner'), 'Ainay');
+      await user.type(screen.getByLabelText(/Surface en m²/), '50{Enter}');
+
+      expect(onScan).toHaveBeenCalledWith('Ainay', 'Tout', '50');
     });
   });
 
