@@ -101,7 +101,25 @@ def estimate_confidence(df, quartier, type_local):
     return "Faible", count
 
 
-def build_feature_row(payload, df, cavaliers_df, feature_names_by_ville):
+def _is_known_category(value, prefix, feature_names, known_values):
+    """ORA-197 : `pd.get_dummies(drop_first=True)` (train_model.py) ne crée
+    PAS de colonne one-hot pour la catégorie de référence (la première par
+    ordre alphabétique, ex. quartier "Ainay" à Lyon) — elle reste connue du
+    modèle (encodée implicitement par toutes ses colonnes `{prefix}_*` à 0),
+    juste sans colonne dédiée. `f"{prefix}_{value}" in feature_names` seul ne
+    peut donc pas distinguer "vu à l'entraînement mais catégorie de
+    référence" de "jamais vu" : `known_values` (liste des valeurs vues à
+    l'entraînement, stockée dans les métadonnées du modèle par
+    train_model.py) lève l'ambiguïté. `known_values=None` (métadonnées
+    absentes/anciennes, appelant qui ne les fournit pas) replie sur l'ancien
+    comportement — un quartier sans sa colonne reste refusé, pas de
+    régression de sécurité."""
+    if f"{prefix}_{value}" in feature_names:
+        return True
+    return known_values is not None and value in known_values
+
+
+def build_feature_row(payload, df, cavaliers_df, feature_names_by_ville, categories_by_ville=None):
     """
     Construit le vecteur de features attendu par le modèle à partir du payload utilisateur.
 
@@ -112,6 +130,11 @@ def build_feature_row(payload, df, cavaliers_df, feature_names_by_ville):
     avant de choisir le jeu de features à valider/construire — impossible de
     savoir quel modèle utiliser avant de savoir quel quartier (donc quelle
     ville) est visé.
+
+    `categories_by_ville` (ORA-197, optionnel) : `{nom_ville: {"quartier":
+    [...], "type_local": [...]}}` — valeurs vues à l'entraînement, y compris
+    la catégorie de référence sans colonne dédiée (cf. `_is_known_category`).
+    `None` (défaut) reproduit le comportement d'avant ORA-197.
 
     Renvoie (features_df, infos) en cas de succès (`infos["ville"]` indique
     quel modèle appeler), ou (None, [messages d'erreur]) sinon.
@@ -147,12 +170,13 @@ def build_feature_row(payload, df, cavaliers_df, feature_names_by_ville):
                 ville_annonce = villes_connues.mode().iloc[0]
 
         feature_names = feature_names_by_ville.get(ville_annonce)
+        known_categories = (categories_by_ville or {}).get(ville_annonce, {})
         if feature_names is None:
             errors.append(
                 f"Aucun modèle de prédiction disponible pour la ville "
                 f"'{ville_annonce or 'inconnue'}' — prédiction non fiable pour cette zone."
             )
-        elif f"quartier_{quartier}" not in feature_names:
+        elif not _is_known_category(quartier, "quartier", feature_names, known_categories.get("quartier")):
             # Régression réelle (ORA-99 follow-up) : un quartier peut exister dans
             # les données réelles (df) sans jamais avoir été vu par le modèle
             # de sa ville (ex: un quartier ajouté aux données mais pas encore
@@ -162,6 +186,12 @@ def build_feature_row(payload, df, cavaliers_df, feature_names_by_ville):
             # sur les vraies annonces comparables : trompeur. Le frontend a déjà
             # un repli silencieux sur la moyenne réelle du secteur quand cet
             # appel échoue (cf. App.jsx handleScan).
+            #
+            # ORA-197 : `_is_known_category` reconnaît en plus la catégorie de
+            # référence de `pd.get_dummies(drop_first=True)` — un quartier
+            # (ex. "Ainay", premier par ordre alphabétique à Lyon) qui n'a pas
+            # sa propre colonne one-hot mais figure dans les catégories vues à
+            # l'entraînement (métadonnées du modèle) n'est plus rejeté à tort.
             errors.append(
                 f"Le modèle actif n'a pas de données d'entraînement pour le quartier '{quartier}' "
                 "— prédiction non fiable pour cette zone."

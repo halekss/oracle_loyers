@@ -252,6 +252,17 @@ def train(ville_slug, source='master'):
             "rien à entraîner."
         )
 
+    # ORA-197 : capturé AVANT prepare_features_and_target (pd.get_dummies) —
+    # la catégorie de référence (première par ordre alphabétique, ex.
+    # "Ainay" à Lyon) n'a pas de colonne one-hot dédiée dans les features
+    # mais reste une valeur vue à l'entraînement ; predictor.py en a besoin
+    # pour ne pas la rejeter à tort comme "quartier inconnu".
+    categories = {
+        col: sorted(df[col].dropna().unique().tolist())
+        for col in ('quartier', 'type_local', 'type')
+        if col in df.columns
+    }
+
     X, y = prepare_features_and_target(df)
 
     print(f"📊 Données prêtes ({ville_nom}) : {X.shape[0]} annonces x {X.shape[1]} critères.")
@@ -371,6 +382,7 @@ def train(ville_slug, source='master'):
             metrics=new_metrics,
             model_version=model_version,
             hyperparameters=hyperparameters,
+            categories=categories,
         )
         print(f"📌 Snapshot des données : {data_snapshot_file} ({data_snapshot_sha256[:12]}...)")
         print(f"📎 Métadonnées du modèle : {meta_path}")

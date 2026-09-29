@@ -115,6 +115,68 @@ class BuildFeatureRowTest(unittest.TestCase):
         self.assertIsNone(features_df)
         self.assertTrue(any("Lille" in e for e in errors))
 
+    def test_accepts_the_reference_category_quartier_when_listed_in_known_categories(self):
+        """ORA-197 : pd.get_dummies(drop_first=True) ne crée pas de colonne
+        pour le premier quartier par ordre alphabétique (Ainay à Lyon) — il
+        EST connu du modèle (toutes ses colonnes quartier_* à 0 encodent
+        justement cette catégorie), mais n'a pas sa propre colonne. Sans la
+        liste des quartiers vus à l'entraînement (stockée dans les
+        métadonnées du modèle), ce cas était indiscernable d'un quartier
+        jamais vu — d'où le rejet à tort observé sur Ainay."""
+        # "Ainay" n'a PAS de colonne quartier_Ainay dans ses features (c'est
+        # la catégorie de référence), mais IL EST dans categories_by_ville.
+        feature_names_by_ville = dict(self.feature_names_by_ville)
+        categories_by_ville = {
+            "Lyon": {"quartier": ["Ainay", "Gerland"]},
+            "Lille": {"quartier": ["Wazemmes"]},
+        }
+        df = pd.concat([self.df, pd.DataFrame([
+            {"quartier": "Ainay", "ville": "Lyon", "type_local": "T2", "latitude": 45.75, "longitude": 4.83, "code_postal": 69002},
+        ])], ignore_index=True)
+
+        features_df, result = build_feature_row(
+            {"surface": 45, "quartier": "Ainay", "type_local": "T2"},
+            df, None, feature_names_by_ville, categories_by_ville,
+        )
+
+        self.assertIsNotNone(features_df)
+        self.assertEqual(result["quartier"], "Ainay")
+        # Catégorie de référence : aucune colonne quartier_Ainay à activer,
+        # toutes les colonnes quartier_* restent à 0 (encodage implicite).
+        self.assertNotIn("quartier_Ainay", features_df.columns)
+
+    def test_still_rejects_a_quartier_truly_absent_from_known_categories(self):
+        """Un quartier qui n'a NI sa propre colonne NI figure dans la liste
+        des quartiers vus à l'entraînement reste refusé — categories_by_ville
+        ne doit pas transformer le garde-fou en passoire."""
+        categories_by_ville = {"Lyon": {"quartier": ["Gerland"]}}  # PAS "Perrache"
+        df = pd.concat([self.df, pd.DataFrame([
+            {"quartier": "Perrache", "ville": "Lyon", "type_local": "T2", "latitude": 45.75, "longitude": 4.82, "code_postal": 69002},
+        ])], ignore_index=True)
+
+        features_df, errors = build_feature_row(
+            {"surface": 45, "quartier": "Perrache", "type_local": "T2"},
+            df, None, self.feature_names_by_ville, categories_by_ville,
+        )
+
+        self.assertIsNone(features_df)
+        self.assertTrue(any("Perrache" in e for e in errors))
+
+    def test_reference_category_check_falls_back_to_old_behaviour_without_categories_by_ville(self):
+        """`categories_by_ville` omis (None, défaut) : comportement identique
+        à avant ORA-197 — un quartier sans sa colonne dédiée reste rejeté,
+        aucune régression pour les appelants qui ne le fournissent pas encore."""
+        feature_names_by_ville = dict(self.feature_names_by_ville)
+        feature_names_by_ville["Lyon"] = [c for c in self.lyon_feature_names if c != "quartier_Gerland"]
+
+        features_df, errors = build_feature_row(
+            {"surface": 40, "quartier": "Gerland", "type_local": "T2"},
+            self.df, None, feature_names_by_ville,
+        )
+
+        self.assertIsNone(features_df)
+        self.assertTrue(any("Gerland" in e for e in errors))
+
     def test_scopes_distance_features_to_the_listings_ville(self):
         cavaliers = pd.DataFrame([
             # Cavalier "Lille" collé sur les coordonnées de Gerland (Lyon).
