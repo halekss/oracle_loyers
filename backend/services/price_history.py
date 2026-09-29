@@ -3,6 +3,7 @@ import os
 import pandas as pd
 
 from services.quartier_search import resolve_quartier_filter
+from services import outlier_detection
 
 # Même mapping que /api/quartier-stats (app.py), dupliqué ici volontairement :
 # ce module lit des snapshots historiques indépendamment du DataLoader en
@@ -42,8 +43,13 @@ def compute_price_history(quartier, type_local, snapshots_dir, manifest_path, vi
     - status == "insufficient_history" (historique == []) si moins de 2
       snapshots existent au total — pas assez de recul pour une tendance.
     - status == "ok" sinon ; historique est une liste chronologique de
-      `{date, prix_m2_moyen, count}`, un point par snapshot où `quartier` a
-      au moins une annonce correspondante après filtrage.
+      `{date, prix_m2_moyen, count}`. `date` est un jour calendaire
+      (YYYY-MM-DD, comme compute_price_history_from_listings) : UN SEUL point
+      par jour (ORA-199), tous les snapshots de ce jour agrégés ensemble —
+      plusieurs runs le même jour (reprise après échec, manifest.csv) ne
+      produisaient auparavant pas un point par snapshot, jamais par jour.
+      Les annonces suspectes (ORA-195, outlier_detection) sont exclues de la
+      moyenne comme de `count`.
     """
     if not os.path.exists(manifest_path):
         return [], "insufficient_history"
@@ -52,15 +58,23 @@ def compute_price_history(quartier, type_local, snapshots_dir, manifest_path, vi
     if len(manifest) < 2:
         return [], "insufficient_history"
 
+    manifest['_jour'] = pd.to_datetime(manifest['timestamp'], utc=True).dt.strftime('%Y-%m-%d')
+
     historique = []
-    for _, row in manifest.iterrows():
-        snapshot_path = os.path.join(snapshots_dir, row['snapshot_file'])
-        if not os.path.exists(snapshot_path):
+    for jour, rows in manifest.groupby('_jour', sort=True):
+        frames = []
+        for _, row in rows.iterrows():
+            snapshot_path = os.path.join(snapshots_dir, row['snapshot_file'])
+            if not os.path.exists(snapshot_path):
+                continue
+            frames.append(pd.read_csv(snapshot_path))
+        if not frames:
             continue
 
-        df = pd.read_csv(snapshot_path)
-        filtered = _filter_quartier(df, quartier, type_local, ville)
-        if filtered.empty:
+        combined = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+        filtered = _filter_quartier(combined, quartier, type_local, ville)
+        filtered = outlier_detection.exclude_suspects(filtered)
+        if filtered is None or filtered.empty:
             continue
 
         if 'prix_m2' in filtered.columns:
@@ -69,7 +83,7 @@ def compute_price_history(quartier, type_local, snapshots_dir, manifest_path, vi
             prix_m2_moyen = (filtered['prix'] / filtered['surface']).mean()
 
         historique.append({
-            'date': row['timestamp'],
+            'date': jour,
             'prix_m2_moyen': round(float(prix_m2_moyen), 0),
             'count': int(len(filtered)),
         })
@@ -127,7 +141,10 @@ def compute_price_history_from_listings(quartier, type_local, master_path, archi
         return [], "insufficient_history"
 
     filtered = _filter_quartier(combined, quartier, type_local, ville)
-    if filtered.empty:
+    # ORA-195 : une annonce suspecte (prix/m² aberrant, etc.) ne doit pas
+    # fausser la moyenne de l'historique, comme pour compute_price_history.
+    filtered = outlier_detection.exclude_suspects(filtered)
+    if filtered is None or filtered.empty:
         return [], "ok"
 
     if 'prix_m2' in filtered.columns and filtered['prix_m2'].notna().any():
