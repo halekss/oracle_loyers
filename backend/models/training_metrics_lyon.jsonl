@@ -4,3 +4,7 @@
 {"trained_at": "2026-09-25T18:20:12.759380+00:00", "ville": "Lyon", "mae": 155.53, "r2": 0.8032, "dataset_size": 534, "n_features": 48, "model_version": "ade6872e1873", "promoted": true}
 {"trained_at": "2026-09-25T18:29:39.706770+00:00", "ville": "Lyon", "mae": 164.07, "r2": 0.7168, "dataset_size": 534, "n_features": 48, "model_version": "ff83ff598a98", "promoted": false}
 {"trained_at": "2026-09-25T18:31:17.628940+00:00", "ville": "Lyon", "mae": 164.07, "r2": 0.7168, "dataset_size": 534, "n_features": 48, "model_version": "ff83ff598a98", "promoted": false}
+{"trained_at": "2026-09-28T20:10:21.004909+00:00", "ville": "Lyon", "mae": 143.34, "r2": 0.7661, "dataset_size": 321, "n_features": 46, "model_version": "1a29cf3776d5", "promoted": true}
+{"trained_at": "2026-09-28T23:26:58.921847+00:00", "ville": "Lyon", "mae": 167.39, "r2": 0.7437, "dataset_size": 513, "n_features": 46, "model_version": "2aa358b546a7", "promoted": false}
+{"trained_at": "2026-09-28T23:41:49.863658+00:00", "ville": "Lyon", "mae": 167.39, "r2": 0.7437, "dataset_size": 513, "n_features": 46, "model_version": "2aa358b546a7", "promoted": false}
+{"trained_at": "2026-09-29T09:25:45.152130+00:00", "ville": "Lyon", "mae": 167.39, "r2": 0.7437, "dataset_size": 513, "n_features": 46, "model_version": "2aa358b546a7", "promoted": true, "jeu_commun": {"n": 55, "candidat": {"mae": 146.0229, "r2": 0.6582}, "actif": {"mae": 153.36, "r2": 0.6265}}}

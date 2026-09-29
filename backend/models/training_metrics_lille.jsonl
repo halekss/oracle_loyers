@@ -3,3 +3,8 @@
 {"trained_at": "2026-09-25T14:29:32.341157+00:00", "ville": "Lille", "mae": 140.0, "r2": 0.686, "dataset_size": 1888, "n_features": 53, "model_version": "7995efa83c66", "promoted": true}
 {"trained_at": "2026-09-25T15:00:14.175524+00:00", "ville": "Lille", "mae": 126.09, "r2": 0.7483, "dataset_size": 703, "n_features": 44, "model_version": "19d30af4c8e7", "promoted": true}
 {"trained_at": "2026-09-25T18:28:09.394313+00:00", "ville": "Lille", "mae": 120.86, "r2": 0.7995, "dataset_size": 703, "n_features": 44, "model_version": "fe1b31939a17", "promoted": true}
+{"trained_at": "2026-09-28T20:10:20.948593+00:00", "ville": "Lille", "mae": 124.62, "r2": 0.6353, "dataset_size": 481, "n_features": 43, "model_version": "ec2abca738bc", "promoted": false}
+{"trained_at": "2026-09-28T20:15:26.740503+00:00", "ville": "Lille", "mae": 124.62, "r2": 0.6353, "dataset_size": 481, "n_features": 43, "model_version": "ec2abca738bc", "promoted": false}
+{"trained_at": "2026-09-28T23:26:58.221237+00:00", "ville": "Lille", "mae": 124.51, "r2": 0.6745, "dataset_size": 671, "n_features": 43, "model_version": "7c5d61353b73", "promoted": false}
+{"trained_at": "2026-09-28T23:41:49.443079+00:00", "ville": "Lille", "mae": 124.51, "r2": 0.6745, "dataset_size": 671, "n_features": 43, "model_version": "7c5d61353b73", "promoted": false}
+{"trained_at": "2026-09-29T09:25:44.823339+00:00", "ville": "Lille", "mae": 124.51, "r2": 0.6745, "dataset_size": 671, "n_features": 43, "model_version": "7c5d61353b73", "promoted": true, "jeu_commun": {"n": 27, "candidat": {"mae": 130.2623, "r2": 0.5378}, "actif": {"mae": 207.5661, "r2": 0.3458}}}
