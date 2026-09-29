@@ -31,6 +31,48 @@ def resolve_ville_nom(ville_slug):
     return load_declared_villes()[ville_slug]['nom']
 
 
+# ponytail: seuil fixe ; sous ce nombre de lignes communes, R²/MAE trop bruités
+# pour départager -> repli sur les métriques stockées de l'actif.
+MIN_COMMON_TEST_ROWS = 20
+
+
+def split_train_test(*arrays):
+    """Split unique, partagé par l'entraînement et `active_training_urls` pour que
+    les lignes d'entraînement d'un ancien modèle soient reconstituables."""
+    return train_test_split(*arrays, test_size=0.2, random_state=42)
+
+
+def _metrics(y_true, y_pred):
+    return {'mae': float(mean_absolute_error(y_true, y_pred)), 'r2': float(r2_score(y_true, y_pred))}
+
+
+def active_training_urls(snapshot_path, ville_nom):
+    """URLs des annonces ayant servi à entraîner le modèle actif : même filtre ville
+    et même split que `train`, rejoués sur le snapshot de ses métadonnées. L'url et
+    non id_annonce : ce dernier est un numéro de ligne réattribué à chaque run."""
+    df = pd.read_csv(snapshot_path)
+    train_df, _ = split_train_test(df[df['ville'] == ville_nom])
+    return set(train_df['url'])
+
+
+def compare_on_common_test(candidate, X_test, y_test, test_urls, active_model_path,
+                           active_train_urls, min_rows=MIN_COMMON_TEST_ROWS):
+    """Évalue candidat ET modèle actif sur le même jeu : le test du candidat privé
+    des annonces vues par l'actif à l'entraînement. Renvoie
+    `(metriques_candidat, metriques_actif, n_lignes)`, ou None si l'actif est
+    introuvable ou s'il reste moins de `min_rows` lignes."""
+    if not os.path.exists(active_model_path):
+        return None
+    unseen = ~test_urls.isin(active_train_urls).to_numpy()
+    if unseen.sum() < min_rows:
+        return None
+    X, y = X_test[unseen], y_test[unseen]
+    active = joblib.load(active_model_path)
+    # Dummies d'un autre run : colonnes absentes -> 0 (même règle que fillna(0)).
+    X_active = X.reindex(columns=active.feature_names_in_, fill_value=0)
+    return _metrics(y, candidate.predict(X)), _metrics(y, active.predict(X_active)), int(unseen.sum())
+
+
 def train(ville_slug):
     """Entraîne, évalue et (si le garde-fou de régression le permet) promeut
     un modèle XGBoost pour UNE ville — un modèle distinct par ville (ORA-154)
@@ -104,7 +146,7 @@ def train(ville_slug):
     print(f"📊 Données prêtes ({ville_nom}) : {X.shape[0]} annonces x {X.shape[1]} critères.")
 
     # --- 5. TRAIN / TEST ---
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = split_train_test(X, y)
 
     # --- 6. ENTRAÎNEMENT XGBOOST ---
     hyperparameters = {
@@ -147,9 +189,35 @@ def train(ville_slug):
     # propre histoire, jamais à celle d'une autre (ORA-154 — comparer un
     # modèle combiné Lyon+Lille à un historique Lyon seul rendait le R² non
     # comparable, gonflant mécaniquement la variance du jeu de test).
+    #
+    # Les métriques stockées de l'actif viennent du split de SON dataset : les
+    # comparer à celles du candidat (autre dataset) rejetait des modèles à MAE
+    # équivalente. On ré-évalue donc les deux sur le même jeu, sans les lignes
+    # d'entraînement de l'actif ; repli sur les métriques stockées si impossible.
     new_metrics = {'mae': float(mae), 'r2': float(r2)}
     previous_metrics, previous_version = load_active_model_metadata(model_save_path)
-    promote, regression_reasons = decide_promotion(new_metrics, previous_metrics)
+    comparaison = None
+    active_meta_path = f"{model_save_path}.meta.json"
+    if previous_metrics and os.path.exists(active_meta_path):
+        with open(active_meta_path, encoding='utf-8') as f:
+            snapshot_file = json.load(f).get('data_snapshot_file')
+        snapshot_path = os.path.join(script_dir, '..', 'data', 'snapshots', snapshot_file or '')
+        if snapshot_file and os.path.exists(snapshot_path):
+            comparaison = compare_on_common_test(
+                model, X_test, y_test, df.loc[X_test.index, 'url'], model_save_path,
+                active_training_urls(snapshot_path, ville_nom),
+            )
+    if comparaison:
+        candidate_common, active_common, n_common = comparaison
+        print(f"⚖️  Jeu de test commun ({n_common} annonces jamais vues par l'actif) : "
+              f"candidat MAE {candidate_common['mae']:.2f} € / R² {candidate_common['r2']:.3f} — "
+              f"actif MAE {active_common['mae']:.2f} € / R² {active_common['r2']:.3f}")
+        promote, regression_reasons = decide_promotion(candidate_common, active_common)
+    else:
+        if previous_metrics:
+            print("⚠️  Comparaison sur jeu commun impossible (snapshot/modèle actif absent ou "
+                  "trop peu d'annonces inédites) : repli sur les métriques stockées de l'actif.")
+        promote, regression_reasons = decide_promotion(new_metrics, previous_metrics)
 
     # --- 10. SAUVEGARDE ---
     # Sérialisé en mémoire d'abord pour pouvoir hasher le binaire exact écrit sur
@@ -214,13 +282,19 @@ def train(ville_slug):
         "model_version": model_version,
         "promoted": promote,
     }
+    if comparaison:
+        metrics_entry["jeu_commun"] = {
+            "n": n_common,
+            "candidat": {k: round(v, 4) for k, v in candidate_common.items()},
+            "actif": {k: round(v, 4) for k, v in active_common.items()},
+        }
     with open(metrics_log_path, 'a', encoding='utf-8') as f:
         f.write(json.dumps(metrics_entry, ensure_ascii=False) + "\n")
     print(f"📈 Métriques ajoutées à l'historique : {metrics_log_path}")
 
     # --- 13. ÉCHEC EXPLICITE POUR AIRFLOW EN CAS DE RÉGRESSION (ORA-34) ---
     # Code de sortie non nul => la tâche BashOperator `train_model_<ville>` du DAG
-    # échoue (et est retentée selon `default_args`), ce qui empêche ce run-ci de
+    # échoue (sans réessai : un rejet est déterministe), ce qui empêche ce run-ci de
     # laisser croire à un déploiement réussi pour cette ville. Les autres villes
     # du même DAG (tâches indépendantes) ne sont pas affectées par cet échec.
     if not promote:

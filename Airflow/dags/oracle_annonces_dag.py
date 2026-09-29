@@ -94,6 +94,9 @@ with DAG(
         slug: BashOperator(
             task_id=f"train_model_{slug}",
             bash_command=f"cd {SCRIPTS} && python train_model.py --ville {slug}",
+            # Un rejet du garde-fou est déterministe : le réessayer ne ferait
+            # que retarder generate_map d'environ 10 min.
+            retries=0,
         )
         for slug in VILLES
     }
