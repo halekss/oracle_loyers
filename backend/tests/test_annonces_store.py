@@ -168,6 +168,76 @@ class AnnoncesStoreTest(unittest.TestCase):
 
         self.assertEqual([item["url"] for item in result["items"]], ["https://example.com/b", "https://example.com/a"])
 
+    def test_upsert_computes_and_stores_suspect_from_the_shared_rule(self):
+        """ORA-195 : la règle vit UNIQUEMENT dans outlier_detection.py —
+        upsert_annonce l'applique à chaque écriture, jamais recalculée ni
+        dupliquée ailleurs dans ce module."""
+        annonce = annonces_store.upsert_annonce(
+            prix=862, surface=525, type_local="Grand (T4+)",
+            url="https://example.com/suspect-1", db_path=self.db_path,
+        )
+
+        self.assertTrue(annonce["suspect"])
+        self.assertIn("Prix/m²", annonce["suspect_reason"])
+
+    def test_upsert_marks_a_normal_annonce_as_not_suspect(self):
+        annonce = annonces_store.upsert_annonce(
+            prix=800, surface=40, type_local="T2",
+            url="https://example.com/normal-1", db_path=self.db_path,
+        )
+
+        self.assertFalse(annonce["suspect"])
+        self.assertIsNone(annonce["suspect_reason"])
+
+    def test_list_annonces_exposes_suspect_fields(self):
+        annonces_store.upsert_annonce(
+            prix=862, surface=525, type_local="Grand (T4+)",
+            url="https://example.com/suspect-2", db_path=self.db_path,
+        )
+
+        result = annonces_store.list_annonces(db_path=self.db_path)
+
+        self.assertTrue(result["items"][0]["suspect"])
+        self.assertIsInstance(result["items"][0]["suspect_reason"], str)
+
+    def test_list_annonces_sorts_suspects_last_regardless_of_the_chosen_sort(self):
+        annonces_store.upsert_annonce(
+            url="https://example.com/cheap-suspect", prix=50, surface=40, type_local="T2",
+            db_path=self.db_path,
+        )
+        annonces_store.upsert_annonce(
+            url="https://example.com/expensive-ok", prix=2000, surface=40, type_local="T2",
+            db_path=self.db_path,
+        )
+
+        # Trié par prix croissant : le suspect (50€, moins cher) devrait
+        # normalement arriver en premier, mais doit rester en fin de liste.
+        result = annonces_store.list_annonces(sort="prix", order="asc", db_path=self.db_path)
+
+        self.assertEqual(
+            [item["url"] for item in result["items"]],
+            ["https://example.com/expensive-ok", "https://example.com/cheap-suspect"],
+        )
+
+    def test_list_annonces_sorts_suspects_last_even_without_an_explicit_sort(self):
+        annonces_store.upsert_annonce(
+            url="https://example.com/suspect-recent", prix=50, surface=40, type_local="T2",
+            db_path=self.db_path,
+        )
+        annonces_store.upsert_annonce(
+            url="https://example.com/ok-older", prix=900, surface=40, type_local="T2",
+            db_path=self.db_path,
+        )
+
+        # Sans tri, l'ordre par défaut est id DESC (le plus récent d'abord) —
+        # le suspect a pourtant été inséré en dernier (id le plus grand).
+        result = annonces_store.list_annonces(db_path=self.db_path)
+
+        self.assertEqual(
+            [item["url"] for item in result["items"]],
+            ["https://example.com/ok-older", "https://example.com/suspect-recent"],
+        )
+
     def test_get_annonce_by_id_returns_none_when_missing(self):
         self.assertIsNone(annonces_store.get_annonce_by_id(999, db_path=self.db_path))
 

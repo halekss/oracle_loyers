@@ -16,6 +16,8 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+from services import outlier_detection
+
 __all__ = [
     "DEFAULT_DB_PATH",
     "STATUTS_VALIDES",
@@ -111,6 +113,17 @@ def init_db(db_path=DEFAULT_DB_PATH):
             conn.execute("ALTER TABLE annonces ADD COLUMN statut TEXT NOT NULL DEFAULT 'active'")
         if "derniere_verification" not in existing_columns:
             conn.execute("ALTER TABLE annonces ADD COLUMN derniere_verification TEXT")
+        # ORA-195 : `type_local` (ex. "T2", "Grand (T4+)") — nécessaire à la
+        # règle outlier_detection.detect_outlier (incohérence type/surface) ;
+        # `suspect`/`suspect_reason`, calculées par upsert_annonce à partir de
+        # cette règle unique, jamais dupliquée en SQL (nécessaire pour trier
+        # les suspectes en fin de liste sans recalcul par requête).
+        if "type_local" not in existing_columns:
+            conn.execute("ALTER TABLE annonces ADD COLUMN type_local TEXT")
+        if "suspect" not in existing_columns:
+            conn.execute("ALTER TABLE annonces ADD COLUMN suspect INTEGER NOT NULL DEFAULT 0")
+        if "suspect_reason" not in existing_columns:
+            conn.execute("ALTER TABLE annonces ADD COLUMN suspect_reason TEXT")
 
         conn.commit()
     finally:
@@ -128,6 +141,7 @@ def upsert_annonce(
     date_scraping=None,
     statut=None,
     derniere_verification=None,
+    type_local=None,
     db_path=DEFAULT_DB_PATH,
 ):
     """Insère une nouvelle annonce, ou met à jour l'annonce existante de même
@@ -139,6 +153,14 @@ def upsert_annonce(
     la préservation du statut entre deux runs successifs est la responsabilité
     de l'appelant (`clean_immo.py` transmet le statut déjà fusionné, cf. Task 2
     du plan ORA-134 bis), pas de ce store.
+
+    `type_local` (ORA-195, ex. "T2", "Grand (T4+)") sert à
+    `outlier_detection.detect_outlier` — `suspect`/`suspect_reason` sont
+    calculées ICI, à chaque écriture, à partir de cette RÈGLE UNIQUE (jamais
+    dupliquée en SQL) : le badge "Donnée douteuse" et le tri (suspectes en fin
+    de liste) restent donc toujours cohérents avec elle, sans recalcul par
+    requête ni étape de synchronisation séparée à maintenir.
+
     Lève `ValueError` si `url` est absente/vide (ORA-82), ou si `statut` est fourni
     mais invalide.
     """
@@ -150,13 +172,20 @@ def upsert_annonce(
     date_scraping = date_scraping or datetime.now(timezone.utc).isoformat()
     images_json = json.dumps(images) if images is not None else None
     statut = statut or "active"
+    suspect, suspect_reason = outlier_detection.detect_outlier(prix, surface, type_local)
 
     conn = get_connection(db_path)
     try:
         conn.execute(
             """
-            INSERT INTO annonces (titre, prix, surface, ville, quartier, url, date_scraping, images, statut, derniere_verification)
-            VALUES (:titre, :prix, :surface, :ville, :quartier, :url, :date_scraping, :images, :statut, :derniere_verification)
+            INSERT INTO annonces (
+                titre, prix, surface, ville, quartier, url, date_scraping, images,
+                statut, derniere_verification, type_local, suspect, suspect_reason
+            )
+            VALUES (
+                :titre, :prix, :surface, :ville, :quartier, :url, :date_scraping, :images,
+                :statut, :derniere_verification, :type_local, :suspect, :suspect_reason
+            )
             ON CONFLICT(url) DO UPDATE SET
                 titre = excluded.titre,
                 prix = excluded.prix,
@@ -166,7 +195,10 @@ def upsert_annonce(
                 date_scraping = excluded.date_scraping,
                 images = excluded.images,
                 statut = excluded.statut,
-                derniere_verification = excluded.derniere_verification
+                derniere_verification = excluded.derniere_verification,
+                type_local = excluded.type_local,
+                suspect = excluded.suspect,
+                suspect_reason = excluded.suspect_reason
             """,
             {
                 "titre": titre,
@@ -179,6 +211,9 @@ def upsert_annonce(
                 "images": images_json,
                 "statut": statut,
                 "derniere_verification": derniere_verification,
+                "type_local": type_local,
+                "suspect": int(suspect),
+                "suspect_reason": suspect_reason,
             },
         )
         conn.commit()
@@ -237,7 +272,13 @@ def list_annonces(ville=None, quartier=None, statut=None, page=1, per_page=20, s
 
     sort_column = SORT_COLUMNS.get(sort)
     order_sql = "ASC" if order == "asc" else "DESC"
-    order_by_sql = f"ORDER BY {sort_column} {order_sql}, id DESC" if sort_column else "ORDER BY id DESC"
+    # ORA-195 : `suspect ASC` toujours en tête — les annonces douteuses
+    # restent visibles (badge) mais jamais mélangées aux autres, quel que
+    # soit le tri choisi par l'utilisateur (y compris l'absence de tri).
+    if sort_column:
+        order_by_sql = f"ORDER BY suspect ASC, {sort_column} {order_sql}, id DESC"
+    else:
+        order_by_sql = "ORDER BY suspect ASC, id DESC"
 
     conn = get_connection(db_path)
     try:
@@ -410,4 +451,6 @@ def _row_to_dict(row):
         return None
     data = dict(row)
     data["images"] = json.loads(data["images"]) if data.get("images") else []
+    if "suspect" in data:
+        data["suspect"] = bool(data["suspect"])
     return data

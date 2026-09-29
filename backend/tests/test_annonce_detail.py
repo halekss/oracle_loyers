@@ -44,6 +44,34 @@ class EnrichAnnonceDetailTest(unittest.TestCase):
 
         self.assertEqual(result['quartier_prix_m2_moyen'], 19.0)
 
+    def test_excludes_suspect_rows_from_the_quartier_average(self):
+        """ORA-195 : une annonce suspecte (ex. prix/m² aberrant) ne doit pas
+        fausser la moyenne du quartier — même si elle N'EST PAS elle-même
+        l'annonce affichée."""
+        annonce = {'id': 1, 'url': 'https://example.com/annonce-1'}
+        df = pd.DataFrame([
+            _dataset_row(prix=760, surface=40, prix_m2=19.0),
+            _dataset_row(url='https://example.com/annonce-2', prix=760, surface=40, prix_m2=19.0),
+            # Suspecte (prix/m² hors norme) : ne doit pas peser dans la moyenne.
+            _dataset_row(url='https://example.com/annonce-suspecte', prix=8000, surface=40, prix_m2=200.0),
+        ])
+
+        result = enrich_annonce_detail(annonce, df)
+
+        self.assertEqual(result['quartier_prix_m2_moyen'], 19.0)
+
+    def test_still_enriches_the_target_annonce_even_when_it_is_itself_suspect(self):
+        """La Fiche d'une annonce suspecte reste complète (photo, coordonnées,
+        cavaliers...) — seule sa contribution aux MOYENNES des autres est
+        exclue, jamais son propre affichage (ORA-195 : "ne rien supprimer")."""
+        annonce = {'id': 1, 'url': 'https://example.com/annonce-1'}
+        df = pd.DataFrame([_dataset_row(prix=8000, surface=40, prix_m2=200.0)])
+
+        result = enrich_annonce_detail(annonce, df)
+
+        self.assertEqual(result['latitude'], 45.75)
+        self.assertEqual(result['type_local'], 'T2')
+
     def test_includes_cavaliers_detail_for_the_matched_row_only(self):
         annonce = {'id': 1, 'url': 'https://example.com/annonce-1'}
         df = pd.DataFrame([_dataset_row()])

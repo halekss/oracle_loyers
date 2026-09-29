@@ -176,6 +176,28 @@ describe('AnnonceCard', () => {
     expect(screen.queryByText('T2')).not.toBeInTheDocument();
   });
 
+  describe('badge "Donnée douteuse" (ORA-195)', () => {
+    it('shows a "Donnée douteuse" badge with the reason as a tooltip when the annonce is suspect', () => {
+      render(<AnnonceCard annonce={{ ...baseAnnonce, suspect: true, suspect_reason: 'Prix/m² hors norme (86.7 €/m²)' }} />);
+
+      const badge = screen.getByText(/Donnée douteuse/);
+      expect(badge).toBeInTheDocument();
+      expect(badge).toHaveAttribute('title', 'Prix/m² hors norme (86.7 €/m²)');
+    });
+
+    it('does not show the badge for a normal annonce', () => {
+      render(<AnnonceCard annonce={{ ...baseAnnonce, suspect: false }} />);
+
+      expect(screen.queryByText(/Donnée douteuse/)).not.toBeInTheDocument();
+    });
+
+    it('does not show the badge when the suspect field is absent (backward-compatible)', () => {
+      render(<AnnonceCard annonce={baseAnnonce} />);
+
+      expect(screen.queryByText(/Donnée douteuse/)).not.toBeInTheDocument();
+    });
+  });
+
   describe('favoris (ORA-132)', () => {
     it('renders an unfavorited toggle by default', () => {
       render(<AnnonceCard annonce={baseAnnonce} />);

@@ -108,6 +108,19 @@ class LoadSourceDataframeTest(unittest.TestCase):
 
         self.assertEqual(list(df['url']), ['https://x/1'])
 
+    def test_excludes_suspect_rows_from_the_master_source(self):
+        """ORA-195 : une annonce suspecte ne doit jamais entraîner le modèle,
+        quelle que soit `source` — même règle unique que partout ailleurs."""
+        _write_csv(self.master_path, MASTER_COLUMNS, [
+            [1, 'Vizzit', 800, 40, 'https://x/1', 'Lyon', 'Gerland', 'T2'],
+            # 862€ / 525m² = 1.6 €/m² : suspect (prix/m² hors norme).
+            [2, 'Vizzit', 862, 525, 'https://x/2', 'Lyon', 'Montchat', 'Grand (T4+)'],
+        ])
+
+        df = train_model.load_source_dataframe('lyon', source='master', data_dir=self.data_dir)
+
+        self.assertEqual(list(df['url']), ['https://x/1'])
+
     def test_rejects_an_unknown_source(self):
         _write_csv(self.master_path, MASTER_COLUMNS, [])
 

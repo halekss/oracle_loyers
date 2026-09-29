@@ -28,7 +28,7 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
 
   if (!annonce) return null;
 
-  const { id, titre, prix, surface, ville, quartier, url, images } = annonce;
+  const { id, titre, prix, surface, ville, quartier, url, images, suspect, suspect_reason: suspectReason } = annonce;
   const favorite = isFavorite(id);
   const source = deriveSource(url);
 
@@ -103,6 +103,16 @@ export default function AnnonceCard({ annonce, referencePrixM2, referenceType, o
             {quartier && (
               <span className="shrink-0 text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border bg-purple-900/40 text-purple-400 border-purple-700/50">
                 {quartier}
+              </span>
+            )}
+            {suspect && (
+              // ORA-195 : badge discret — signale sans alarmer, l'annonce
+              // reste consultable (règle : ne jamais rien supprimer).
+              <span
+                title={suspectReason || 'Donnée douteuse'}
+                className="shrink-0 text-[9px] uppercase font-bold tracking-wide px-2 py-1 rounded-full border bg-slate-800 text-slate-400 border-slate-700"
+              >
+                ⚠ Donnée douteuse
               </span>
             )}
           </div>
