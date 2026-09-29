@@ -29,6 +29,7 @@ class PredictRouteTest(unittest.TestCase):
         data = response.get_json()
         self.assertIn("error", data)
         self.assertNotIn("estimated_price", data)
+        self.assertEqual(data["code"], "IMPLAUSIBLE")
 
     def test_predict_route_rejects_zero_price_with_500(self):
         """Un loyer exactement nul n'est pas plus plausible qu'un loyer négatif."""
@@ -75,6 +76,7 @@ class PredictRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertEqual(data["error"], "Payload invalide")
+        self.assertEqual(data["code"], "NO_SURFACE")
         self.assertTrue(any("surface" in detail for detail in data["details"]))
 
     def test_predict_route_rejects_negative_surface_with_400(self):
@@ -86,6 +88,7 @@ class PredictRouteTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["code"], "NO_SURFACE")
 
     def test_predict_route_rejects_unknown_quartier_with_400(self):
         client = app.app.test_client()
@@ -97,6 +100,7 @@ class PredictRouteTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
+        self.assertEqual(data["code"], "UNKNOWN_QUARTIER")
         self.assertTrue(any("quartier" in detail for detail in data["details"]))
 
     def test_predict_route_rejects_malformed_field_shape_with_400(self):
@@ -121,7 +125,9 @@ class PredictRouteTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 500)
-        self.assertIn("error", response.get_json())
+        data = response.get_json()
+        self.assertIn("error", data)
+        self.assertEqual(data["code"], "MODEL_UNAVAILABLE")
 
     def test_predict_route_returns_400_when_model_is_absent_for_the_requested_ville_only(self):
         """ORA-154 : la panne d'un modèle ne doit plus dégrader toutes les
@@ -137,7 +143,52 @@ class PredictRouteTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
+        self.assertEqual(data["code"], "UNKNOWN_QUARTIER")
         self.assertTrue(any("Lyon" in detail for detail in data["details"]))
+
+    def test_predict_route_returns_a_low_sample_code_when_fewer_than_5_comparables(self):
+        """ORA-198 : l'estimation reste affichée (200), juste signalée comme
+        moins fiable — pas un état bloquant comme les autres codes."""
+        client = app.app.test_client()
+
+        with patch("app.estimate_confidence", return_value=("Faible", 2)):
+            response = client.post(
+                "/api/predict",
+                json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertGreater(data["estimated_price"], 0)
+        self.assertEqual(data["code"], "LOW_SAMPLE")
+
+    def test_predict_route_omits_the_code_field_with_enough_comparables(self):
+        client = app.app.test_client()
+
+        with patch("app.estimate_confidence", return_value=("Élevée", 25)):
+            response = client.post(
+                "/api/predict",
+                json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("code", response.get_json())
+
+    def test_predict_route_returns_a_model_unavailable_code_when_the_prediction_itself_crashes(self):
+        client = app.app.test_client()
+
+        broken_model = MagicMock()
+        broken_model.feature_names_in_ = app.models["Lyon"].feature_names_in_
+        broken_model.predict.side_effect = RuntimeError("boom")
+
+        with patch.dict(app.models, {"Lyon": broken_model}):
+            response = client.post(
+                "/api/predict",
+                json={"surface": 45, "quartier": "Gerland", "type_local": "T2"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.get_json()["code"], "MODEL_UNAVAILABLE")
 
 
 if __name__ == "__main__":

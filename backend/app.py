@@ -907,11 +907,11 @@ def predict():
         description: Modèle ou données de référence indisponibles
     """
     if not any(m is not None for m in models.values()):
-        return jsonify({"error": "Modèle de prédiction indisponible sur ce serveur"}), 500
+        return jsonify({"error": "Modèle de prédiction indisponible sur ce serveur", "code": "MODEL_UNAVAILABLE"}), 500
 
     df = data_loader.get_data()
     if df is None or df.empty:
-        return jsonify({"error": "Données de référence indisponibles"}), 500
+        return jsonify({"error": "Données de référence indisponibles", "code": "MODEL_UNAVAILABLE"}), 500
 
     # ORA-195 : l'estimation et ses comparables ignorent les annonces suspectes.
     df = outlier_detection.exclude_suspects(df)
@@ -941,13 +941,17 @@ def predict():
     }
     features_df, result = build_feature_row(payload, df, cavaliers_df, feature_names_by_ville, categories_by_ville)
     if features_df is None:
-        return jsonify({"error": "Payload invalide", "details": result}), 400
+        # ORA-198 : `code` stable (NO_SURFACE, UNKNOWN_QUARTIER, INVALID_PAYLOAD)
+        # que le frontend mappe sur un message explicite — jamais de texte à
+        # parser (`details` reste des messages humains, informatifs mais pas
+        # contractuels).
+        return jsonify({"error": "Payload invalide", "code": result["code"], "details": result["details"]}), 400
 
     model = models[result["ville"]]
     try:
         estimated_price = float(model.predict(features_df)[0])
     except Exception as e:
-        return jsonify({"error": f"Erreur lors de la prédiction : {e}"}), 500
+        return jsonify({"error": f"Erreur lors de la prédiction : {e}", "code": "MODEL_UNAVAILABLE"}), 500
 
     if is_physically_implausible_price(estimated_price):
         # Un loyer <= 0 n'est jamais une estimation valide (ORA-152) : signale
@@ -963,20 +967,27 @@ def predict():
         )
         return jsonify({
             "error": "Le modèle de prédiction a renvoyé une estimation incohérente (prix <= 0€).",
+            "code": "IMPLAUSIBLE",
         }), 500
 
     surface = result["surface"]
     price_m2 = estimated_price / surface if surface else 0.0
     confidence, comparables = estimate_confidence(df, result["quartier"], result["type_local"])
 
-    return jsonify({
+    response = {
         "estimated_price": round(estimated_price, 0),
         "price_m2": round(price_m2, 0),
         "confiance": confidence,
         "comparables": comparables,
         "quartier_detecte": result["quartier"],
         "type_local_detecte": result["type_local"],
-    })
+    }
+    # ORA-198 : moins de 5 comparables (même seuil que estimate_confidence,
+    # confiance "Faible") -> signale explicitement une fiabilité faible,
+    # sans bloquer l'affichage de l'estimation.
+    if comparables < 5:
+        response["code"] = "LOW_SAMPLE"
+    return jsonify(response)
 
 @app.route('/api/tiles/<int:z>/<int:x>/<int:y>.png', defaults={'retina': False})
 @app.route('/api/tiles/<int:z>/<int:x>/<int:y>@2x.png', defaults={'retina': True})

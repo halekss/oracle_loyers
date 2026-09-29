@@ -137,68 +137,72 @@ def build_feature_row(payload, df, cavaliers_df, feature_names_by_ville, categor
     `None` (défaut) reproduit le comportement d'avant ORA-197.
 
     Renvoie (features_df, infos) en cas de succès (`infos["ville"]` indique
-    quel modèle appeler), ou (None, [messages d'erreur]) sinon.
+    quel modèle appeler), ou (None, {"code": ..., "details": [...]}) sinon —
+    `code` (ORA-198) est une valeur stable ("NO_SURFACE", "UNKNOWN_QUARTIER",
+    "INVALID_PAYLOAD") que l'appelant (app.py) mappe sur un message utilisateur
+    explicite, jamais du texte à parser côté frontend.
     """
-    errors = []
-
     surface = None
     try:
         surface = float(payload.get("surface"))
         if surface <= 0:
-            errors.append("surface doit être un nombre strictement positif")
-            surface = None
+            return None, {"code": "NO_SURFACE", "details": ["surface doit être un nombre strictement positif"]}
     except (TypeError, ValueError):
-        errors.append("surface est requise et doit être numérique")
+        return None, {"code": "NO_SURFACE", "details": ["surface est requise et doit être numérique"]}
 
     type_local = normalize_type_local(payload.get("type_local"))
     if not type_local:
-        errors.append("type_local invalide (attendu : Studio/T1, T2, T3 ou Grand (T4+))")
+        return None, {
+            "code": "INVALID_PAYLOAD",
+            "details": ["type_local invalide (attendu : Studio/T1, T2, T3 ou Grand (T4+))"],
+        }
 
     known_quartiers = df["quartier"].dropna().unique().tolist() if df is not None else []
     quartier = resolve_quartier(payload.get("quartier"), known_quartiers)
 
-    ville_annonce = None
-    feature_names = None
-    quartier_rows = None
     if not quartier:
-        errors.append("quartier inconnu ou non fourni")
-    else:
-        quartier_rows = df[df["quartier"] == quartier]
-        if "ville" in quartier_rows.columns:
-            villes_connues = quartier_rows["ville"].dropna()
-            if not villes_connues.empty:
-                ville_annonce = villes_connues.mode().iloc[0]
+        return None, {"code": "UNKNOWN_QUARTIER", "details": ["quartier inconnu ou non fourni"]}
 
-        feature_names = feature_names_by_ville.get(ville_annonce)
-        known_categories = (categories_by_ville or {}).get(ville_annonce, {})
-        if feature_names is None:
-            errors.append(
+    quartier_rows = df[df["quartier"] == quartier]
+    ville_annonce = None
+    if "ville" in quartier_rows.columns:
+        villes_connues = quartier_rows["ville"].dropna()
+        if not villes_connues.empty:
+            ville_annonce = villes_connues.mode().iloc[0]
+
+    feature_names = feature_names_by_ville.get(ville_annonce)
+    known_categories = (categories_by_ville or {}).get(ville_annonce, {})
+    if feature_names is None:
+        return None, {
+            "code": "UNKNOWN_QUARTIER",
+            "details": [
                 f"Aucun modèle de prédiction disponible pour la ville "
                 f"'{ville_annonce or 'inconnue'}' — prédiction non fiable pour cette zone."
-            )
-        elif not _is_known_category(quartier, "quartier", feature_names, known_categories.get("quartier")):
-            # Régression réelle (ORA-99 follow-up) : un quartier peut exister dans
-            # les données réelles (df) sans jamais avoir été vu par le modèle
-            # de sa ville (ex: un quartier ajouté aux données mais pas encore
-            # dans un modèle promu) — sans ce contrôle, la colonne one-hot
-            # correspondante est silencieusement ignorée plus bas et le modèle
-            # prédit à l'aveugle, tout en affichant un niveau de confiance basé
-            # sur les vraies annonces comparables : trompeur. Le frontend a déjà
-            # un repli silencieux sur la moyenne réelle du secteur quand cet
-            # appel échoue (cf. App.jsx handleScan).
-            #
-            # ORA-197 : `_is_known_category` reconnaît en plus la catégorie de
-            # référence de `pd.get_dummies(drop_first=True)` — un quartier
-            # (ex. "Ainay", premier par ordre alphabétique à Lyon) qui n'a pas
-            # sa propre colonne one-hot mais figure dans les catégories vues à
-            # l'entraînement (métadonnées du modèle) n'est plus rejeté à tort.
-            errors.append(
+            ],
+        }
+    if not _is_known_category(quartier, "quartier", feature_names, known_categories.get("quartier")):
+        # Régression réelle (ORA-99 follow-up) : un quartier peut exister dans
+        # les données réelles (df) sans jamais avoir été vu par le modèle
+        # de sa ville (ex: un quartier ajouté aux données mais pas encore
+        # dans un modèle promu) — sans ce contrôle, la colonne one-hot
+        # correspondante est silencieusement ignorée plus bas et le modèle
+        # prédit à l'aveugle, tout en affichant un niveau de confiance basé
+        # sur les vraies annonces comparables : trompeur. Le frontend a déjà
+        # un repli silencieux sur la moyenne réelle du secteur quand cet
+        # appel échoue (cf. App.jsx handleScan).
+        #
+        # ORA-197 : `_is_known_category` reconnaît en plus la catégorie de
+        # référence de `pd.get_dummies(drop_first=True)` — un quartier
+        # (ex. "Ainay", premier par ordre alphabétique à Lyon) qui n'a pas
+        # sa propre colonne one-hot mais figure dans les catégories vues à
+        # l'entraînement (métadonnées du modèle) n'est plus rejeté à tort.
+        return None, {
+            "code": "UNKNOWN_QUARTIER",
+            "details": [
                 f"Le modèle actif n'a pas de données d'entraînement pour le quartier '{quartier}' "
                 "— prédiction non fiable pour cette zone."
-            )
-
-    if errors:
-        return None, errors
+            ],
+        }
 
     type_bien = normalize_type_bien(payload.get("type"))
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import ResultCard from './components/ResultCard';
+import EstimationStatus from './components/EstimationStatus';
 import PriceHistory from './components/PriceHistory';
 import MapComponent from './components/MapComponent';
 import CalquesView from './components/CalquesView';
@@ -380,13 +381,13 @@ function App() {
       let estimatedPrice = data.prix_moyen;
       let priceM2 = data.prix_m2_moyen;
       let confiance = null;
-      // ORA-179 : distingue "aucune prédiction tentée" (surface/type non
-      // fournis, vue Estimation vide et invite normalement) de "prédiction
-      // tentée mais indisponible" (le modèle actif n'a pas assez de données
-      // pour ce couple quartier/type précis, ex: T3 à Ainay) — l'ancien
-      // message d'invite blâmait l'utilisateur même quand il avait tout
-      // rempli correctement.
-      let predictionUnavailable = false;
+      // ORA-198 : code stable (NO_SURFACE/UNKNOWN_QUARTIER/IMPLAUSIBLE/
+      // MODEL_UNAVAILABLE/INVALID_PAYLOAD, cf. /api/predict) plutôt qu'un
+      // simple booléen "indisponible" — EstimationStatus.jsx choisit le
+      // message/l'action explicite à afficher à partir de cette valeur, sans
+      // jamais parser de texte. `null` = prédiction non tentée ou réussie.
+      let predictionErrorCode = null;
+      let lowSampleWarning = false;
 
       const surfaceValue = parseFloat(surfaceInput);
       const hasValidSurface = Number.isFinite(surfaceValue) && surfaceValue > 0;
@@ -402,11 +403,16 @@ function App() {
             estimatedPrice = prediction.estimated_price;
             priceM2 = prediction.price_m2;
             confiance = prediction.confiance;
+            lowSampleWarning = prediction.code === 'LOW_SAMPLE';
           } else {
-            predictionUnavailable = true;
+            predictionErrorCode = 'MODEL_UNAVAILABLE';
           }
         } catch (predictErr) {
-          predictionUnavailable = true;
+          // Un code reconnu (réponse HTTP avec corps JSON) prime ; une erreur
+          // réseau/serveur sans corps exploitable (ApiError.code === null)
+          // retombe sur "Oracle indisponible", le message le plus honnête
+          // pour un échec dont on ne connaît pas la cause précise.
+          predictionErrorCode = predictErr?.code || 'MODEL_UNAVAILABLE';
           console.error("Estimation IA indisponible, repli sur la moyenne réelle du secteur :", predictErr);
         }
       }
@@ -418,7 +424,8 @@ function App() {
         count: data.count,
         type: data.type_filtre,
         confiance,
-        predictionUnavailable,
+        predictionErrorCode,
+        lowSampleWarning,
         facteurs: data.facteurs || [],
         // ORA-172 : détail complet (tous les sous-types, pas juste le plus
         // présent) pour le panneau "Les 4 Cavaliers", en plus des phrases résumées ci-dessus (PDF).
@@ -551,17 +558,41 @@ function App() {
   // (maquette 03), vide et explicite tant qu'aucune surface n'a été saisie.
   function renderEstimationView() {
     if (!hasModelEstimate) {
-      // ORA-179 : une surface/type ont bien été fournis mais le modèle actif
-      // n'a pas assez de données pour cette combinaison précise (ex: peu
-      // d'annonces T3 à Ainay) — message honnête plutôt que de laisser
-      // penser que l'utilisateur a oublié de remplir un champ.
-      const message = result?.predictionUnavailable
-        ? `Estimation indisponible pour ${result.quartier} en ${result.type} : données insuffisantes pour cette combinaison quartier/type dans le modèle actif. Le loyer moyen réel du secteur reste visible dans Scan.`
-        : "Saisissez une surface et un type de bien précis (T1-T4+) dans Recherche pour obtenir l'estimation personnalisée du modèle.";
+      // ORA-198 : un état explicite par cas (surface manquante, quartier
+      // inconnu du modèle, estimation incohérente, Oracle indisponible) au
+      // lieu d'un message générique unique — `predictionErrorCode` vient du
+      // contrat /api/predict (jamais de texte à parser). Pas de surface
+      // encore fournie (y compris avant tout scan) : même état "Surface
+      // manquante", c'est littéralement le même blocage pour l'utilisateur.
+      const code = result?.predictionErrorCode || (!result?.surface ? 'NO_SURFACE' : null);
+      if (code) {
+        return (
+          <>
+            {renderSummaryChip()}
+            <div className="p-4 md:p-5">
+              <EstimationStatus
+                code={code}
+                medianPrice={code === 'UNKNOWN_QUARTIER' ? result?.estimated_price : undefined}
+                medianPriceM2={code === 'UNKNOWN_QUARTIER' ? result?.stats?.prix_m2 : undefined}
+                onAction={
+                  code === 'NO_SURFACE' ? handleAddSurface
+                    : code === 'IMPLAUSIBLE' ? () => setActiveView('recherche')
+                      : code === 'MODEL_UNAVAILABLE' ? () => handleScan(result.quartier, result.type, String(result.surface))
+                        : undefined
+                }
+              />
+            </div>
+          </>
+        );
+      }
+      // Surface fournie mais type "Tout" : aucune prédiction n'a été tentée
+      // par choix (pas un échec) — invite neutre, pas un état d'erreur.
       return (
         <>
           {renderSummaryChip()}
-          <p className="p-4 md:p-5 text-xs text-ink-dim">{message}</p>
+          <p className="p-4 md:p-5 text-xs text-ink-dim">
+            Choisissez un type de bien précis (T1-T4+) dans Recherche pour obtenir l'estimation personnalisée du modèle.
+          </p>
         </>
       );
     }

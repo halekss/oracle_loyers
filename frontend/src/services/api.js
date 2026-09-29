@@ -5,25 +5,43 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", ""]);
 // 4xx/5xx, pour que l'UI puisse afficher un message adapté à chaque cas
 // plutôt qu'un message générique unique.
 export class ApiError extends Error {
-  constructor(message, { type = "unknown", status = null } = {}) {
+  constructor(message, { type = "unknown", status = null, code = null, details = null } = {}) {
     super(message);
     this.name = "ApiError";
     this.type = type; // "network" | "rate_limit" | "client" | "server" | "unknown"
     this.status = status;
+    // ORA-198 : `code` — valeur stable renvoyée par le backend (ex. NO_SURFACE,
+    // UNKNOWN_QUARTIER, IMPLAUSIBLE, MODEL_UNAVAILABLE sur /api/predict) pour
+    // que l'UI affiche un message explicite par cas, sans parser `message`.
+    // `null` quand la réponse n'a pas de corps JSON exploitable (ex. erreur
+    // réseau, ou route qui n'a pas encore ce contrat).
+    this.code = code;
+    this.details = details;
   }
 }
 
-const classifyResponseError = (response) => {
+// ORA-198 : lit le corps JSON de la réponse en erreur (quand il existe) pour
+// remonter `code`/`details` jusqu'à l'appelant — sans ça, `fetchWithClassification`
+// jetait un ApiError générique et le contrat `code` du backend n'était jamais lu.
+const classifyResponseError = async (response) => {
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    // Pas de corps JSON exploitable (erreur HTML/texte brut, timeout proxy...) : on garde body=null.
+  }
+  const options = { status: response.status, code: body?.code ?? null, details: body?.details ?? null };
+
   if (response.status === 429) {
-    return new ApiError("Trop de requêtes (429)", { type: "rate_limit", status: response.status });
+    return new ApiError("Trop de requêtes (429)", { ...options, type: "rate_limit" });
   }
   if (response.status >= 500) {
-    return new ApiError(`Erreur serveur (${response.status})`, { type: "server", status: response.status });
+    return new ApiError(body?.error || `Erreur serveur (${response.status})`, { ...options, type: "server" });
   }
   if (response.status >= 400) {
-    return new ApiError(`Requête invalide (${response.status})`, { type: "client", status: response.status });
+    return new ApiError(body?.error || `Requête invalide (${response.status})`, { ...options, type: "client" });
   }
-  return new ApiError(`Réponse inattendue (${response.status})`, { type: "unknown", status: response.status });
+  return new ApiError(`Réponse inattendue (${response.status})`, { ...options, type: "unknown" });
 };
 
 const fetchWithClassification = async (url, options) => {
@@ -34,7 +52,7 @@ const fetchWithClassification = async (url, options) => {
     throw new ApiError("Impossible de contacter le serveur (problème réseau).", { type: "network" });
   }
 
-  if (!response.ok) throw classifyResponseError(response);
+  if (!response.ok) throw await classifyResponseError(response);
 
   return response;
 };
