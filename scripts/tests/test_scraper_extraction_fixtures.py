@@ -87,6 +87,31 @@ class Century21ExtractionTest(unittest.TestCase):
         self.assertEqual(lien, "https://www.century21.fr/trouver_logement/detail/15336559480/")
 
 
+class _FakeSeleniumElement:
+    def __init__(self, href=None, classes=""):
+        self._href, self._classes = href, classes
+
+    def find_elements(self, by, value):
+        return [_FakeSeleniumElement(href=self._href)] if self._href is not None and value == "a" else []
+
+    def get_attribute(self, name):
+        return {"href": self._href, "class": self._classes}.get(name)
+
+
+class Century21LienDeCarteTest(unittest.TestCase):
+    """CARD_SELECTOR ([class*=...]) attrape aussi un sous-bloc sans lien par
+    carte (~1 par annonce dans les logs : 37 à Lyon, 12 à Lille le 28/09) : ce
+    n'est pas une annonce, pas une erreur de parsing."""
+
+    def test_returns_the_href_of_a_listing_card(self):
+        carte = _FakeSeleniumElement(href="https://www.century21.fr/trouver_logement/detail/1/")
+        self.assertEqual(scraper_century_21.lien_de_carte(carte), "https://www.century21.fr/trouver_logement/detail/1/")
+
+    def test_returns_none_for_a_block_without_link_instead_of_raising(self):
+        bloc = _FakeSeleniumElement(classes="c-the-property-thumbnail-with-content__col-right")
+        self.assertIsNone(scraper_century_21.lien_de_carte(bloc))
+
+
 class OrpiExtractionTest(unittest.TestCase):
     def test_extracts_titre_prix_surface_lien(self):
         soup = load_fixture("orpi.html")

@@ -58,6 +58,14 @@ INFOS_SELECTORS = [
 
 logger = get_scraper_logger("century21")
 
+def lien_de_carte(carte):
+    """href du premier <a> de la carte, ou None si le bloc n'a pas de lien.
+    CARD_SELECTOR (sous-chaîne de classe) attrape aussi un sous-bloc sans lien
+    par carte (~1 par annonce dans les logs du 28/09) : ce n'est pas une annonce."""
+    liens = carte.find_elements(By.TAG_NAME, "a")
+    return liens[0].get_attribute("href") if liens else None
+
+
 @retry_with_backoff(max_retries=3, backoff_seconds=2)
 def load_page(driver, url):
     driver.get(url)
@@ -129,14 +137,15 @@ if __name__ == '__main__':
             break
 
         vus_avant_page = len(vus_ce_run)
-        total_cards_vues += len(annonces)
         compteur_nouveaux = 0
+        classes_sans_lien = set()
         for annonce in annonces:
             try:
-                lien_elem = annonce.find_element(By.TAG_NAME, "a")
-                lien = lien_elem.get_attribute("href")
+                lien = lien_de_carte(annonce)
                 if not lien:
+                    classes_sans_lien.add(annonce.get_attribute("class"))
                     continue
+                total_cards_vues += 1
 
                 if lien in rows_by_lien:
                     # Déjà connue : pas de re-scraping de ses détails, on note juste
@@ -166,6 +175,9 @@ if __name__ == '__main__':
                 logger.warning("Erreur lors du parsing d'une annonce : %s", exc)
                 continue
 
+        if classes_sans_lien:
+            logger.info("Page %s : blocs sans lien ignorés (non-annonces), classes : %s",
+                        page_num, sorted(c or "" for c in classes_sans_lien))
         logger.info("Page %s terminée : %s annonces ajoutées.", page_num, compteur_nouveaux)
         total_nouveaux_run += compteur_nouveaux
         checkpoint()
