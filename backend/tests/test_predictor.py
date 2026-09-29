@@ -65,6 +65,34 @@ class BuildFeatureRowTest(unittest.TestCase):
             "Lille": self.lille_feature_names,
         }
 
+    def test_returns_a_no_surface_code_when_surface_is_missing(self):
+        """ORA-198 : code stable, pas de texte à parser côté frontend."""
+        features_df, result = build_feature_row(
+            {"quartier": "Gerland", "type_local": "T2"},
+            self.df, None, self.feature_names_by_ville,
+        )
+
+        self.assertIsNone(features_df)
+        self.assertEqual(result["code"], "NO_SURFACE")
+
+    def test_returns_a_no_surface_code_when_surface_is_zero_or_negative(self):
+        features_df, result = build_feature_row(
+            {"surface": -10, "quartier": "Gerland", "type_local": "T2"},
+            self.df, None, self.feature_names_by_ville,
+        )
+
+        self.assertIsNone(features_df)
+        self.assertEqual(result["code"], "NO_SURFACE")
+
+    def test_returns_an_invalid_payload_code_for_an_unrecognized_type_local(self):
+        features_df, result = build_feature_row(
+            {"surface": 40, "quartier": "Gerland", "type_local": "Bureau"},
+            self.df, None, self.feature_names_by_ville,
+        )
+
+        self.assertIsNone(features_df)
+        self.assertEqual(result["code"], "INVALID_PAYLOAD")
+
     def test_accepts_a_quartier_present_in_its_ville_model_features(self):
         features_df, result = build_feature_row(
             {"surface": 40, "quartier": "Gerland", "type_local": "T2"},
@@ -98,22 +126,24 @@ class BuildFeatureRowTest(unittest.TestCase):
         feature_names_by_ville = dict(self.feature_names_by_ville)
         feature_names_by_ville["Lyon"] = [c for c in self.lyon_feature_names if c != "quartier_Gerland"]
 
-        features_df, errors = build_feature_row(
+        features_df, result = build_feature_row(
             {"surface": 40, "quartier": "Gerland", "type_local": "T2"},
             self.df, None, feature_names_by_ville,
         )
 
         self.assertIsNone(features_df)
-        self.assertTrue(any("Gerland" in e for e in errors))
+        self.assertEqual(result["code"], "UNKNOWN_QUARTIER")
+        self.assertTrue(any("Gerland" in e for e in result["details"]))
 
     def test_rejects_when_no_model_is_registered_for_the_resolved_ville(self):
-        features_df, errors = build_feature_row(
+        features_df, result = build_feature_row(
             {"surface": 40, "quartier": "Wazemmes", "type_local": "T2"},
             self.df, None, {"Lyon": self.lyon_feature_names},
         )
 
         self.assertIsNone(features_df)
-        self.assertTrue(any("Lille" in e for e in errors))
+        self.assertEqual(result["code"], "UNKNOWN_QUARTIER")
+        self.assertTrue(any("Lille" in e for e in result["details"]))
 
     def test_accepts_the_reference_category_quartier_when_listed_in_known_categories(self):
         """ORA-197 : pd.get_dummies(drop_first=True) ne crée pas de colonne
@@ -154,13 +184,14 @@ class BuildFeatureRowTest(unittest.TestCase):
             {"quartier": "Perrache", "ville": "Lyon", "type_local": "T2", "latitude": 45.75, "longitude": 4.82, "code_postal": 69002},
         ])], ignore_index=True)
 
-        features_df, errors = build_feature_row(
+        features_df, result = build_feature_row(
             {"surface": 45, "quartier": "Perrache", "type_local": "T2"},
             df, None, self.feature_names_by_ville, categories_by_ville,
         )
 
         self.assertIsNone(features_df)
-        self.assertTrue(any("Perrache" in e for e in errors))
+        self.assertEqual(result["code"], "UNKNOWN_QUARTIER")
+        self.assertTrue(any("Perrache" in e for e in result["details"]))
 
     def test_reference_category_check_falls_back_to_old_behaviour_without_categories_by_ville(self):
         """`categories_by_ville` omis (None, défaut) : comportement identique
@@ -169,13 +200,14 @@ class BuildFeatureRowTest(unittest.TestCase):
         feature_names_by_ville = dict(self.feature_names_by_ville)
         feature_names_by_ville["Lyon"] = [c for c in self.lyon_feature_names if c != "quartier_Gerland"]
 
-        features_df, errors = build_feature_row(
+        features_df, result = build_feature_row(
             {"surface": 40, "quartier": "Gerland", "type_local": "T2"},
             self.df, None, feature_names_by_ville,
         )
 
         self.assertIsNone(features_df)
-        self.assertTrue(any("Gerland" in e for e in errors))
+        self.assertEqual(result["code"], "UNKNOWN_QUARTIER")
+        self.assertTrue(any("Gerland" in e for e in result["details"]))
 
     def test_scopes_distance_features_to_the_listings_ville(self):
         cavaliers = pd.DataFrame([

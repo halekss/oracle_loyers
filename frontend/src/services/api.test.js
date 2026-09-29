@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { getApiBaseUrl, apiFetchOptions, parseRateLimitHeaders } from './api.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getApiBaseUrl, apiFetchOptions, parseRateLimitHeaders, api, ApiError } from './api.js';
 
 describe('getApiBaseUrl', () => {
   it('uses VITE_API_URL when provided', () => {
@@ -44,5 +44,52 @@ describe('parseRateLimitHeaders', () => {
 
   it('returns null when the headers are absent (rate limiting disabled or not exposed)', () => {
     expect(parseRateLimitHeaders(new Headers())).toBeNull();
+  });
+});
+
+describe('api.predict error classification (ORA-198)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('attaches the backend `code` and `details` to the thrown ApiError on a 400', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Payload invalide', code: 'NO_SURFACE', details: ['surface est requise'] }), {
+        status: 400,
+      }),
+    ));
+
+    await expect(api.predict({ quartier: 'Gerland', type_local: 'T2' })).rejects.toMatchObject({
+      code: 'NO_SURFACE',
+      details: ['surface est requise'],
+    });
+  });
+
+  it('attaches the backend `code` on a 500', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'incohérent', code: 'IMPLAUSIBLE' }), { status: 500 }),
+    ));
+
+    await expect(api.predict({ surface: 45, quartier: 'Gerland', type_local: 'T2' })).rejects.toMatchObject({
+      code: 'IMPLAUSIBLE',
+    });
+  });
+
+  it('leaves `code` null when the error body has none (unexpected server error shape)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('not json', { status: 500 })));
+
+    await expect(api.predict({ surface: 45, quartier: 'Gerland', type_local: 'T2' })).rejects.toMatchObject({
+      code: null,
+    });
+  });
+
+  it('still throws a network-type ApiError (no code) when fetch itself fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    const error = await api.predict({ surface: 45, quartier: 'Gerland', type_local: 'T2' }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.type).toBe('network');
+    expect(error.code).toBeNull();
   });
 });
