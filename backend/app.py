@@ -240,6 +240,12 @@ with open(SCRAPING_CONFIG_PATH, encoding='utf-8') as f:
 
 MODEL_PATHS = {}  # nom de ville -> chemin du .pkl
 models = {}       # nom de ville -> modèle chargé, ou None si indisponible
+# ORA-197 : catégories vues à l'entraînement (quartiers, types), lues depuis
+# les métadonnées écrites par train_model.py (record_model_metadata) — permet
+# à predictor.build_feature_row de reconnaître la catégorie de référence de
+# pd.get_dummies(drop_first=True), sans colonne one-hot dédiée dans le modèle
+# lui-même (ex. "Ainay", premier quartier lyonnais par ordre alphabétique).
+categories_by_ville = {}
 for slug, ville_config in VILLES_CONFIG.items():
     ville_nom = ville_config['nom']
     model_path = os.path.join(MODELS_DIR, f'price_predictor_{slug}.pkl')
@@ -252,6 +258,16 @@ for slug, ville_config in VILLES_CONFIG.items():
             ville_nom, model_path, type(exc).__name__, exc,
         )
         models[ville_nom] = None
+
+    meta_path = f"{model_path}.meta.json"
+    try:
+        with open(meta_path, encoding='utf-8') as f:
+            categories_by_ville[ville_nom] = json.load(f).get('categories', {})
+    except (OSError, json.JSONDecodeError):
+        # Modèle promu avant ORA-197 (pas de champ "categories"), ou jamais
+        # promu du tout (pas de .meta.json) : repli sur l'ancien comportement
+        # de build_feature_row (catégorie de référence rejetée), pas un crash.
+        categories_by_ville[ville_nom] = {}
 
 # --- ROUTES API ---
 
@@ -923,7 +939,7 @@ def predict():
         for ville_nom, m in models.items()
         if m is not None
     }
-    features_df, result = build_feature_row(payload, df, cavaliers_df, feature_names_by_ville)
+    features_df, result = build_feature_row(payload, df, cavaliers_df, feature_names_by_ville, categories_by_ville)
     if features_df is None:
         return jsonify({"error": "Payload invalide", "details": result}), 400
 

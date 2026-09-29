@@ -75,6 +75,7 @@ def record_model_metadata(
     metrics,
     model_version=None,
     hyperparameters=None,
+    categories=None,
 ):
     """Écrit `<model_path>.meta.json`, référençant explicitement la version des données
     utilisée pour entraîner ce modèle (ORA-28) ainsi que ses métriques, pour pouvoir
@@ -82,6 +83,13 @@ def record_model_metadata(
 
     `model_version` (hash du binaire du modèle) et `hyperparameters` sont optionnels
     (ORA-31) : un appelant qui ne les fournit pas obtient le même comportement qu'avant.
+
+    `categories` (ORA-197, optionnel) : `{"quartier": [...], "type_local": [...]}`
+    — valeurs vues à l'entraînement AVANT `pd.get_dummies(drop_first=True)`, y
+    compris la catégorie de référence (ex. "Ainay" à Lyon) qui n'a pas de
+    colonne one-hot dédiée dans le modèle lui-même. Sans cette liste,
+    `services/predictor.py` ne peut pas distinguer cette catégorie connue
+    d'un quartier réellement jamais vu.
     """
     meta_path = f"{model_path}.meta.json"
     metadata = {
@@ -94,6 +102,8 @@ def record_model_metadata(
         metadata['model_version'] = model_version
     if hyperparameters is not None:
         metadata['hyperparameters'] = hyperparameters
+    if categories is not None:
+        metadata['categories'] = categories
     with open(meta_path, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
     return meta_path

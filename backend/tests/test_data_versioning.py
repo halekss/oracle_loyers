@@ -108,6 +108,41 @@ class RecordModelMetadataTest(unittest.TestCase):
             self.assertEqual(metadata["model_version"], "deadbeef1234")
             self.assertEqual(metadata["hyperparameters"]["n_estimators"], 1500)
 
+    def test_includes_categories_when_provided(self):
+        """ORA-197 : les catégories vues à l'entraînement (quartiers, types)
+        doivent être retrouvables depuis les métadonnées — y compris la
+        catégorie de référence de pd.get_dummies(drop_first=True), qui n'a
+        pas de colonne one-hot dédiée dans le modèle lui-même."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model_path = os.path.join(tmp_dir, "price_predictor.pkl")
+
+            meta_path = record_model_metadata(
+                model_path,
+                data_snapshot_sha256="abc123",
+                data_snapshot_file="master_immo_final_abc123.csv",
+                metrics={"mae": 42.5, "r2": 0.87},
+                categories={"quartier": ["Ainay", "Gerland"], "type_local": ["Studio/T1", "T2"]},
+            )
+
+            with open(meta_path, encoding="utf-8") as f:
+                metadata = json.load(f)
+
+            self.assertEqual(metadata["categories"]["quartier"], ["Ainay", "Gerland"])
+
+    def test_omits_categories_when_not_provided(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model_path = os.path.join(tmp_dir, "price_predictor.pkl")
+
+            meta_path = record_model_metadata(
+                model_path, data_snapshot_sha256="abc123",
+                data_snapshot_file="master_immo_final_abc123.csv", metrics={"mae": 42.5, "r2": 0.87},
+            )
+
+            with open(meta_path, encoding="utf-8") as f:
+                metadata = json.load(f)
+
+            self.assertNotIn("categories", metadata)
+
 
 class ArchiveModelVersionTest(unittest.TestCase):
     def test_archives_a_versioned_copy_of_the_model(self):
