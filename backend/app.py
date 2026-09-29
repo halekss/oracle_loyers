@@ -18,7 +18,7 @@ from services.cavaliers_radius import CavaliersRadiusService
 from services.price_history import compute_price_history, compute_price_history_from_listings
 from services.quartier_search import resolve_quartier_filter
 from services.pdf_report import render_estimation_pdf
-from services import annonces_store, tile_proxy
+from services import annonces_store, tile_proxy, outlier_detection
 from schemas import (
     ChatRequestSchema,
     QuartierStatsRequestSchema,
@@ -546,6 +546,10 @@ def get_quartier_stats():
         if df is None or df.empty:
             return jsonify({"error": "Données non disponibles"}), 500
 
+        # ORA-195 : médiane/moyenne/écarts/comparables jamais faussés par une
+        # annonce suspecte (prix/m², surface ou loyer aberrant).
+        df = outlier_detection.exclude_suspects(df)
+
         # Nettoyage pour éviter les erreurs sur NaN
         df_clean = df.dropna(subset=['quartier', 'prix', 'surface'])
 
@@ -893,6 +897,9 @@ def predict():
     if df is None or df.empty:
         return jsonify({"error": "Données de référence indisponibles"}), 500
 
+    # ORA-195 : l'estimation et ses comparables ignorent les annonces suspectes.
+    df = outlier_detection.exclude_suspects(df)
+
     try:
         payload = get_request_json()
     except Exception:
@@ -1022,6 +1029,9 @@ def chat():
 
         # On récupère le DataFrame complet
         df = data_loader.get_data()
+        # ORA-195 : les recommandations/estimations d'Immotep ignorent les
+        # annonces suspectes (prix/m², surface ou loyer aberrant).
+        df = outlier_detection.exclude_suspects(df)
         # Bornage à la ville affichée côté front : sans lui, une question sur
         # un lieu lyonnais inconnu recommandait des annonces de Lille.
         if payload.ville and 'ville' in df.columns:

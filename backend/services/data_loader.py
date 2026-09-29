@@ -2,6 +2,7 @@ import logging
 import pandas as pd
 import os
 from services.utils import guess_room_count_smart
+from services import outlier_detection
 
 logger = logging.getLogger(__name__)
 
@@ -43,5 +44,13 @@ class DataLoader:
             )
 
     def get_data(self):
-        """Renvoie le DataFrame brut."""
+        """Renvoie le DataFrame brut, annonces suspectes incluses (ORA-195) —
+        ne rien exclure ici : certains appelants comptent le total réel."""
         return self.df
+
+    def get_clean_data(self):
+        """Renvoie le DataFrame sans les annonces suspectes (ORA-195,
+        outlier_detection — règle unique, calculée à la volée pour rester
+        toujours à jour). À utiliser pour tout agrégat : médianes,
+        estimations, écarts au marché, comparables, historique €/m²."""
+        return outlier_detection.exclude_suspects(self.df)

@@ -1,4 +1,5 @@
 from services.cavaliers_factors import detail_cavaliers
+from services import outlier_detection
 
 
 def enrich_annonce_detail(annonce, df):
@@ -42,7 +43,12 @@ def enrich_annonce_detail(annonce, df):
     quartier = row.get('quartier')
     if type_local == type_local and quartier == quartier:
         same_segment = df[(df['quartier'] == quartier) & (df['type_local'] == type_local) & df['prix_m2'].notna()]
-        if not same_segment.empty:
+        # ORA-195 : exclut les annonces suspectes (prix/m² aberrant, etc.) de
+        # la MOYENNE seulement — l'annonce affichée elle-même reste pleinement
+        # enrichie ci-dessus même si elle est suspecte ("ne rien supprimer" :
+        # seule sa contribution aux agrégats des autres annonces est retirée).
+        same_segment = outlier_detection.exclude_suspects(same_segment)
+        if same_segment is not None and not same_segment.empty:
             enriched['quartier_prix_m2_moyen'] = round(float(same_segment['prix_m2'].mean()), 1)
 
     enriched['cavaliers_detail'] = detail_cavaliers(matches)

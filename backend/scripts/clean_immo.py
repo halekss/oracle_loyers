@@ -1084,6 +1084,7 @@ def step_sync_annonces_store(df, db_path=ANNONCES_DB_PATH, master_urls=None):
                 images=images,
                 statut=statut,
                 derniere_verification=row.get('derniere_verification_http') or None,
+                type_local=row.get('type_local') or None,
                 db_path=db_path,
             )
             synced += 1

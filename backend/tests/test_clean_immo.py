@@ -8,7 +8,8 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
-from scripts.clean_immo import step_archive_hors_master, step_flag_expired
+from scripts.clean_immo import step_archive_hors_master, step_flag_expired, step_sync_annonces_store
+from services import annonces_store
 
 
 class StepFlagExpiredTest(unittest.TestCase):
@@ -299,3 +300,36 @@ class StepArchiveHorsMasterTest(unittest.TestCase):
         master, _ = step_archive_hors_master(self._df(), self.archive, set(), "2026-09-25")
 
         self.assertEqual(set(master["url"]), {"v-ok", "s-live"})
+
+
+class StepSyncAnnoncesStorePropagatesTypeLocalTest(unittest.TestCase):
+    """ORA-195 : `type_local` doit atteindre annonces_store pour que la règle
+    outlier_detection (incohérence type/surface) puisse s'appliquer aux
+    annonces servies par /api/annonces — sans lui, seules les règles
+    prix/m²/loyer/surface seraient utilisables côté store."""
+
+    def setUp(self):
+        fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        os.remove(self.db_path)
+
+    def tearDown(self):
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)
+
+    def test_type_local_is_passed_through_to_the_store(self):
+        df = pd.DataFrame({
+            "url": ["https://example.com/1"],
+            "prix": [900],
+            "surface": [15],
+            "ville": ["Lyon"],
+            "quartier": ["Gerland"],
+            "type_local": ["T2"],
+        })
+
+        step_sync_annonces_store(df, db_path=self.db_path)
+
+        annonce = annonces_store.get_annonce_by_url("https://example.com/1", db_path=self.db_path)
+        self.assertEqual(annonce["type_local"], "T2")
+        # 15m² < 20m² pour un T2 : la règle partagée doit l'avoir signalée.
+        self.assertTrue(annonce["suspect"])

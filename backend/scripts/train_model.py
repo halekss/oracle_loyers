@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import numpy as np
 import os
+import sys
 from datetime import datetime, timezone
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
@@ -18,6 +19,15 @@ from data_versioning import (
     snapshot_dataset,
 )
 from rollback_model import rollback_to
+
+# backend/services (outlier_detection) n'est pas sur sys.path par défaut quand
+# ce script est lancé directement (`python train_model.py`, sys.path[0] =
+# scripts/) — même garde que clean_immo.py/generate_map.py.
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from services import outlier_detection  # noqa: E402 (après le sys.path.insert nécessaire)
 
 # Vérification XGBoost
 try:
@@ -107,6 +117,10 @@ def load_source_dataframe(ville_slug, source='master', data_dir=None):
     - les lignes d'archive au statut 'inactive' sont exclues
       (ARCHIVE_EXCLUDED_STATUTS ci-dessus).
 
+    Exclut aussi les annonces suspectes (ORA-195, outlier_detection — même
+    règle unique que partout ailleurs), quelle que soit `source` : un prix/m²
+    ou une surface aberrante ne doit jamais entraîner le modèle.
+
     `data_dir` (optionnel, pour les tests) : dossier `data/` à utiliser au
     lieu de `backend/data/` réel."""
     ville_nom = resolve_ville_nom(ville_slug)
@@ -117,28 +131,30 @@ def load_source_dataframe(ville_slug, source='master', data_dir=None):
     df_master = df_master[df_master['ville'] == ville_nom]
 
     if source == 'master':
-        return df_master
-    if source != 'master_archive':
+        result = df_master
+    elif source == 'master_archive':
+        archive_path = os.path.join(data_dir, 'master_archive.csv')
+        if not os.path.exists(archive_path):
+            result = df_master
+        else:
+            df_archive = pd.read_csv(archive_path)
+            df_archive = df_archive[df_archive['ville'] == ville_nom]
+
+            if 'statut' in df_archive.columns:
+                df_archive = df_archive[~df_archive['statut'].isin(ARCHIVE_EXCLUDED_STATUTS)]
+
+            if 'archive_le' in df_archive.columns:
+                df_archive = df_archive.sort_values('archive_le').drop_duplicates(subset='url', keep='last')
+            else:
+                df_archive = df_archive.drop_duplicates(subset='url', keep='last')
+
+            df_archive = df_archive[~df_archive['url'].isin(df_master['url'])]
+
+            result = pd.concat([df_master, df_archive], ignore_index=True, sort=False)
+    else:
         raise ValueError(f"source inconnue : {source!r} (attendu 'master' ou 'master_archive')")
 
-    archive_path = os.path.join(data_dir, 'master_archive.csv')
-    if not os.path.exists(archive_path):
-        return df_master
-
-    df_archive = pd.read_csv(archive_path)
-    df_archive = df_archive[df_archive['ville'] == ville_nom]
-
-    if 'statut' in df_archive.columns:
-        df_archive = df_archive[~df_archive['statut'].isin(ARCHIVE_EXCLUDED_STATUTS)]
-
-    if 'archive_le' in df_archive.columns:
-        df_archive = df_archive.sort_values('archive_le').drop_duplicates(subset='url', keep='last')
-    else:
-        df_archive = df_archive.drop_duplicates(subset='url', keep='last')
-
-    df_archive = df_archive[~df_archive['url'].isin(df_master['url'])]
-
-    return pd.concat([df_master, df_archive], ignore_index=True, sort=False)
+    return outlier_detection.exclude_suspects(result)
 
 
 def prepare_features_and_target(df):
