@@ -70,9 +70,9 @@ class ComputePriceHistoryTest(unittest.TestCase):
 
             self.assertEqual(status, "ok")
             self.assertEqual(len(historique), 2)
-            self.assertEqual(historique[0]["date"], "2026-01-01T00:00:00+00:00")
+            self.assertEqual(historique[0]["date"], "2026-01-01")
             self.assertEqual(historique[0]["count"], 2)
-            self.assertEqual(historique[1]["date"], "2026-01-08T00:00:00+00:00")
+            self.assertEqual(historique[1]["date"], "2026-01-08")
             self.assertEqual(historique[1]["count"], 3)
 
     def test_skips_snapshots_without_any_matching_quartier(self):
@@ -95,7 +95,7 @@ class ComputePriceHistoryTest(unittest.TestCase):
 
             self.assertEqual(status, "ok")
             self.assertEqual(len(historique), 1)
-            self.assertEqual(historique[0]["date"], "2026-01-08T00:00:00+00:00")
+            self.assertEqual(historique[0]["date"], "2026-01-08")
 
     def test_tolerates_a_typo_in_the_quartier_name(self):
         """ORA-110 : même matching partagé (fuzzy) que /api/quartier-stats,
@@ -171,6 +171,63 @@ class ComputePriceHistoryTest(unittest.TestCase):
             self.assertEqual(len(historique), 2)
             for point in historique:
                 self.assertEqual(point["count"], 1)
+
+    def test_aggregates_multiple_snapshots_on_the_same_calendar_day_into_one_point(self):
+        """ORA-199 : un run rejoué le même jour (manifest.csv, ex. reprise
+        après échec) ne doit pas produire deux points pour la même date —
+        agrégation par jour, pas par ligne de manifest."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            snapshots_dir = os.path.join(tmp_dir, "snapshots")
+            os.makedirs(snapshots_dir)
+
+            pd.DataFrame({
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [800], 'surface': [40],
+                'prix_m2': [20], 'type_local': ['T2'],
+            }).to_csv(os.path.join(snapshots_dir, "snap1.csv"), index=False)
+            pd.DataFrame({
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [900], 'surface': [45],
+                'prix_m2': [20], 'type_local': ['T2'],
+            }).to_csv(os.path.join(snapshots_dir, "snap1bis.csv"), index=False)
+            pd.DataFrame({
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [1000], 'surface': [40],
+                'prix_m2': [25], 'type_local': ['T2'],
+            }).to_csv(os.path.join(snapshots_dir, "snap2.csv"), index=False)
+            manifest_path = _write_manifest(snapshots_dir, [
+                {"timestamp": "2026-01-01T08:00:00+00:00", "sha256": "a", "snapshot_file": "snap1.csv", "row_count": 1},
+                {"timestamp": "2026-01-01T20:00:00+00:00", "sha256": "a2", "snapshot_file": "snap1bis.csv", "row_count": 1},
+                {"timestamp": "2026-01-08T08:00:00+00:00", "sha256": "b", "snapshot_file": "snap2.csv", "row_count": 1},
+            ])
+
+            historique, status = compute_price_history("Gerland", "Tout", snapshots_dir, manifest_path)
+
+            self.assertEqual(status, "ok")
+            self.assertEqual(len(historique), 2, "un seul point pour le 2026-01-01, malgré 2 snapshots ce jour-là")
+            self.assertEqual(historique[0]["date"], "2026-01-01")
+            self.assertEqual(historique[0]["count"], 2)
+            self.assertEqual(historique[0]["prix_m2_moyen"], 20)
+
+    def test_excludes_suspect_rows_from_the_average(self):
+        """ORA-195/ORA-199 : une annonce suspecte (prix/m² aberrant) ne doit
+        pas fausser la moyenne de l'historique."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            snapshots_dir = os.path.join(tmp_dir, "snapshots")
+            os.makedirs(snapshots_dir)
+
+            pd.DataFrame({
+                'ville': ['Lyon', 'Lyon'], 'quartier': ['Gerland', 'Gerland'],
+                'prix': [800, 862], 'surface': [40, 525],
+                'prix_m2': [20, 1.6], 'type_local': ['T2', 'Grand (T4+)'],
+            }).to_csv(os.path.join(snapshots_dir, "snap1.csv"), index=False)
+            manifest_path = _write_manifest(snapshots_dir, [
+                {"timestamp": "2026-01-01T00:00:00+00:00", "sha256": "a", "snapshot_file": "snap1.csv", "row_count": 2},
+                {"timestamp": "2026-01-08T00:00:00+00:00", "sha256": "b", "snapshot_file": "snap1.csv", "row_count": 2},
+            ])
+
+            historique, status = compute_price_history("Gerland", "Tout", snapshots_dir, manifest_path)
+
+            self.assertEqual(status, "ok")
+            self.assertEqual(historique[0]["count"], 1, "l'annonce suspecte (1.6€/m²) est exclue")
+            self.assertEqual(historique[0]["prix_m2_moyen"], 20)
 
 
 class ComputePriceHistoryFromListingsTest(unittest.TestCase):
@@ -313,6 +370,35 @@ class ComputePriceHistoryFromListingsTest(unittest.TestCase):
             self.assertEqual(status, "ok")
             self.assertEqual(historique[0]["prix_m2_moyen"], 20)
             self.assertEqual(historique[1]["prix_m2_moyen"], 20)
+
+    def test_excludes_suspect_rows_from_the_average(self):
+        """ORA-195/ORA-199 : une annonce suspecte ne doit pas fausser la
+        moyenne de l'historique master+archive non plus."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            master_path = os.path.join(tmp_dir, "master.csv")
+            archive_path = os.path.join(tmp_dir, "archive.csv")
+            self._write(archive_path, {
+                'ville': [], 'quartier': [], 'prix': [], 'surface': [],
+                'type_local': [], 'date_dernier_scan': [],
+            })
+            self._write(master_path, {
+                'ville': ['Lyon', 'Lyon'], 'quartier': ['Gerland', 'Gerland'],
+                'prix': [800, 862], 'surface': [40, 525],
+                'type_local': ['T2', 'Grand (T4+)'],
+                'date_dernier_scan': ['2026-09-26', '2026-09-26'],
+            })
+            # Deuxième date pour dépasser le seuil "insufficient_history" (< 2 dates).
+            self._write(archive_path, {
+                'ville': ['Lyon'], 'quartier': ['Gerland'], 'prix': [900], 'surface': [45],
+                'type_local': ['T2'], 'date_dernier_scan': ['2026-08-12'],
+            })
+
+            historique, status = compute_price_history_from_listings("Gerland", "Tout", master_path, archive_path)
+
+            self.assertEqual(status, "ok")
+            recent = next(p for p in historique if p["date"] == "2026-09-26")
+            self.assertEqual(recent["count"], 1, "l'annonce suspecte (1.6€/m²) est exclue")
+            self.assertEqual(recent["prix_m2_moyen"], 20)
 
 
 if __name__ == "__main__":
