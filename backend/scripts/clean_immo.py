@@ -410,11 +410,20 @@ def step_flag_expired(df, previous_csv_path=None, ttl_days=None, reference_date=
             recent_mask = age_verif_jours <= ttl_days
             previous_verif_recente = dict(zip(previous_df['url'], recent_mask))
 
+    # Jour de la dernière vue par le scraper (DerniereVue, sans heure) : s'il
+    # est postérieur ou égal au jour de la vérification HTTP qui a déclaré la
+    # ligne morte, le scraper la voit encore en ligne — faux positif du
+    # vérificateur (Vizzit : 410 sur des fiches en ligne, 2026-09-28).
+    jour_scan = pd.to_datetime(df['date_dernier_scan'], errors='coerce', utc=True).dt.normalize() \
+        if 'date_dernier_scan' in df.columns else pd.Series(pd.NaT, index=df.index)
+
     nouveau_statut = []
     nouveau_derniere_verif = []
-    for url, deja_vu in zip(df['url'], vue_recemment):
+    for url, deja_vu, scan in zip(df['url'], vue_recemment, jour_scan):
         ancien = previous_statut.get(url)
-        if ancien == 'inactive':
+        verif = pd.to_datetime(previous_derniere_verif.get(url), errors='coerce', utc=True)
+        revue_apres_verif = pd.notna(scan) and pd.notna(verif) and scan >= verif.normalize()
+        if ancien == 'inactive' and not (deja_vu and revue_apres_verif):
             nouveau_statut.append('inactive')
         elif deja_vu:
             nouveau_statut.append('active')

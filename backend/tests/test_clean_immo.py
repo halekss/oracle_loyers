@@ -43,15 +43,33 @@ class StepFlagExpiredTest(unittest.TestCase):
 
         # Le run courant re-fusionne des données brutes fraîches ne contenant
         # PAS cette colonne statut (comme le fait réellement data_fusion.py).
+        # Dernière vue par le scraper AVANT la vérification HTTP : rien ne
+        # contredit le constat de mort.
         df = pd.DataFrame({
             "url": ["https://example.com/dead"],
-            "date_dernier_scan": [pd.Timestamp.now(tz="UTC").isoformat()],
+            "date_dernier_scan": ["2026-07-30"],
         })
 
-        result = step_flag_expired(df, previous_csv_path=self.csv_path)
+        result = step_flag_expired(df, previous_csv_path=self.csv_path, reference_date=pd.Timestamp("2026-08-02", tz="UTC"))
 
         self.assertEqual(result.iloc[0]["statut"], "inactive",
                           "le statut inactive confirmé ne doit pas être écrasé par une re-fusion")
+
+    def test_inactive_row_seen_again_by_scraper_after_verification_is_reactivated(self):
+        # Faux positif du 2026-09-28 : Vizzit renvoie 410 sur des fiches en
+        # ligne ; 382 annonces « mortes » ont été revues par le scraper le soir
+        # même. La vue du scraper (DerniereVue, jour seul) le même jour ou après
+        # la vérification l'emporte.
+        pd.DataFrame({
+            "url": ["https://example.com/vivante"],
+            "statut": ["inactive"],
+            "derniere_verification_http": ["2026-09-28T14:23:16+00:00"],
+        }).to_csv(self.csv_path, index=False)
+        df = pd.DataFrame({"url": ["https://example.com/vivante"], "date_dernier_scan": ["2026-09-28"]})
+
+        result = step_flag_expired(df, previous_csv_path=self.csv_path, reference_date=pd.Timestamp("2026-09-29", tz="UTC"))
+
+        self.assertEqual(result.iloc[0]["statut"], "active")
 
     def test_reappearing_row_resets_to_active(self):
         # Une url 'a_verifier' (TTL dépassé sans confirmation morte) qui
