@@ -73,7 +73,130 @@ def compare_on_common_test(candidate, X_test, y_test, test_urls, active_model_pa
     return _metrics(y, candidate.predict(X)), _metrics(y, active.predict(X_active)), int(unseen.sum())
 
 
-def train(ville_slug):
+# ORA-181 : statuts d'archive exclus de l'entraînement — une annonce archivée
+# 'inactive' (confirmée morte/retirée, cf. ORA-134) n'est pas un signal marché
+# fiable ; 'active'/'a_verifier' restent valables (prix historique réel, juste
+# plus ancien que le master, sorti par step_archive_hors_master).
+ARCHIVE_EXCLUDED_STATUTS = {'inactive'}
+
+HYPERPARAMETERS = {
+    'n_estimators': 1500,
+    'learning_rate': 0.01,
+    'max_depth': 7,
+    'subsample': 0.7,
+    'colsample_bytree': 0.6,
+    'random_state': 42,
+}
+
+
+def load_source_dataframe(ville_slug, source='master', data_dir=None):
+    """Charge le jeu d'entraînement d'UNE ville depuis `source` (ORA-181) :
+
+    - 'master' (comportement historique, inchangé) : master_immo_final.csv
+      seul, filtré sur la ville.
+    - 'master_archive' : ajoute backend/data/master_archive.csv (annonces
+      sorties du master, cf. clean_immo.step_archive_hors_master) — plus de
+      données, mais plus anciennes en moyenne.
+
+    Points tranchés (voir description ORA-181) :
+    - une annonce présente plusieurs fois dans l'archive (même url) ne garde
+      que sa ligne la plus récente (`archive_le` le plus grand) ;
+    - une url déjà dans le master garde sa version master (plus fraîche),
+      même si elle apparaît aussi dans l'archive (ne devrait pas arriver vu
+      step_archive_hors_master, mais pas garanti dans le temps) ;
+    - les lignes d'archive au statut 'inactive' sont exclues
+      (ARCHIVE_EXCLUDED_STATUTS ci-dessus).
+
+    `data_dir` (optionnel, pour les tests) : dossier `data/` à utiliser au
+    lieu de `backend/data/` réel."""
+    ville_nom = resolve_ville_nom(ville_slug)
+    data_dir = data_dir or os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
+
+    master_path = os.path.join(data_dir, 'master_immo_final.csv')
+    df_master = pd.read_csv(master_path)
+    df_master = df_master[df_master['ville'] == ville_nom]
+
+    if source == 'master':
+        return df_master
+    if source != 'master_archive':
+        raise ValueError(f"source inconnue : {source!r} (attendu 'master' ou 'master_archive')")
+
+    archive_path = os.path.join(data_dir, 'master_archive.csv')
+    if not os.path.exists(archive_path):
+        return df_master
+
+    df_archive = pd.read_csv(archive_path)
+    df_archive = df_archive[df_archive['ville'] == ville_nom]
+
+    if 'statut' in df_archive.columns:
+        df_archive = df_archive[~df_archive['statut'].isin(ARCHIVE_EXCLUDED_STATUTS)]
+
+    if 'archive_le' in df_archive.columns:
+        df_archive = df_archive.sort_values('archive_le').drop_duplicates(subset='url', keep='last')
+    else:
+        df_archive = df_archive.drop_duplicates(subset='url', keep='last')
+
+    df_archive = df_archive[~df_archive['url'].isin(df_master['url'])]
+
+    return pd.concat([df_master, df_archive], ignore_index=True, sort=False)
+
+
+def prepare_features_and_target(df):
+    """Prétraitement partagé par `train()` et `compare_sources()` (ORA-181) :
+    même nettoyage/encodage quelle que soit la source, pour une comparaison
+    MAE/R² qui isole vraiment l'effet des données, pas celui du pipeline."""
+    y = df['prix']
+
+    features_to_drop = [
+        'id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'titre',
+        'date', 'image', 'ville', 'source_localisation', 'precision_localisation', 'description_detail',
+    ]
+    X = df.drop(columns=features_to_drop, errors='ignore')
+
+    cols_nb = [c for c in X.columns if c.startswith('nb_')]
+    X = X.drop(columns=cols_nb, errors='ignore')
+
+    cols_text = X.select_dtypes(include=['object']).columns
+    if len(cols_text) > 0:
+        X = pd.get_dummies(X, columns=cols_text, drop_first=True)
+
+    X = X.apply(pd.to_numeric, errors='coerce').fillna(0)
+    return X, y
+
+
+def compare_sources(ville_slug, data_dir=None):
+    """ORA-181 : compare MAE/R² 'master' vs 'master_archive' sans rien
+    entraîner "pour de vrai" — aucune sauvegarde, promotion, ni mise à jour
+    des métadonnées/snapshots. Sert à décider s'il faut un jour changer le
+    défaut d'entraînement, pas à le changer directement.
+
+    Même split/hyperparamètres que `train()` (HYPERPARAMETERS, random_state
+    42) pour une comparaison qui isole l'effet des données."""
+    ville_nom = resolve_ville_nom(ville_slug)
+    results = {}
+    for source in ('master', 'master_archive'):
+        df = load_source_dataframe(ville_slug, source=source, data_dir=data_dir)
+        X, y = prepare_features_and_target(df)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        model = XGBRegressor(n_jobs=-1, **HYPERPARAMETERS)
+        model.fit(X_train, y_train)
+        predictions = model.predict(X_test)
+        results[source] = {
+            'mae': float(mean_absolute_error(y_test, predictions)),
+            'r2': float(r2_score(y_test, predictions)),
+            'dataset_size': int(X.shape[0]),
+        }
+
+    print(f"\n{'=' * 50}")
+    print(f"📊 COMPARAISON DES SOURCES D'ENTRAÎNEMENT — {ville_nom}")
+    print('=' * 50)
+    for source, metrics in results.items():
+        print(f"  {source:16s} : {metrics['dataset_size']:4d} annonces · MAE ± {metrics['mae']:.2f} € · R² {metrics['r2']:.3f}")
+
+    return results
+
+
+def train(ville_slug, source='master'):
     """Entraîne, évalue et (si le garde-fou de régression le permet) promeut
     un modèle XGBoost pour UNE ville — un modèle distinct par ville (ORA-154)
     plutôt qu'un modèle combiné avec `ville` en feature : un run Lille en
@@ -91,57 +214,29 @@ def train(ville_slug):
 
     os.makedirs(models_dir, exist_ok=True)
 
-    print(f"🚀 Démarrage de l'entraînement ({ville_nom}, Mode : XGBoost Blindé)...")
+    print(f"🚀 Démarrage de l'entraînement ({ville_nom}, source={source}, Mode : XGBoost Blindé)...")
 
     # --- 2. CHARGEMENT ---
     if not os.path.exists(data_path):
         print(f"❌ Erreur : Fichier introuvable {data_path}")
         exit()
 
-    # Le master ne contient que les annonces du dernier run (les autres sont dans
-    # master_archive.csv, cf. clean_immo.step_archive_hors_master) : le modèle
-    # s'entraîne donc sur le marché courant. Entraîner aussi sur l'archive : ORA-181.
-    df_all = pd.read_csv(data_path)
-    df = df_all[df_all['ville'] == ville_nom]
+    # ORA-181 : `source='master'` (défaut, comportement historique inchangé)
+    # n'entraîne que sur les annonces du dernier run ; `source='master_archive'`
+    # ajoute master_archive.csv (annonces sorties du master, cf.
+    # clean_immo.step_archive_hors_master) — cf. load_source_dataframe pour les
+    # règles de dédoublonnage/exclusion. Le snapshot versionné (ORA-28, étape 11
+    # ci-dessous) reste celui du master seul quelle que soit `source` : c'est
+    # le seul fichier qu'on a besoin de reproduire pour rejouer un ancien
+    # modèle (l'archive n'est pas versionnée par snapshot).
+    df = load_source_dataframe(ville_slug, source=source)
     if df.empty:
         raise SystemExit(
-            f"❌ Aucune annonce pour la ville '{ville_nom}' dans {data_path} — "
+            f"❌ Aucune annonce pour la ville '{ville_nom}' (source={source}) — "
             "rien à entraîner."
         )
 
-    # CIBLE
-    y = df['prix']
-
-    # --- 3. NETTOYAGE AGRESSIF ---
-    # On vire les colonnes d'identification pure. `ville` est retirée ici :
-    # constante au sein d'un modèle par ville, elle n'apporterait aucune
-    # information (one-hot à une seule catégorie, supprimée par
-    # drop_first=True de toute façon) — contrairement à l'ancien modèle
-    # combiné (ORA-71) où elle codait un effet prix par ville. `image`
-    # (ORA-155) : URL de la photo, quasi unique par ligne, ne peut
-    # structurellement pas généraliser.
-    features_to_drop = [
-        'id_annonce', 'site', 'prix', 'prix_m2', 'url', 'description', 'titre',
-        'date', 'image', 'ville', 'source_localisation', 'precision_localisation', 'description_detail',
-    ]
-    X = df.drop(columns=features_to_drop, errors='ignore')
-
-    # On vire les colonnes 'nb_' (Nombres) pour ne garder que les 'dist_'
-    cols_nb = [c for c in X.columns if c.startswith('nb_')]
-    X = X.drop(columns=cols_nb)
-
-    # --- 4. ENCODAGE AUTOMATIQUE (Le Fix) ---
-    # On cherche TOUTES les colonnes qui sont encore du texte (object)
-    cols_text = X.select_dtypes(include=['object']).columns
-
-    if len(cols_text) > 0:
-        print(f"🔧 Conversion automatique des colonnes texte en chiffres : {list(cols_text)}")
-        # On transforme le texte en colonnes binaires (0/1)
-        X = pd.get_dummies(X, columns=cols_text, drop_first=True)
-
-    # Sécurité finale : on force tout en numérique et on remplit les trous
-    X = X.apply(pd.to_numeric, errors='coerce')  # Force tout en nombre
-    X = X.fillna(0)
+    X, y = prepare_features_and_target(df)
 
     print(f"📊 Données prêtes ({ville_nom}) : {X.shape[0]} annonces x {X.shape[1]} critères.")
 
@@ -149,14 +244,7 @@ def train(ville_slug):
     X_train, X_test, y_train, y_test = split_train_test(X, y)
 
     # --- 6. ENTRAÎNEMENT XGBOOST ---
-    hyperparameters = {
-        'n_estimators': 1500,
-        'learning_rate': 0.01,
-        'max_depth': 7,
-        'subsample': 0.7,
-        'colsample_bytree': 0.6,
-        'random_state': 42,
-    }
+    hyperparameters = HYPERPARAMETERS
     model = XGBRegressor(n_jobs=-1, **hyperparameters)
 
     model.fit(X_train, y_train)
@@ -275,6 +363,7 @@ def train(ville_slug):
     metrics_entry = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "ville": ville_nom,
+        "source": source,
         "mae": round(float(mae), 2),
         "r2": round(float(r2), 4),
         "dataset_size": int(X.shape[0]),
@@ -308,6 +397,19 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Entraîne le modèle XGBoost de prédiction de prix pour une ville.")
     parser.add_argument('--ville', default='lyon', help="Slug de la ville (cf. scraping_config.json), ex: lyon, lille.")
+    parser.add_argument(
+        '--source', choices=['master', 'master_archive'], default='master',
+        help="ORA-181 : jeu d'entraînement — 'master' (défaut, comportement historique) ou "
+             "'master_archive' (ajoute les annonces archivées, plus de données mais plus anciennes).",
+    )
+    parser.add_argument(
+        '--compare', action='store_true',
+        help="ORA-181 : compare MAE/R² master vs master_archive sans rien entraîner/sauvegarder "
+             "pour de vrai (ignore --source).",
+    )
     args = parser.parse_args()
 
-    train(args.ville)
+    if args.compare:
+        compare_sources(args.ville)
+    else:
+        train(args.ville, source=args.source)
