@@ -4,9 +4,16 @@ import sys
 import tempfile
 import unittest
 
+import joblib
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import train_test_split
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts")))
 
 import rollback_model
+import train_model
 from data_versioning import decide_promotion, load_active_model_metadata, record_model_metadata
 
 
@@ -150,3 +157,79 @@ class PromotionGuardTriggersRollbackTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CommonTestSetComparisonTest(unittest.TestCase):
+    """Le garde-fou compare actif et candidat sur le MÊME jeu de test, privé des
+    annonces sur lesquelles l'actif a été entraîné (sinon il serait jugé sur des
+    lignes déjà vues). Avant : chaque R² venait du split de son propre dataset,
+    d'où des rejets pour une MAE quasi identique (Lille, 28/09)."""
+
+    @staticmethod
+    def _frame(n, offset=0):
+        import numpy as np
+        rng = np.random.default_rng(offset)
+        a, b = rng.uniform(0, 10, n), rng.uniform(0, 10, n)
+        return pd.DataFrame({
+            # id_annonce = numéro de ligne, réattribué à chaque run : seule l'url
+            # identifie une annonce d'un dataset à l'autre.
+            "id_annonce": range(n),
+            "url": [f"https://ex/{offset + i}" for i in range(n)],
+            "ville": "Lyon", "a": a, "b": b, "prix": 100 * a + 20 * b,
+        })
+
+    def test_active_training_urls_reproduce_the_training_split_for_the_ville(self):
+        df = self._frame(50)
+        other = self._frame(10, offset=1000).assign(ville="Lille")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            snap = os.path.join(tmp_dir, "snap.csv")
+            pd.concat([other, df]).to_csv(snap, index=False)
+            urls = train_model.active_training_urls(snap, "Lyon")
+        expected, _ = train_test_split(df, test_size=0.2, random_state=42)
+        self.assertEqual(urls, set(expected["url"]))
+
+    def test_both_models_are_scored_on_unseen_rows_only_with_aligned_columns(self):
+        train_df, test_df = self._frame(80), self._frame(40, offset=500)
+        active = LinearRegression().fit(train_df[["a", "b"]], train_df["prix"])
+        # Candidat avec un jeu de colonnes différent (dummies d'un autre run).
+        X_test = test_df[["a"]].assign(c=1.0)
+        candidate = LinearRegression().fit(X_test, test_df["prix"])
+        # 10 lignes du test ont servi à entraîner l'actif : exclues.
+        seen = set(test_df["url"][:10])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "active.pkl")
+            joblib.dump(active, path)
+            result = train_model.compare_on_common_test(
+                candidate, X_test, test_df["prix"], test_df["url"], path, seen, min_rows=20,
+            )
+        new_metrics, active_metrics, n_rows = result
+        self.assertEqual(n_rows, 30)
+        unseen = test_df.iloc[10:]
+        # b absent du jeu candidat => rempli à 0 pour l'actif.
+        expected_pred = active.predict(unseen[["a"]].assign(b=0.0))
+        self.assertAlmostEqual(active_metrics["mae"], mean_absolute_error(unseen["prix"], expected_pred))
+        self.assertAlmostEqual(new_metrics["mae"], mean_absolute_error(
+            unseen["prix"], candidate.predict(X_test.iloc[10:])))
+
+    def test_identical_models_get_identical_metrics_and_are_promoted(self):
+        df = self._frame(60)
+        model = LinearRegression().fit(df[["a", "b"]], df["prix"] + df["a"] ** 2)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "active.pkl")
+            joblib.dump(model, path)
+            new_metrics, active_metrics, _ = train_model.compare_on_common_test(
+                model, df[["a", "b"]], df["prix"], df["url"], path, set(), min_rows=20,
+            )
+        self.assertEqual(new_metrics, active_metrics)
+        self.assertTrue(decide_promotion(new_metrics, active_metrics)[0])
+
+    def test_returns_none_when_too_few_unseen_rows_or_no_active_model(self):
+        df = self._frame(30)
+        model = LinearRegression().fit(df[["a", "b"]], df["prix"])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, "active.pkl")
+            args = (model, df[["a", "b"]], df["prix"], df["url"])
+            self.assertIsNone(train_model.compare_on_common_test(*args, path, set(), min_rows=20))
+            joblib.dump(model, path)
+            seen = set(df["url"][:15])
+            self.assertIsNone(train_model.compare_on_common_test(*args, path, seen, min_rows=20))
