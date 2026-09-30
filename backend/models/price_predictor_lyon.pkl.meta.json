@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-09-29T13:05:28.644307+00:00",
+  "trained_at": "2026-09-29T09:25:45.151970+00:00",
   "data_snapshot_sha256": "35626156d3e0f88d6e1635805ac4c3cde27564eef59e5b559dc59b96a48197ed",
   "data_snapshot_file": "master_immo_final_35626156d3e0.csv",
   "metrics": {
-    "mae": 166.53956381788532,
-    "r2": 0.7249720114909153
+    "mae": 167.3894668134671,
+    "r2": 0.7437120269173023
   },
-  "model_version": "850d2d7913ea",
+  "model_version": "2aa358b546a7",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
@@ -14,36 +14,5 @@
     "subsample": 0.7,
     "colsample_bytree": 0.6,
     "random_state": 42
-  },
-  "categories": {
-    "quartier": [
-      "Ainay",
-      "Bellecour / Cordeliers",
-      "Brotteaux / Foch",
-      "Confluence",
-      "Croix-Rousse Plateau",
-      "Gerland",
-      "Guillotière / Jean Macé",
-      "Monplaisir / Bachut",
-      "Montchat",
-      "Part-Dieu / Villette",
-      "Pentes Croix-Rousse",
-      "Point du Jour / St Just",
-      "Préfecture / Quais",
-      "Terreaux / Hotel de Ville",
-      "Vaise / Valmy",
-      "Vieux Lyon"
-    ],
-    "type_local": [
-      "Grand (T4+)",
-      "Studio/T1",
-      "T2",
-      "T3"
-    ],
-    "type": [
-      "Appartement",
-      "Maison",
-      "Studio"
-    ]
   }
 }
