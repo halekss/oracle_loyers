@@ -1,21 +1,21 @@
-# Graph Report - oracle_loyers-c21  (2026-09-29)
+# Graph Report - oracle_loyers-xgbguard  (2026-09-30)
 
 ## Corpus Check
-- 230 files · ~586,641 words
+- 236 files · ~593,169 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2446 nodes · 3820 edges · 225 communities (140 shown, 85 thin omitted)
-- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 172 edges (avg confidence: 0.76)
+- 2467 nodes · 3845 edges · 232 communities (144 shown, 88 thin omitted)
+- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 179 edges (avg confidence: 0.77)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `90d9bc15`
+- Built from commit: `12fbab6d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- summarize_cavaliers
+- cavaliers_factors.py
 - CalquesView.jsx
 - complete_data_extraction.py
 - resolve_quartier_filter
@@ -26,7 +26,7 @@
 - App.jsx
 - clean_immo.py
 - AnnoncesStoreTest
-- AnnoncesList.jsx
+- AnnonceCard.jsx
 - scraper_orpi.py
 - merge_cavaliers
 - generate_map.py
@@ -38,27 +38,27 @@
 - ChatService
 - _geocode
 - test_playwright_selectors.py
-- AdresseDuBienTest
+- localisation_texte.py
 - api.js
 - scraper_paruvendu.py
 - prepare_new_city.py
-- annonces_store.py
+- get_connection
 - CavaliersRequestSchema
 - CheckUrlStatusTest
-- AnnonceCard.jsx
-- schemas.py
+- ResultCard.jsx
+- ChatRequestSchema
 - LoggingConfigTest
 - normalize_text
 - GetTileTest
-- EnrichDescriptionsTest
+- archive_stale_rows
 - AnnoncesRoutesTest
 - ChatServiceTest
 - BuildBridgeMessageScriptTest
-- scraper_seloger.py
+- summarize_cavaliers
 - load_site_config
 - test_data_fusion.py
 - run_fusion
-- services/__init__.py
+- annonces_store.py
 - QuartierStatsRouteTest
 - API_CONTRACT.md (Contrat API)
 - annonces.db (SQLite store, ORA-112)
@@ -91,15 +91,15 @@
 - bs4_first_text
 - extract_postal_code
 - resolve_seloger_lieu
-- rollback_model.py
+- test_rollback_model.py
 - ErrorBoundary
 - test_scraper_extraction_fixtures.py
-- MergeAllVillesTest
+- load_declared_villes
 - test_chat_service.py
 - File Structure
 - scraper_utils.py
 - PruneDeadMapListingsTest
-- get_map_tile
+- chat
 - decide_promotion
 - LoadLayersConfigTest
 - File Structure
@@ -117,7 +117,7 @@
 - QuartierStatsRequestSchema
 - clean_price_integer
 - clean_surface
-- train_model.py
+- train
 - resolve_quartier
 - DedoublonnerTest
 - BuildCavalierMarkersScriptTest
@@ -130,9 +130,9 @@
 - BuildImmoMarkersClickScriptTest
 - RuntimeConfigTest
 - package.json
-- scope_cavaliers_to_ville
-- CavaliersRadiusServiceNoRadiusTest
-- archive_stale_rows
+- AdresseDuBienTest
+- ChatOracle.jsx
+- enrich_annonce_detail
 - format_description
 - fetch_lyon_arrondissements.py
 - geocodage.py
@@ -156,9 +156,9 @@
 - CavalierIconHtmlTest
 - ComputeLayerCountsTest
 - LoadGeojsonFileTest
-- useAnnonceDetail.js
+- AnnonceDetailContent.jsx
 - get_db_connection
-- get_scraper_logger
+- scraper_pap.py
 - _FakeSeleniumElement
 - is_context_safe
 - ListingsRouteTest
@@ -170,12 +170,12 @@
 - StepTypesTest
 - vite.config.js
 - chat_service.py
-- ChatRequestSchema
+- detail_cavaliers
 - oracle_annonces_dag.py
 - oracle_cavaliers_dag.py
 - oracle_cleanup_dag.py
 - autoprefixer
-- test_cavaliers_radius.py
+- rollback_model.py
 - Vite Build Tool
 - eslint-plugin-react-hooks
 - eslint-plugin-react-refresh
@@ -217,6 +217,13 @@
 - OWASP A05: Security Misconfiguration — partially corrected
 - OWASP A07: Identification and Authentication Failures — risk accepted (ORA-46)
 - OWASP A10: Server-Side Request Forgery — OK
+- XgboostVersionGuardTest
+- log_annonce_click
+- _fetch_all_annonces
+- resolve_default_cp
+- BuildImmoTooltipHtmlTest
+- CheckUrlStatusAsyncTest
+- step_prune_expired
 
 ## God Nodes (most connected - your core abstractions)
 1. `ChatService` - 51 edges
@@ -227,8 +234,8 @@
 6. `_geocode()` - 21 edges
 7. `CavaliersRequestSchema` - 19 edges
 8. `ChatServiceTest` - 19 edges
-9. `main()` - 18 edges
-10. `retry_with_backoff()` - 18 edges
+9. `retry_with_backoff()` - 18 edges
+10. `main()` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Photo hotlink posture (ORA-134, supersedes ORA-94)` --semantically_similar_to--> `SET_TILE_URL message`  [INFERRED] [semantically similar]
@@ -254,39 +261,39 @@
 - **Fonds de carte overlays** — docs_mockups_vue_calques_fonds_de_carte, docs_mockups_vue_calques_metro_lines, docs_mockups_vue_calques_prix_m2_arrondissement, docs_mockups_vue_calques_dark_basemap [INFERRED 0.85]
 - **Four cavalier POI layers filtered by radius and shown in legend** — docs_mockups_vue_calques_cavalier_vice, docs_mockups_vue_calques_cavalier_gentrification, docs_mockups_vue_calques_cavalier_nuisance, docs_mockups_vue_calques_cavalier_superstition, docs_mockups_vue_calques_rayon_selector, docs_mockups_vue_calques_map_legend [INFERRED 0.85]
 
-## Communities (225 total, 85 thin omitted)
+## Communities (232 total, 88 thin omitted)
 
-### Community 0 - "summarize_cavaliers"
-Cohesion: 0.06
-Nodes (31): enrich_annonce_detail(), ORA-174 (maquette 06, "Fiche annonce") : enrichit une annonce issue…, absence_phrase_for(), detail_cavaliers(), _intensity_tier(), list_poi_types(), phrase_for(), _pick_variant() (+23 more)
+### Community 0 - "cavaliers_factors.py"
+Cohesion: 0.13
+Nodes (14): absence_phrase_for(), _intensity_tier(), phrase_for(), _pick_variant(), Index déterministe dans [0, n_variants) à partir de `key`, stable d'un process…, faible (0) / moyenne (1) / forte (2) : module le ton des variantes selon la…, Choisit une variante parmi `variants` (liste de gabarits). Sans `quartier` (ex.…, Phrase concrète pour un `poi` connu (POI_PHRASES) ou, à défaut, une phrase… (+6 more)
 
 ### Community 1 - "CalquesView.jsx"
 Cohesion: 0.05
-Nodes (37): CalquesView(), IMMO_KEYS, immoLayerByKey, LYON_LINE_CODES, quartiersLayer, RADIUS_OPTIONS, cavaliersDetail, facteurs (+29 more)
+Nodes (36): CalquesView(), IMMO_KEYS, immoLayerByKey, LYON_LINE_CODES, quartiersLayer, RADIUS_OPTIONS, cavaliersDetail, facteurs (+28 more)
 
 ### Community 2 - "complete_data_extraction.py"
 Cohesion: 0.06
 Nodes (29): advert_id(), coordinates_from_api_response(), extract_coordinates_from_html(), fetch_api_coordinates(), get_gps_from_url(), process_row(), URL de recherche Vizzit d'une ville (scraping_config.json), sans tranche de…, Identifiant d'annonce Vizzit : dernier segment de l'URL de la fiche. (+21 more)
 
 ### Community 3 - "resolve_quartier_filter"
-Cohesion: 0.10
-Nodes (17): compute_price_history(), compute_price_history_from_listings(), _filter_quartier(), Calcule l'évolution du prix moyen/m² pour `quartier` à travers tous les…, Ne lit que les colonnes utiles à l'historique (prix/quartier/dates) —…, Calcule l'évolution du prix moyen/m² pour `quartier` depuis…, _read_listing_columns(), Résolution d'une recherche utilisateur (texte libre) en un sous-ensemble du… (+9 more)
+Cohesion: 0.09
+Nodes (19): get_quartier_historique(), Évolution du prix moyen/m² pour un quartier, depuis les snapshots de données…, compute_price_history(), compute_price_history_from_listings(), _filter_quartier(), Calcule l'évolution du prix moyen/m² pour `quartier` à travers tous les…, Ne lit que les colonnes utiles à l'historique (prix/quartier/dates) —…, Calcule l'évolution du prix moyen/m² pour `quartier` depuis… (+11 more)
 
 ### Community 4 - "monitor_drift.py"
 Cohesion: 0.07
 Nodes (29): CI Workflow (ci.yml), CI job: backend (pytest), CI job: dependency-scan (pip-audit, npm audit), CI job: deploy (Render deploy hooks, ORA-64), CI job: e2e (Playwright vs vite preview + Flask), CI job: frontend (lint, build, test), CI job: scrapers (pytest, excludes e2e), Model Drift Monitor Workflow (+21 more)
 
 ### Community 5 - "CavaliersRadiusServiceTest"
-Cohesion: 0.17
-Nodes (5): Raccourci pratique (tests) : l'entrée de `result["cavaliers_detail"]` dont…, CavaliersRadiusServiceTest, Le fichier Lille fixture a un BOM (utf-8-sig) : si le service le lisait en…, Le Bar Loin (800m) et l'École du Coin (800m) n'entrent que dans le rayon 1000m…, Cimetière du Nord (1500m) reste le plus proche même si hors de tous les rayons…
+Cohesion: 0.09
+Nodes (12): Raccourci pratique (tests) : l'entrée de `result["cavaliers_detail"]` dont…, CavaliersRadiusServiceNoRadiusTest, CavaliersRadiusServiceTest, _offset(), Le fichier Lille fixture a un BOM (utf-8-sig) : si le service le lisait en…, Rayon « Aucun » (ORA-183, v3) : totaux à l'échelle de la ville, sans filtre de…, 3 lieux Vice à Lyon (Le Bar Proche 100m, Le Bar Loin 800m, Kebab King 400m) :…, Lille (fixture LILLE_ROWS) n'a que du Vice : à l'échelle d'une ville, une… (+4 more)
 
 ### Community 6 - "app.py"
-Cohesion: 0.06
-Nodes (41): after_request, chat(), get_annonce_detail(), get_annonces(), get_cavaliers(), get_chat_rate_limit(), get_cors_origins(), get_default_rate_limits() (+33 more)
+Cohesion: 0.07
+Nodes (36): after_request, get_annonce_detail(), get_annonces(), get_cavaliers(), get_chat_rate_limit(), get_cors_origins(), get_default_rate_limits(), get_listings() (+28 more)
 
 ### Community 7 - "pick_user_agent"
-Cohesion: 0.11
-Nodes (21): prune_dead_map_listings(), Nettoyage ponctuel des annonces mortes dans master_immo_final.csv + carte…, Écrit dans un fichier temporaire puis remplace `path` via os.replace (atomique)…, Vérifie chaque url de `csv_path` (HTTP puis navigateur headless pour les…, _write_csv_atomically(), check_url_status_browser(), looks_like_challenge_page(), looks_like_valid_listing() (+13 more)
+Cohesion: 0.12
+Nodes (20): prune_dead_map_listings(), Nettoyage ponctuel des annonces mortes dans master_immo_final.csv + carte…, Écrit dans un fichier temporaire puis remplace `path` via os.replace (atomique)…, Vérifie chaque url de `csv_path` (HTTP puis navigateur headless pour les…, _write_csv_atomically(), check_url_status_browser(), looks_like_challenge_page(), looks_like_valid_listing() (+12 more)
 
 ### Community 8 - "App.jsx"
 Cohesion: 0.08
@@ -294,19 +301,19 @@ Nodes (21): App(), renderEstimationView(), renderScanView(), renderSummaryChip()
 
 ### Community 9 - "clean_immo.py"
 Cohesion: 0.09
-Nodes (38): build_shapes_from_cavaliers(), clean_zipcode(), determine_type_local(), extract_seloger_quartier_slug(), get_nearest_distance_and_count(), get_point_for_zipcode(), get_point_in_circle(), get_random_point_in_polygon() (+30 more)
+Nodes (38): build_shapes_from_cavaliers(), build_titre(), clean_zipcode(), determine_type_local(), extract_seloger_quartier_slug(), get_nearest_distance_and_count(), get_point_for_zipcode(), get_point_in_circle() (+30 more)
 
 ### Community 10 - "AnnoncesStoreTest"
 Cohesion: 0.05
 Nodes (4): AnnoncesStoreTest, ORA-173 : "€/m² croissant" (tri par défaut de la maquette 05) — prix_m2 n'est…, `NULLIF(surface, 0)` -> NULL pour une surface manquante : SQLite trie NULL…, Le frontend envoie le slug de la ville active ("lyon"), la colonne stocke…
 
-### Community 11 - "AnnoncesList.jsx"
-Cohesion: 0.18
-Nodes (10): AnnoncesList(), loadAnnonces(), SORT_OPTIONS, useFavorites(), getTypeCategory(), KNOWN_CATEGORIES, SOURCE_BY_HOST, describeApiError() (+2 more)
+### Community 11 - "AnnonceCard.jsx"
+Cohesion: 0.13
+Nodes (21): AnnonceCard(), AnnonceIllustration(), formatPrice(), ILLUSTRATION_BY_CATEGORY, baseAnnonce, AnnonceDetailModal(), detail, AnnoncesList() (+13 more)
 
 ### Community 12 - "scraper_orpi.py"
-Cohesion: 0.09
-Nodes (19): _fetch_geocodage(), geocode_adresse(), checkpoint(), load_page(), parse_quartier(), Persiste l'état courant de `rows_by_lien` (écriture atomique complète, pas un…, Nom de quartier seul depuis le libellé de localisation Orpi ("Lyon 8-…, checkpoint() (+11 more)
+Cohesion: 0.13
+Nodes (12): _fetch_geocodage(), geocode_adresse(), checkpoint(), load_page(), parse_quartier(), Persiste l'état courant de `rows_by_lien` (écriture atomique complète, pas un…, Nom de quartier seul depuis le libellé de localisation Orpi ("Lyon 8-…, Décorateur retry/backoff générique pour les opérations de scraping instables… (+4 more)
 
 ### Community 13 - "merge_cavaliers"
 Cohesion: 0.09
@@ -325,8 +332,8 @@ Cohesion: 0.12
 Nodes (9): Integration test: mix of all statuses with various verification timestamps., Test the date-arithmetic logic of _rows_to_verify (TTL/staleness detection)., Row with statut='active' and derniere_verification_http older than ttl_days →…, Row with statut='active' and derniere_verification_http within ttl_days → NOT…, Row with statut='active' and missing/empty derniere_verification_http →…, Row with statut='active' and NaT derniere_verification_http → included., Row with statut='a_verifier' regardless of derniere_verification_http → always…, Row with statut='inactive' → never included (even with stale/missing timestamp). (+1 more)
 
 ### Community 17 - "build_feature_row"
-Cohesion: 0.14
-Nodes (13): build_feature_row(), compute_distance_features(), haversine_distance_m(), normalize_type_bien(), normalize_type_local(), Construit le vecteur de features attendu par le modèle à partir du payload…, Normalise un type de bien utilisateur (T1, studio, T4+...) vers une catégorie…, Normalise le type de bien brut (Appartement/Maison/Studio), 'Appartement' par… (+5 more)
+Cohesion: 0.11
+Nodes (16): build_feature_row(), compute_distance_features(), haversine_distance_m(), normalize_type_bien(), normalize_type_local(), Construit le vecteur de features attendu par le modèle à partir du payload…, Normalise un type de bien utilisateur (T1, studio, T4+...) vers une catégorie…, Normalise le type de bien brut (Appartement/Maison/Studio), 'Appartement' par… (+8 more)
 
 ### Community 18 - "test_scraper_utils.py"
 Cohesion: 0.09
@@ -344,13 +351,13 @@ Nodes (6): AdresseGeocodeeTest, _geocode(), _geocodeur(), OrdrePrioriteLocalisat
 Cohesion: 0.08
 Nodes (26): expectedFailure, retry_with_backoff, checkpoint(), lien_de_carte(), load_page(), href du premier <a> de la carte, ou None si le bloc n'a pas de lien.…, Persiste l'état courant de `rows_by_lien` (écriture atomique complète, pas un…, assert_selector_canary() (+18 more)
 
-### Community 23 - "AdresseDuBienTest"
-Cohesion: 0.08
-Nodes (21): _candidats(), extraire_adresse(), localiser_adresse(), _nom_propre(), Adresse du bien extraite d'un texte libre (ORA-180) : « 52 rue André Bollier ».…, [(adresse, avec_numero)] acceptées dans une phrase brute., (adresse | None, raison courte). Contradiction = None., Premier texte (dans l'ordre donné) qui décide ; une contradiction est… (+13 more)
+### Community 23 - "localisation_texte.py"
+Cohesion: 0.14
+Nodes (16): _candidats(), _nom_propre(), Adresse du bien extraite d'un texte libre (ORA-180) : « 52 rue André Bollier ».…, [(adresse, avec_numero)] acceptées dans une phrase brute., _clause_propre(), _evaluer(), extraire_zone(), localiser_par_texte() (+8 more)
 
 ### Community 24 - "api.js"
-Cohesion: 0.12
-Nodes (20): ALL_TYPES, buildChatContext(), ChatOracle(), DEFAULT_MESSAGES, describeChatError(), defaultDetail, defaultFacteurs, renderCavaliersRadius() (+12 more)
+Cohesion: 0.19
+Nodes (12): defaultDetail, defaultFacteurs, renderCavaliersRadius(), useCavaliersRadius(), API_URL, apiFetchOptions(), classifyResponseError(), fetchWithClassification() (+4 more)
 
 ### Community 25 - "scraper_paruvendu.py"
 Cohesion: 0.11
@@ -360,9 +367,9 @@ Nodes (20): checkpoint(), fetch_description(), fetch_page(), find_description_bs
 Cohesion: 0.17
 Nodes (14): build_config_skeleton(), build_report(), classify(), fetch_arrondissements(), fetch_commune(), fetch_shared_postal_codes(), _get(), main() (+6 more)
 
-### Community 27 - "annonces_store.py"
-Cohesion: 0.10
-Nodes (32): log_annonce_click(), Journalise un clic sortant vers l'annonce source (ORA-91), et renvoie le…, build_titre(), deactivate_hors_master(), Pas de vrai champ 'titre' dans le CSV master (seulement 'description', un texte…, Alimente la table SQLite `annonces` (services/annonces_store.py) à partir du…, Passe `inactive` les annonces du store absentes du master (ORA-193), sauf si le…, step_sync_annonces_store() (+24 more)
+### Community 27 - "get_connection"
+Cohesion: 0.14
+Nodes (19): deactivate_hors_master(), Alimente la table SQLite `annonces` (services/annonces_store.py) à partir du…, Passe `inactive` les annonces du store absentes du master (ORA-193), sauf si le…, step_sync_annonces_store(), deactivate_annonces_not_in(), get_annonce_by_id(), get_annonce_by_url(), get_connection() (+11 more)
 
 ### Community 28 - "CavaliersRequestSchema"
 Cohesion: 0.15
@@ -372,13 +379,13 @@ Nodes (6): CavaliersRequestSchema, La query string GET ne transporte que des cha
 Cohesion: 0.10
 Nodes (3): CheckUrlStatusTest, LooksLikeSoft404Test, PruneDeadAnnoncesTest
 
-### Community 30 - "AnnonceCard.jsx"
-Cohesion: 0.13
-Nodes (22): AnnonceCard(), formatPrice(), ILLUSTRATION_BY_CATEGORY, baseAnnonce, formatM2(), formatPrice(), formatShortDate(), historyPeriod() (+14 more)
+### Community 30 - "ResultCard.jsx"
+Cohesion: 0.14
+Nodes (18): formatM2(), formatPrice(), formatShortDate(), historyPeriod(), positionOnRange(), RANGE_LABELS, ResultCard(), baseData (+10 more)
 
-### Community 31 - "schemas.py"
-Cohesion: 0.23
-Nodes (8): ComparableSchema, FacteurSchema, PdfReportRequestSchema, PredictRequestSchema, PriceHistoryPointSchema, Schémas de validation des payloads pour les routes Flask actives (/api/chat,…, PredictRequestSchemaTest, BaseModel
+### Community 31 - "ChatRequestSchema"
+Cohesion: 0.17
+Nodes (10): ChatRequestSchema, ComparableSchema, FacteurSchema, PdfReportRequestSchema, PredictRequestSchema, PriceHistoryPointSchema, Schémas de validation des payloads pour les routes Flask actives (/api/chat,…, ChatRequestSchemaTest (+2 more)
 
 ### Community 32 - "LoggingConfigTest"
 Cohesion: 0.10
@@ -392,9 +399,9 @@ Nodes (6): compact_text(), normalize_text(), searchable_text(), CompactTextTest,
 Cohesion: 0.12
 Nodes (4): BuildUpstreamUrlTest, GetTileTest, IsValidTileTest, TileRouteTest
 
-### Community 35 - "EnrichDescriptionsTest"
-Cohesion: 0.25
-Nodes (3): EnrichDescriptionsTest, _Logger, ORA-161 : visite des pages détail plafonnée, sans jamais insister en cas de…
+### Community 35 - "archive_stale_rows"
+Cohesion: 0.15
+Nodes (6): archive_stale_rows(), Déplace de `rows_by_lien` vers `<output>_archive.csv` les annonces non revues…, ArchiveStaleRowsTest, EnrichDescriptionsTest, _Logger, ORA-161 : visite des pages détail plafonnée, sans jamais insister en cas de…
 
 ### Community 36 - "AnnoncesRoutesTest"
 Cohesion: 0.11
@@ -404,25 +411,25 @@ Nodes (3): AnnoncesRoutesTest, ORA-174 : coordonnées, €/m² moyen du quartier
 Cohesion: 0.11
 Nodes (7): BuildBridgeMessageScriptTest, Contrat postMessage carte (ORA-125) : la carte générée ne doit traiter un…, Remplace l'ancienne correspondance par texte de <label> (fragile, cassait dès…, ORA-105 : recentrage sur la bounding-box des résultats filtrés., L'URL du proxy de tuiles arrive au runtime (dépend du déploiement) : validée…, v3 (ORA-183) : tous les pings d'un cavalier actif restent visibles, rayon actif…, Un second SET_FOCUS (nouveau rayon) ne doit pas laisser l'ancien cercle affiché…
 
-### Community 39 - "scraper_seloger.py"
+### Community 39 - "summarize_cavaliers"
 Cohesion: 0.22
-Nodes (7): checkpoint(), parse_title_attribute(), Persiste l'état courant de `rows_by_lien` (écriture atomique complète, pas un…, Parse 'Type - Lieu - Prix - Infos' format. Returns None if format unrecognized., canonical_url(), Retire la query string et le fragment d'une URL d'annonce. Régression réelle…, SeLoger scraper test fixture (HTML)
+Nodes (8): list_poi_types(), Introspecte les colonnes `dist_<catégorie>_<poi>` réellement présentes dans…, Résume les 4 "Cavaliers" (Vice, Gentrification, Nuisance, Superstition) pour un…, summarize_cavaliers(), ListPoiTypesTest, Non-régression : /api/quartier-stats et le PDF n'appellent summarize_cavaliers…, _row(), SummarizeCavaliersTest
 
 ### Community 40 - "load_site_config"
-Cohesion: 0.33
-Nodes (3): load_site_config(), Charge la config de la ville active (URL de recherche, paramètre de pagination)…, LoadSiteConfigTest
+Cohesion: 0.24
+Nodes (4): load_site_config(), Charge la config de la ville active (URL de recherche, paramètre de pagination)…, LoadSiteConfigTest, PickUserAgentAndProxyTest
 
 ### Community 41 - "test_data_fusion.py"
-Cohesion: 0.12
-Nodes (10): CP de repli pour une ville (cf. extract_postal_code). Fail-fast plutôt que de…, Config des fichiers 'classiques' (hors Vizzit) pour une ville donnée, à partir…, resolve_default_cp(), site_files_config(), LoadDeclaredVillesTest, PostalCodeFromUrlTest, Le fichier GPS Vizzit (complete_data_extraction.py) n'a pas de colonne `Image`…, ResolveDefaultCpTest (+2 more)
+Cohesion: 0.18
+Nodes (6): Config des fichiers 'classiques' (hors Vizzit) pour une ville donnée, à partir…, site_files_config(), PostalCodeFromUrlTest, Le fichier GPS Vizzit (complete_data_extraction.py) n'a pas de colonne `Image`…, RunFusionVizzitImageTest, SiteFilesConfigTest
 
 ### Community 42 - "run_fusion"
 Cohesion: 0.18
 Nodes (8): Fusionne les CSV scrapés en base_de_donnees_immo_complet.csv. Par défaut…, run_fusion(), ORA-134 : la colonne DerniereVue des scrapers doit survivre à la fusion sous le…, ORA-161 : la description libre scrapée sur la page détail (colonne…, ORA-153 : chaque DAG annonces tourne désormais indépendamment par ville.…, RunFusionDateDernierScanTest, RunFusionDescriptionDetailTest, RunFusionPerVilleTest
 
-### Community 43 - "services/__init__.py"
-Cohesion: 0.12
-Nodes (16): check_url_status(), _fetch_all_annonces(), looks_like_soft_404(), prune_dead_annonces(), Nettoyage ponctuel des annonces mortes dans annonces.db (ORA-134). Le pipeline…, Snapshot complet (id, url, titre) pris avant toute suppression : évite le bug…, Vérifie chaque annonce de `db_path` (DEFAULT_DB_PATH si None) et supprime…, True si `html_text` contient un des `SOFT_404_PATTERNS` (insensible à la casse). (+8 more)
+### Community 43 - "annonces_store.py"
+Cohesion: 0.13
+Nodes (15): check_url_status(), looks_like_soft_404(), Nettoyage ponctuel des annonces mortes dans annonces.db (ORA-134). Le pipeline…, True si `html_text` contient un des `SOFT_404_PATTERNS` (insensible à la casse)., Vérifie une url en direct. Renvoie True (confirmée morte : 404/410, ou soft-404…, check_url_status_async(), Vérification HTTP asynchrone des annonces à statut incertain (ORA-134 bis, tier…, Vérifie les annonces éligibles (cf. `_rows_to_verify`) et met à jour leur… (+7 more)
 
 ### Community 44 - "QuartierStatsRouteTest"
 Cohesion: 0.11
@@ -457,8 +464,8 @@ Cohesion: 0.12
 Nodes (4): BuildShapesFromCavaliersTest, BuildTitreTest, GetPointForZipcodeZonesLimitrophesTest, StepIdsTest
 
 ### Community 52 - "test_generate_map.py"
-Cohesion: 0.12
-Nodes (6): BuildImmoTooltipHtmlTest, BuildMetroStationPopupHtmlTest, FilterByVilleTest, ORA-188 : la pastille DivIcon 24x24 avec la lettre de ligne est retirée…, Aucune clé, ni URL CARTO, dans la carte générée (fichier versionné)., TileLayerNeverEmbedsAKeyTest
+Cohesion: 0.18
+Nodes (5): BuildMetroStationPopupHtmlTest, FilterByVilleTest, ORA-188 : la pastille DivIcon 24x24 avec la lettre de ligne est retirée…, Aucune clé, ni URL CARTO, dans la carte générée (fichier versionné)., TileLayerNeverEmbedsAKeyTest
 
 ### Community 53 - "4 cavaliers (Vice, Gentrification, Nuisance, Superstition) POI layers"
 Cohesion: 0.13
@@ -469,8 +476,8 @@ Cohesion: 0.21
 Nodes (7): load_sites_actifs(), Retire les colonnes `nom.1`, `nom.2`… que pandas crée à la lecture d'un CSV…, Clés des sites actifs (`sites_actifs` de scraping_config.json, ex. {'vizzit',…, Le master ne garde que les annonces scrapées au dernier run de leur (ville,…, _sans_colonnes_dupliquees(), step_archive_hors_master(), StepArchiveHorsMasterTest
 
 ### Community 55 - "data_fusion.py"
-Cohesion: 0.16
-Nodes (14): dedoublonner(), _distance_m(), load_sites_actifs(), normalize_lieu(), postal_code_from_url(), Clés des sites actifs (`sites_actifs` de scraping_config.json), ou None si…, Début du texte libre de l'annonce, normalisé (lettres/chiffres seuls), ou None…, Même prix/surface/type/CP (déjà vrai ici) ET une preuve d'identité : même début… (+6 more)
+Cohesion: 0.18
+Nodes (13): dedoublonner(), _distance_m(), load_sites_actifs(), postal_code_from_url(), Clés des sites actifs (`sites_actifs` de scraping_config.json), ou None si…, Début du texte libre de l'annonce, normalisé (lettres/chiffres seuls), ou None…, Même prix/surface/type/CP (déjà vrai ici) ET une preuve d'identité : même début…, Retire les vrais doublons (même clé prix/surface/prix_m2/type/CP + preuve… (+5 more)
 
 ### Community 56 - "MainRegeneratesAWorkingLyonMapTest"
 Cohesion: 0.13
@@ -485,8 +492,8 @@ Cohesion: 0.17
 Nodes (15): build_bridge_message_script, build_cavalier_markers_script, build_layer_groups_script, FLY_TO message, FLY_TO_BOUNDS message, Folium render-order pitfall (init script after </body>), generate_map.py, MapComponent.jsx (+7 more)
 
 ### Community 59 - "record_model_metadata"
-Cohesion: 0.20
-Nodes (8): load_active_model_metadata(), Lit les métadonnées (`metrics`, `model_version`) du modèle actuellement actif…, Écrit `<model_path>.meta.json`, référençant explicitement la version des…, record_model_metadata(), RecordModelMetadataTest, LoadActiveModelMetadataTest, PromotionGuardTriggersRollbackTest, Reproduit le flux de décision de train_model.py au niveau des fonctions qu'il…
+Cohesion: 0.23
+Nodes (7): load_active_model_metadata(), Lit les métadonnées (`metrics`, `model_version`) du modèle actuellement actif…, Écrit `<model_path>.meta.json`, référençant explicitement la version des…, record_model_metadata(), LoadActiveModelMetadataTest, PromotionGuardTriggersRollbackTest, Reproduit le flux de décision de train_model.py au niveau des fonctions qu'il…
 
 ### Community 60 - "DataLoader"
 Cohesion: 0.18
@@ -529,20 +536,20 @@ Cohesion: 0.29
 Nodes (3): extract_postal_code(), Normalise le CP (69XXX ou 59XXX). `default_cp` est le repli utilisé quand aucun…, ExtractPostalCodeTest
 
 ### Community 75 - "resolve_seloger_lieu"
-Cohesion: 0.27
-Nodes (4): CP réel déduit du champ `Lieu` de SeLoger, ou du premier segment d'`Infos`…, resolve_seloger_lieu(), ORA-71 POC follow-up : le champ Lieu de SeLoger contient parfois une vraie…, ResolveSelogerLieuTest
+Cohesion: 0.24
+Nodes (5): normalize_lieu(), CP réel déduit du champ `Lieu` de SeLoger, ou du premier segment d'`Infos`…, resolve_seloger_lieu(), ORA-71 POC follow-up : le champ Lieu de SeLoger contient parfois une vraie…, ResolveSelogerLieuTest
 
-### Community 76 - "rollback_model.py"
-Cohesion: 0.17
-Nodes (6): Revenir à une version antérieure du modèle price_predictor_<ville>.pkl sans…, price_predictor_<ville>.pkl pour le slug donné — un modèle distinct par ville…, resolve_model_path(), ORA-154 : un modèle distinct par ville — price_predictor_<ville>.pkl, pas un…, ResolveModelPathTest, RollbackModelTest
+### Community 76 - "test_rollback_model.py"
+Cohesion: 0.29
+Nodes (3): ORA-154 : un modèle distinct par ville — price_predictor_<ville>.pkl, pas un…, ResolveModelPathTest, RollbackModelTest
 
 ### Community 78 - "test_scraper_extraction_fixtures.py"
 Cohesion: 0.15
 Nodes (8): bs4_first_attr(), Century21ExtractionTest, load_fixture(), ParuVenduExtractionTest, Tests unitaires d'extraction par site (ORA-19), basés sur des fixtures HTML…, ParuVendu utilise déjà BeautifulSoup en production : on teste find_bs4…, Équivalent BeautifulSoup de find_attr (cascade de sélecteurs CSS -> attribut)., SeLogerExtractionTest
 
-### Community 79 - "MergeAllVillesTest"
-Cohesion: 0.33
-Nodes (4): merge_all_villes(), L'Oracle des Loyers — Fusion des cavaliers par ville Concatène les…, MergeAllVillesTest, ORA-153 : avant ce script, rien ne produisait cavaliers_all.csv automatiquement…
+### Community 79 - "load_declared_villes"
+Cohesion: 0.22
+Nodes (7): load_declared_villes(), Villes déclarées dans scraping_config.json (ORA-71) : ajouter une ville au JSON…, merge_all_villes(), L'Oracle des Loyers — Fusion des cavaliers par ville Concatène les…, LoadDeclaredVillesTest, MergeAllVillesTest, ORA-153 : avant ce script, rien ne produisait cavaliers_all.csv automatiquement…
 
 ### Community 80 - "test_chat_service.py"
 Cohesion: 0.20
@@ -553,12 +560,12 @@ Cohesion: 0.18
 Nodes (10): File Structure, Global Constraints, Nettoyage non-destructif des annonces mortes — Implementation Plan, Prochaines étapes après ce plan (hors scope, à netifier séparément si besoin), Self-Review, Task 1: Migration DB non-destructive + statut dans `annonces_store.py`, Task 2: Fusion préservante dans `clean_immo.py` (remplace le drop TTL), Task 3: Vérificateur HTTP asynchrone (`verify_annonces_async.py`) (+2 more)
 
 ### Community 82 - "scraper_utils.py"
-Cohesion: 0.21
-Nodes (6): atomic_csv_writer(), Écrit dans un fichier temporaire à côté de `output_path` et ne remplace ce…, _detect_local_chrome_major_version(), Utilitaires partagés entre les 6 scrapers (Century21, Orpi, PAP, ParuVendu,…, Détecte la version majeure du Chrome installé localement en interrogeant le…, AtomicCsvWriterTest
+Cohesion: 0.10
+Nodes (16): atomic_csv_writer(), Écrit dans un fichier temporaire à côté de `output_path` et ne remplace ce…, checkpoint(), load_page(), parse_title_attribute(), Persiste l'état courant de `rows_by_lien` (écriture atomique complète, pas un…, Parse 'Type - Lieu - Prix - Infos' format. Returns None if format unrecognized., canonical_url() (+8 more)
 
-### Community 84 - "get_map_tile"
-Cohesion: 0.24
-Nodes (9): get_map_tile(), Proxy des tuiles CARTO du fond de carte : la clé API reste côté serveur…, build_upstream_url(), get_tile(), is_valid_tile(), Proxy des tuiles du fond de carte CARTO. CARTO exige une clé API sur ses…, Coordonnées de tuile plausibles : 0 <= z <= MAX_ZOOM, x et y dans [0, 2^z)., URL CARTO d'une tuile (sans la clé : elle voyage en paramètre séparé). (+1 more)
+### Community 84 - "chat"
+Cohesion: 0.18
+Nodes (12): chat(), get_map_tile(), Proxy des tuiles CARTO du fond de carte : la clé API reste côté serveur…, Chatbot Immotep : réponse groundée sur les données réelles, ou via Gemini. ---…, build_upstream_url(), get_tile(), is_valid_tile(), Proxy des tuiles du fond de carte CARTO. CARTO exige une clé API sur ses… (+4 more)
 
 ### Community 85 - "decide_promotion"
 Cohesion: 0.31
@@ -577,8 +584,8 @@ Cohesion: 0.09
 Nodes (4): CheckUrlStatusBrowserTest, LooksLikeChallengePageTest, LooksLikeValidListingTest, RecheckAmbiguousTest
 
 ### Community 90 - "data_versioning.py"
-Cohesion: 0.33
-Nodes (4): Archive un instantané content-addressé de `csv_path` dans `snapshots_dir` et…, _sha256_of_file(), snapshot_dataset(), SnapshotDatasetTest
+Cohesion: 0.25
+Nodes (5): Archive un instantané content-addressé de `csv_path` dans `snapshots_dir` et…, _sha256_of_file(), snapshot_dataset(), RecordModelMetadataTest, SnapshotDatasetTest
 
 ### Community 91 - "ReportPdfRouteTest"
 Cohesion: 0.22
@@ -616,9 +623,9 @@ Nodes (3): clean_price_integer(), Convertit en entier (supprime €, cc, espaces
 Cohesion: 0.39
 Nodes (3): clean_surface(), Extrait le nombre avant 'm2'., CleanSurfaceTest
 
-### Community 102 - "train_model.py"
-Cohesion: 0.36
-Nodes (7): load_declared_villes(), Villes déclarées dans scraping_config.json (ORA-71) : ajouter une ville au JSON…, Restaure `model_path` à la version archivée `model_version`. `versions_dir`…, rollback_to(), Entraîne, évalue et (si le garde-fou de régression le permet) promeut un modèle…, resolve_ville_nom(), train()
+### Community 102 - "train"
+Cohesion: 0.20
+Nodes (17): active_training_urls(), check_xgboost_version(), compare_on_common_test(), compare_sources(), load_source_dataframe(), _metrics(), prepare_features_and_target(), Charge le jeu d'entraînement d'UNE ville depuis `source` (ORA-181) : - 'master'… (+9 more)
 
 ### Community 103 - "resolve_quartier"
 Cohesion: 0.36
@@ -652,17 +659,17 @@ Nodes (3): BuildImmoMarkersClickScriptTest, ORA-185 : le clic sur un marker d'an
 Cohesion: 0.29
 Nodes (6): name, overrides, vite, private, type, version
 
-### Community 115 - "scope_cavaliers_to_ville"
-Cohesion: 0.33
-Nodes (3): Cavaliers de la ville donnée uniquement (même convention que…, scope_cavaliers_to_ville(), ScopeCavaliersToVilleTest
+### Community 115 - "AdresseDuBienTest"
+Cohesion: 0.20
+Nodes (5): extraire_adresse(), localiser_adresse(), (adresse | None, raison courte). Contradiction = None., Premier texte (dans l'ordre donné) qui décide ; une contradiction est…, AdresseDuBienTest
 
-### Community 116 - "CavaliersRadiusServiceNoRadiusTest"
-Cohesion: 0.22
-Nodes (4): CavaliersRadiusServiceNoRadiusTest, Rayon « Aucun » (ORA-183, v3) : totaux à l'échelle de la ville, sans filtre de…, 3 lieux Vice à Lyon (Le Bar Proche 100m, Le Bar Loin 800m, Kebab King 400m) :…, Lille (fixture LILLE_ROWS) n'a que du Vice : à l'échelle d'une ville, une…
+### Community 116 - "ChatOracle.jsx"
+Cohesion: 0.28
+Nodes (8): ALL_TYPES, buildChatContext(), ChatOracle(), DEFAULT_MESSAGES, describeChatError(), ApiError, loadChatHistory(), saveChatHistory()
 
-### Community 117 - "archive_stale_rows"
-Cohesion: 0.32
-Nodes (3): archive_stale_rows(), Déplace de `rows_by_lien` vers `<output>_archive.csv` les annonces non revues…, ArchiveStaleRowsTest
+### Community 117 - "enrich_annonce_detail"
+Cohesion: 0.35
+Nodes (4): enrich_annonce_detail(), ORA-174 (maquette 06, "Fiche annonce") : enrichit une annonce issue…, _dataset_row(), EnrichAnnonceDetailTest
 
 ### Community 118 - "format_description"
 Cohesion: 0.47
@@ -692,17 +699,17 @@ Nodes (3): archive_model_version(), Conserve une copie du modèle sous un nom ve
 Cohesion: 0.50
 Nodes (4): fetch_boundary(), main(), Récupère une fois les contours réels des quartiers de Lille (+ Lomme,…, Renvoie une Feature GeoJSON polygonale pour `nom`, ou None si OSM n'a pas de…
 
-### Community 141 - "useAnnonceDetail.js"
-Cohesion: 0.19
-Nodes (10): AnnonceIllustration(), AnnonceDetailContent(), CATEGORY_STYLES, formatM2(), formatPrice(), AnnonceDetailModal(), detail, useAnnonceDetail() (+2 more)
+### Community 141 - "AnnonceDetailContent.jsx"
+Cohesion: 0.60
+Nodes (4): AnnonceDetailContent(), CATEGORY_STYLES, formatM2(), formatPrice()
 
 ### Community 143 - "get_db_connection"
 Cohesion: 0.50
 Nodes (4): get_db_connection(), init_db(), Initialise la table 'annonces' si elle n'existe pas., Crée une connexion à la base de données.
 
-### Community 144 - "get_scraper_logger"
-Cohesion: 0.36
-Nodes (3): get_scraper_logger(), Logger structuré commun aux scrapers : format et niveaux cohérents entre les 6…, GetScraperLoggerTest
+### Community 144 - "scraper_pap.py"
+Cohesion: 0.16
+Nodes (7): checkpoint(), load_page(), Persiste l'état courant de `rows_by_lien` (écriture atomique complète, pas un…, get_scraper_logger(), Logger structuré commun aux scrapers : format et niveaux cohérents entre les 6…, PAP scraper test fixture (HTML), GetScraperLoggerTest
 
 ### Community 145 - "_FakeSeleniumElement"
 Cohesion: 0.29
@@ -720,33 +727,49 @@ Nodes (3): DISPLAY, log(), run_scrapers.sh script
 Cohesion: 0.67
 Nodes (3): chat_service.py, Gemini cloud + deterministic filtering, no local RAG (ORA-119), Backend observability: structured logs + Sentry (ORA-63)
 
-### Community 161 - "test_cavaliers_radius.py"
-Cohesion: 0.40
-Nodes (3): _offset(), (lat, lng) à ~`dist_m` mètres au nord de CENTER_LAT/CENTER_LNG., _write_csv()
+### Community 156 - "detail_cavaliers"
+Cohesion: 0.27
+Nodes (5): detail_cavaliers(), Détail complet des 4 Cavaliers pour un sous-ensemble d'annonces (ORA-172,…, DetailCavaliersTest, ORA-172 : contrairement à summarize_cavaliers (1 phrase, le POI dominant), le…, Reproduit "Rien dans le rayon. Pompes funèbres les plus proches à 573 m."…
+
+### Community 161 - "rollback_model.py"
+Cohesion: 0.29
+Nodes (5): Revenir à une version antérieure du modèle price_predictor_<ville>.pkl sans…, price_predictor_<ville>.pkl pour le slug donné — un modèle distinct par ville…, Restaure `model_path` à la version archivée `model_version`. `versions_dir`…, resolve_model_path(), rollback_to()
+
+### Community 226 - "log_annonce_click"
+Cohesion: 0.33
+Nodes (6): log_annonce_click(), Journalise un clic sortant vers l'annonce source (ORA-91), et renvoie le…, count_clicks(), log_click(), Journalise un clic sortant vers l'annonce `annonce_id` (ORA-91). Utilisé pour…, Nombre de clics enregistrés pour `annonce_id` (ORA-92).
+
+### Community 227 - "_fetch_all_annonces"
+Cohesion: 0.33
+Nodes (6): _fetch_all_annonces(), prune_dead_annonces(), Snapshot complet (id, url, titre) pris avant toute suppression : évite le bug…, Vérifie chaque annonce de `db_path` (DEFAULT_DB_PATH si None) et supprime…, delete_annonce(), Retire une annonce (et ses clics associés) du store, par `url` ou `annonce_id`…
+
+### Community 228 - "resolve_default_cp"
+Cohesion: 0.50
+Nodes (3): CP de repli pour une ville (cf. extract_postal_code). Fail-fast plutôt que de…, resolve_default_cp(), ResolveDefaultCpTest
 
 ## Ambiguous Edges - Review These
 - `clean_immo.py` → `Address geocoding via third-party service (ORA-180)`  [AMBIGUOUS]
   LEGAL_DECISIONS.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **174 isolated node(s):** `Healthchecks des services`, `IMMO_KEYS`, `immoLayerByKey`, `LYON_LINE_CODES`, `quartiersLayer` (+169 more)
+- **174 isolated node(s):** `Backend observability: structured logs + Sentry (ORA-63)`, `CI/CD Render deploy hook (ORA-64)`, `Dependency vulnerability scan (ORA-65)`, `Healthchecks des services`, `sanitizeListingUrl` (+169 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **85 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **88 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `clean_immo.py` and `Address geocoding via third-party service (ORA-180)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `CavaliersRadiusService` connect `CavaliersRadiusService` to `test_cavaliers_radius.py`, `CavaliersRadiusServiceTest`, `app.py`, `build_feature_row`, `CavaliersRadiusServiceNoRadiusTest`?**
-  _High betweenness centrality (0.023) - this node is a cross-community bridge._
-- **Why does `pick_user_agent()` connect `pick_user_agent` to `scraper_seloger.py`, `scraper_orpi.py`, `scraper_utils.py`, `scraper_vizzit.py`, `test_scraper_utils.py`, `test_playwright_selectors.py`, `scraper_paruvendu.py`?**
-  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+- **Why does `CavaliersRadiusService` connect `CavaliersRadiusService` to `CavaliersRadiusServiceTest`, `app.py`?**
+  _High betweenness centrality (0.027) - this node is a cross-community bridge._
 - **Why does `ChatService` connect `ChatService` to `test_chat_service.py`, `normalize_text`, `ChatServiceTest`, `app.py`?**
-  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+- **Why does `CavaliersRequestSchema` connect `CavaliersRequestSchema` to `app.py`, `ChatRequestSchema`?**
+  _High betweenness centrality (0.019) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `ChatService` (e.g. with `ChatServiceTest` and `ExtractLocationsFuzzyMatchingTest`) actually correct?**
   _`ChatService` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 13 inferred relationships involving `run_fusion()` (e.g. with `clean_price_integer()` and `clean_surface()`) actually correct?**
   _`run_fusion()` has 13 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Healthchecks des services`, `IMMO_KEYS`, `immoLayerByKey` to the rest of the system?**
+- **What connects `Backend observability: structured logs + Sentry (ORA-63)`, `CI/CD Render deploy hook (ORA-64)`, `Dependency vulnerability scan (ORA-65)` to the rest of the system?**
   _174 weakly-connected nodes found - possible documentation gaps or missing edges._
