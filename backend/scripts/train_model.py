@@ -31,10 +31,24 @@ from services import outlier_detection  # noqa: E402 (après le sys.path.insert 
 
 # Vérification XGBoost
 try:
-    from xgboost import XGBRegressor
+    from xgboost import XGBRegressor, __version__ as XGBOOST_VERSION
 except ImportError:
     print("❌ Erreur : XGBoost n'est pas installé. (pip install xgboost)")
     exit()
+
+# Même épinglage que requirements.txt et Airflow/Dockerfile (ORA-152). Un
+# pickle entraîné sous une autre version peut perdre son base_score une fois
+# chargé en 2.1.4 (modèles 3.x de 739c1b2 : prédictions décalées de ~-1000 €).
+PINNED_XGBOOST_VERSION = '2.1.4'
+
+
+def check_xgboost_version(version=None):
+    version = version or XGBOOST_VERSION
+    if version != PINNED_XGBOOST_VERSION:
+        raise SystemExit(
+            f"❌ XGBoost {version} installé, {PINNED_XGBOOST_VERSION} attendu (ORA-152) : "
+            "entraîner dans backend/.venv ou le conteneur Airflow."
+        )
 
 
 def resolve_ville_nom(ville_slug):
@@ -219,6 +233,7 @@ def train(ville_slug, source='master'):
     difficulté (peu de données, dérive de features) ne peut plus casser les
     prédictions Lyon, et le garde-fou de régression compare chaque ville à
     sa propre histoire plutôt qu'à un mélange de gammes de prix différentes."""
+    check_xgboost_version()
     ville_nom = resolve_ville_nom(ville_slug)
 
     # --- 1. CONFIGURATION ---
