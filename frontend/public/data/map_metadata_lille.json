@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-09-29T09:25:47.959345+00:00",
+  "generated_at": "2026-10-05T20:15:01.838971+00:00",
   "map_file": "map_pings_lille_calques.html",
   "layer_counts": {
-    "Vice": 401,
+    "Vice": 402,
     "Gentrification": 138,
-    "Nuisance": 546,
+    "Nuisance": 547,
     "Superstition": 31,
-    "Studio": 224,
-    "T2": 256,
-    "T3": 121,
-    "T4": 54
+    "Studio": 236,
+    "T2": 260,
+    "T3": 125,
+    "T4": 73
   }
 }

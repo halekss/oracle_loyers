@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-09-29T09:25:49.519983+00:00",
+  "generated_at": "2026-10-05T20:15:03.813854+00:00",
   "map_file": "map_pings_lyon_calques.html",
   "layer_counts": {
-    "Vice": 553,
-    "Gentrification": 395,
-    "Nuisance": 789,
-    "Superstition": 46,
-    "Studio": 108,
-    "T2": 162,
-    "T3": 148,
-    "T4": 93
+    "Vice": 555,
+    "Gentrification": 398,
+    "Nuisance": 792,
+    "Superstition": 48,
+    "Studio": 158,
+    "T2": 122,
+    "T3": 98,
+    "T4": 65
   }
 }
