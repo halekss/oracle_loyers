@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-09-29T09:25:44.822804+00:00",
-  "data_snapshot_sha256": "35626156d3e0f88d6e1635805ac4c3cde27564eef59e5b559dc59b96a48197ed",
-  "data_snapshot_file": "master_immo_final_35626156d3e0.csv",
+  "trained_at": "2026-10-05T20:14:56.464704+00:00",
+  "data_snapshot_sha256": "cd8b324ba16be3a571658e0e37e26a45700674fac70f7e2b6744843246ab5c3c",
+  "data_snapshot_file": "master_immo_final_cd8b324ba16b.csv",
   "metrics": {
-    "mae": 124.50804511176216,
-    "r2": 0.674485970797176
+    "mae": 131.42136204496344,
+    "r2": 0.7904801015156351
   },
-  "model_version": "7c5d61353b73",
+  "model_version": "9906ea06aef2",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
@@ -14,5 +14,34 @@
     "subsample": 0.7,
     "colsample_bytree": 0.6,
     "random_state": 42
+  },
+  "categories": {
+    "quartier": [
+      "Bois Blancs",
+      "Faubourg de Béthune",
+      "Fives",
+      "Hellemmes",
+      "La Madeleine",
+      "Lille / Non localisé",
+      "Lille-Centre",
+      "Lille-Moulins",
+      "Lille-Sud",
+      "Lomme",
+      "Saint-Maurice Pellevoisin",
+      "Vauban-Esquermes",
+      "Vieux-Lille",
+      "Wazemmes"
+    ],
+    "type_local": [
+      "Grand (T4+)",
+      "Studio/T1",
+      "T2",
+      "T3"
+    ],
+    "type": [
+      "Appartement",
+      "Maison",
+      "Studio"
+    ]
   }
 }
