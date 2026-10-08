@@ -104,8 +104,13 @@ test.describe('Clic sur un ping d\'annonce — popup + Fiche (ORA-196)', () => {
     await page.goto('/');
     const frame = await getMapFrame(page);
 
+    // Premier marker VISIBLE : le premier de oracleImmoMarkersById peut être
+    // hors du cadre (ids de la base, ordre arbitraire) et le clic ne
+    // toucherait alors rien.
     const firstMarker = await frame.evaluate(() => {
-      const marker = Object.values(window.oracleImmoMarkersById)[0];
+      const map = window[Object.keys(window).find((k) => k.startsWith('map_'))];
+      const marker = Object.values(window.oracleImmoMarkersById)
+        .find((m) => map.getBounds().pad(-0.1).contains(m.getLatLng()));
       const { lat, lng } = marker.getLatLng();
       return { lat, lng };
     });
@@ -144,9 +149,11 @@ test.describe('Clic sur un ping d\'annonce — popup + Fiche (ORA-196)', () => {
       const circle = window.__oracleFocusCircle;
       if (!circle) return null;
       const center = circle.getLatLng();
+      const map = window[Object.keys(window).find((k) => k.startsWith('map_'))];
+      const visible = map.getBounds().pad(-0.1);
       for (const marker of Object.values(window.oracleImmoMarkersById || {})) {
         const latlng = marker.getLatLng();
-        if (center.distanceTo(latlng) <= 500) return { lat: latlng.lat, lng: latlng.lng };
+        if (center.distanceTo(latlng) <= 500 && visible.contains(latlng)) return { lat: latlng.lat, lng: latlng.lng };
       }
       return null;
     });
