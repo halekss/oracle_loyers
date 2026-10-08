@@ -26,6 +26,11 @@ jobs:
 
       - run: pip install -r requirements.txt pytest
 
+      # annonces.db n'est pas versionnée (.gitignore) : on la remplit depuis le
+      # master versionné, comme clean_immo en fin de pipeline (sans elle, aucun
+      # marker de carte n'a d'id et /api/annonces est vide pour l'e2e).
+      - run: python -c "import sys; sys.path.insert(0, 'scripts'); import pandas as pd, clean_immo as c; df = pd.read_csv(c.OUTPUT_FINAL_CSV); c.step_sync_annonces_store(df, master_urls=set(df['url'].dropna()))"
+
       - run: python -m pytest tests/ -v
 
   scrapers:
@@ -139,6 +144,15 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - run: pip install -r requirements.txt
+        working-directory: backend
+
+      # annonces.db non versionnée : cf. job backend. La carte versionnée porte
+      # les ids de la base locale : on la régénère contre la base CI pour que
+      # le clic sur un ping ouvre une fiche qui existe (GET /api/annonces/<id>).
+      - run: python -c "import sys; sys.path.insert(0, 'scripts'); import pandas as pd, clean_immo as c; df = pd.read_csv(c.OUTPUT_FINAL_CSV); c.step_sync_annonces_store(df, master_urls=set(df['url'].dropna()))"
+        working-directory: backend
+
+      - run: python scripts/generate_map.py --ville lyon
         working-directory: backend
 
       - uses: actions/setup-node@v4
