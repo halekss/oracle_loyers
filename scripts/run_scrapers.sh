@@ -7,6 +7,7 @@
 # Pour chaque ville de scraping_config.json : les scrapers de `sites_actifs`,
 # puis complete_data_extraction (absent du DAG). Un scraper en échec
 # n'arrête pas les autres ; le code de sortie signale s'il y en a eu un.
+# Usage manuel : `scripts/run_scrapers.sh [ville...]` (défaut : toutes).
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -27,6 +28,11 @@ fi
 log() { echo "$(date '+%F %T') $*" | tee -a "$LOG"; }
 
 read -r -a VILLES <<<"$("$PY" -c "import json; print(' '.join(json.load(open('$CONFIG'))['villes']))")"
+[ $# -gt 0 ] && VILLES=("$@")
+for v in "${VILLES[@]}"; do
+  "$PY" -c "import json,sys; sys.exit('$v' not in json.load(open('$CONFIG'))['villes'])" \
+    || { echo "Ville inconnue : $v (voir $CONFIG)" >&2; exit 2; }
+done
 read -r -a SITES <<<"$("$PY" -c "import json; print(' '.join(json.load(open('$CONFIG'))['sites_actifs']))")"
 
 echecs=0
