@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-09-29T09:25:45.151970+00:00",
-  "data_snapshot_sha256": "35626156d3e0f88d6e1635805ac4c3cde27564eef59e5b559dc59b96a48197ed",
-  "data_snapshot_file": "master_immo_final_35626156d3e0.csv",
+  "trained_at": "2026-10-14T09:25:41.387499+00:00",
+  "data_snapshot_sha256": "274a561c160c1f9347c3404cf1bfe97c792e839ecff3b9e54cecbbbacc444360",
+  "data_snapshot_file": "master_immo_final_274a561c160c.csv",
   "metrics": {
-    "mae": 167.3894668134671,
-    "r2": 0.7437120269173023
+    "mae": 245.1822145968507,
+    "r2": 0.4877805693423025
   },
-  "model_version": "2aa358b546a7",
+  "model_version": "f7825c20716e",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
@@ -15,5 +15,35 @@
     "colsample_bytree": 0.6,
     "random_state": 42
   },
-  "rolled_back_at": "2026-10-05T20:14:58.935724+00:00"
+  "categories": {
+    "quartier": [
+      "Ainay",
+      "Bellecour / Cordeliers",
+      "Brotteaux / Foch",
+      "Confluence",
+      "Croix-Rousse Plateau",
+      "Gerland",
+      "Guillotière / Jean Macé",
+      "Monplaisir / Bachut",
+      "Montchat",
+      "Part-Dieu / Villette",
+      "Pentes Croix-Rousse",
+      "Point du Jour / St Just",
+      "Préfecture / Quais",
+      "Terreaux / Hotel de Ville",
+      "Vaise / Valmy",
+      "Vieux Lyon"
+    ],
+    "type_local": [
+      "Grand (T4+)",
+      "Studio/T1",
+      "T2",
+      "T3"
+    ],
+    "type": [
+      "Appartement",
+      "Maison",
+      "Studio"
+    ]
+  }
 }
