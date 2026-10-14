@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-10-05T20:14:56.464704+00:00",
-  "data_snapshot_sha256": "cd8b324ba16be3a571658e0e37e26a45700674fac70f7e2b6744843246ab5c3c",
-  "data_snapshot_file": "master_immo_final_cd8b324ba16b.csv",
+  "trained_at": "2026-10-14T09:25:41.519185+00:00",
+  "data_snapshot_sha256": "274a561c160c1f9347c3404cf1bfe97c792e839ecff3b9e54cecbbbacc444360",
+  "data_snapshot_file": "master_immo_final_274a561c160c.csv",
   "metrics": {
-    "mae": 131.42136204496344,
-    "r2": 0.7904801015156351
+    "mae": 127.29964111328125,
+    "r2": 0.7145431199003565
   },
-  "model_version": "9906ea06aef2",
+  "model_version": "c5fc8dcfb453",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
@@ -21,7 +21,6 @@
       "Faubourg de Béthune",
       "Fives",
       "Hellemmes",
-      "La Madeleine",
       "Lille / Non localisé",
       "Lille-Centre",
       "Lille-Moulins",
