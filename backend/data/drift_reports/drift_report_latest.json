@@ -1,8 +1,8 @@
 {
-  "checked_at": "2026-10-12T09:55:45.266494+00:00",
+  "checked_at": "2026-10-19T08:12:13.812227+00:00",
   "status": "drift_detected",
-  "reference_snapshot": "master_immo_final_918bdac6713d.csv",
-  "reference_snapshot_timestamp": "2026-09-28T23:41:49.442921+00:00",
+  "reference_snapshot": "master_immo_final_35626156d3e0.csv",
+  "reference_snapshot_timestamp": "2026-09-29T09:25:44.818522+00:00",
   "reference_row_count": 1184,
   "current_row_count": 1551,
   "ks_drift_threshold": 0.15,
