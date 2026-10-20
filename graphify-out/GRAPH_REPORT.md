@@ -1,7 +1,7 @@
-# Graph Report - oracle_loyers  (2026-10-12)
+# Graph Report - oracle_loyers  (2026-10-20)
 
 ## Corpus Check
-- 238 files · ~645,221 words
+- 238 files · ~644,563 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `be681d9e`
+- Built from commit: `53fe9791`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -751,10 +751,10 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **Why does `AnnoncesStoreTest` connect `AnnoncesStoreTest` to `annonces_store.py`?**
   _High betweenness centrality (0.023) - this node is a cross-community bridge._
-- **Why does `CavaliersRadiusService` connect `CavaliersRadiusService` to `build_feature_row`, `app.py`?**
-  _High betweenness centrality (0.022) - this node is a cross-community bridge._
-- **Why does `pick_user_agent()` connect `pick_user_agent` to `scraper_pap.py`, `scraper_orpi.py`, `test_scraper_utils.py`, `scraper_vizzit.py`, `scraper_utils.py`, `test_playwright_selectors.py`, `scraper_paruvendu.py`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
+- **Why does `CavaliersRequestSchema` connect `CavaliersRequestSchema` to `app.py`?**
+  _High betweenness centrality (0.019) - this node is a cross-community bridge._
+- **Why does `RowsToVerifyTest` connect `RowsToVerifyTest` to `annonces_store.py`?**
+  _High betweenness centrality (0.013) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `ChatService` (e.g. with `ChatServiceTest` and `ExtractLocationsFuzzyMatchingTest`) actually correct?**
   _`ChatService` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 13 inferred relationships involving `run_fusion()` (e.g. with `clean_price_integer()` and `clean_surface()`) actually correct?**

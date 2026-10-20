@@ -6,7 +6,7 @@ Vérification HTTP asynchrone quotidienne des annonces à statut incertain
 Ne supprime jamais de ligne, met uniquement à jour la colonne `statut`
 (active/a_verifier/inactive) de master_immo_final.csv puis annonces.db.
 
-Volontairement séparé de oracle_annonces_pipeline (hebdomadaire, lundi 22h) :
+Volontairement séparé de oracle_annonces_pipeline (hebdomadaire, après le scraping du lundi) :
 cadence différente (quotidienne vs hebdomadaire) et ce DAG ne doit pas être
 bloqué par la durée du pipeline ML complet (fusion + features + entraînement).
 Exécuté à 3h du matin (Europe/Paris), en dehors du créneau du pipeline

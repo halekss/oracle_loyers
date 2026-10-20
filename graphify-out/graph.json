@@ -6001,13 +6001,13 @@
       "label": "archive_model_version()",
       "file_type": "code",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L170",
+      "source_location": "L180",
       "_callable": true,
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_archive_model_version",
       "community": 132,
       "community_name": "archive_model_version",
-      "norm_label": "archive_model_version()",
-      "id": "backend_scripts_data_versioning_archive_model_version"
+      "norm_label": "archive_model_version()"
     },
     {
       "label": ".test_archives_a_versioned_copy_of_the_model()",
@@ -14713,13 +14713,13 @@
       "label": "load_active_model_metadata()",
       "file_type": "code",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L106",
+      "source_location": "L116",
       "_callable": true,
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_load_active_model_metadata",
       "community": 59,
       "community_name": "record_model_metadata",
-      "norm_label": "load_active_model_metadata()",
-      "id": "backend_scripts_data_versioning_load_active_model_metadata"
+      "norm_label": "load_active_model_metadata()"
     },
     {
       "label": "record_model_metadata()",
@@ -14728,10 +14728,10 @@
       "source_location": "L70",
       "_callable": true,
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_record_model_metadata",
       "community": 59,
       "community_name": "record_model_metadata",
-      "norm_label": "record_model_metadata()",
-      "id": "backend_scripts_data_versioning_record_model_metadata"
+      "norm_label": "record_model_metadata()"
     },
     {
       "label": ".test_includes_model_version_and_hyperparameters_when_provided()",
@@ -17749,13 +17749,13 @@
       "label": "decide_promotion()",
       "file_type": "code",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L122",
+      "source_location": "L132",
       "_callable": true,
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_decide_promotion",
       "community": 85,
       "community_name": "decide_promotion",
-      "norm_label": "decide_promotion()",
-      "id": "backend_scripts_data_versioning_decide_promotion"
+      "norm_label": "decide_promotion()"
     },
     {
       "label": ".test_better_or_equivalent_metrics_are_promoted()",
@@ -18604,10 +18604,10 @@
       "source_location": "L9",
       "_callable": true,
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_sha256_of_file",
       "community": 90,
       "community_name": "data_versioning.py",
-      "norm_label": "_sha256_of_file()",
-      "id": "backend_scripts_data_versioning_sha256_of_file"
+      "norm_label": "_sha256_of_file()"
     },
     {
       "label": "snapshot_dataset()",
@@ -18616,10 +18616,10 @@
       "source_location": "L17",
       "_callable": true,
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_snapshot_dataset",
       "community": 90,
       "community_name": "data_versioning.py",
-      "norm_label": "snapshot_dataset()",
-      "id": "backend_scripts_data_versioning_snapshot_dataset"
+      "norm_label": "snapshot_dataset()"
     },
     {
       "label": ".test_writes_sidecar_json_referencing_data_snapshot()",
@@ -22017,12 +22017,12 @@
       "label": "Conserve une copie du mod\u00e8le sous un nom versionn\u00e9 (hash du binaire), pour\u2026",
       "file_type": "rationale",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L171",
+      "source_location": "L181",
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_rationale_181",
       "community": 132,
       "community_name": "archive_model_version",
-      "norm_label": "conserve une copie du modele sous un nom versionne (hash du binaire), pour...",
-      "id": "backend_scripts_data_versioning_rationale_171"
+      "norm_label": "conserve une copie du modele sous un nom versionne (hash du binaire), pour..."
     },
     {
       "label": "fetch_lille_quartiers.py",
@@ -22637,7 +22637,7 @@
       "label": "DISPLAY",
       "file_type": "code",
       "source_file": "scripts/run_scrapers.sh",
-      "source_location": "L20",
+      "source_location": "L21",
       "metadata": {
         "language": "bash",
         "kind": "code"
@@ -22652,7 +22652,7 @@
       "label": "log()",
       "file_type": "code",
       "source_file": "scripts/run_scrapers.sh",
-      "source_location": "L28",
+      "source_location": "L29",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -22728,10 +22728,10 @@
       "source_file": "Airflow/dags/oracle_annonces_dag.py",
       "source_location": "L1",
       "_origin": "ast",
+      "id": "airflow_dags_oracle_annonces_dag",
       "community": 157,
       "community_name": "oracle_annonces_dag.py",
-      "norm_label": "oracle_annonces_dag.py",
-      "id": "airflow_dags_oracle_annonces_dag"
+      "norm_label": "oracle_annonces_dag.py"
     },
     {
       "label": "L'Oracle des Loyers \u2014 DAG Annonces (scraping + mod\u00e8le) Fusionne les annonces\u2026",
@@ -22739,10 +22739,10 @@
       "source_file": "Airflow/dags/oracle_annonces_dag.py",
       "source_location": "L1",
       "_origin": "ast",
+      "id": "airflow_dags_oracle_annonces_dag_rationale_1",
       "community": 157,
       "community_name": "oracle_annonces_dag.py",
-      "norm_label": "l'oracle des loyers \u2014 dag annonces (scraping + modele) fusionne les annonces...",
-      "id": "airflow_dags_oracle_annonces_dag_rationale_1"
+      "norm_label": "l'oracle des loyers \u2014 dag annonces (scraping + modele) fusionne les annonces..."
     },
     {
       "label": "oracle_cavaliers_dag.py",
@@ -22772,10 +22772,10 @@
       "source_file": "Airflow/dags/oracle_cleanup_dag.py",
       "source_location": "L1",
       "_origin": "ast",
+      "id": "airflow_dags_oracle_cleanup_dag",
       "community": 159,
       "community_name": "oracle_cleanup_dag.py",
-      "norm_label": "oracle_cleanup_dag.py",
-      "id": "airflow_dags_oracle_cleanup_dag"
+      "norm_label": "oracle_cleanup_dag.py"
     },
     {
       "label": "L'Oracle des Loyers \u2014 DAG Cleanup (ORA-134 bis) V\u00e9rification HTTP asynchrone\u2026",
@@ -22783,10 +22783,10 @@
       "source_file": "Airflow/dags/oracle_cleanup_dag.py",
       "source_location": "L1",
       "_origin": "ast",
+      "id": "airflow_dags_oracle_cleanup_dag_rationale_1",
       "community": 159,
       "community_name": "oracle_cleanup_dag.py",
-      "norm_label": "l'oracle des loyers \u2014 dag cleanup (ora-134 bis) verification http asynchrone...",
-      "id": "airflow_dags_oracle_cleanup_dag_rationale_1"
+      "norm_label": "l'oracle des loyers \u2014 dag cleanup (ora-134 bis) verification http asynchrone..."
     },
     {
       "label": "Integration test: mix of all statuses with various verification timestamps.",
@@ -26072,23 +26072,23 @@
       "label": "Lit les m\u00e9tadonn\u00e9es (`metrics`, `model_version`) du mod\u00e8le actuellement actif\u2026",
       "file_type": "rationale",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L107",
+      "source_location": "L117",
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_rationale_117",
       "community": 59,
       "community_name": "record_model_metadata",
-      "norm_label": "lit les metadonnees (`metrics`, `model_version`) du modele actuellement actif...",
-      "id": "backend_scripts_data_versioning_rationale_107"
+      "norm_label": "lit les metadonnees (`metrics`, `model_version`) du modele actuellement actif..."
     },
     {
       "label": "\u00c9crit `<model_path>.meta.json`, r\u00e9f\u00e9ren\u00e7ant explicitement la version des\u2026",
       "file_type": "rationale",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L79",
+      "source_location": "L80",
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_rationale_80",
       "community": 59,
       "community_name": "record_model_metadata",
-      "norm_label": "ecrit `<model_path>.meta.json`, referencant explicitement la version des...",
-      "id": "backend_scripts_data_versioning_rationale_79"
+      "norm_label": "ecrit `<model_path>.meta.json`, referencant explicitement la version des..."
     },
     {
       "label": "Reproduit le flux de d\u00e9cision de train_model.py au niveau des fonctions qu'il\u2026",
@@ -27656,12 +27656,12 @@
       "label": "D\u00e9cide si un mod\u00e8le nouvellement entra\u00een\u00e9 doit remplacer le mod\u00e8le actif.\u2026",
       "file_type": "rationale",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L128",
+      "source_location": "L138",
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_rationale_138",
       "community": 85,
       "community_name": "decide_promotion",
-      "norm_label": "decide si un modele nouvellement entraine doit remplacer le modele actif....",
-      "id": "backend_scripts_data_versioning_rationale_128"
+      "norm_label": "decide si un modele nouvellement entraine doit remplacer le modele actif...."
     },
     {
       "label": "ORA-34 : un r\u00e9-entra\u00eenement automatique (DAG Airflow quotidien) ne doit jamais\u2026",
@@ -28009,10 +28009,10 @@
       "source_file": "backend/scripts/data_versioning.py",
       "source_location": "L1",
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning",
       "community": 90,
       "community_name": "data_versioning.py",
-      "norm_label": "data_versioning.py",
-      "id": "backend_scripts_data_versioning"
+      "norm_label": "data_versioning.py"
     },
     {
       "label": "test_data_versioning.py",
@@ -28031,10 +28031,10 @@
       "source_file": "backend/scripts/data_versioning.py",
       "source_location": "L18",
       "_origin": "ast",
+      "id": "backend_scripts_data_versioning_rationale_18",
       "community": 90,
       "community_name": "data_versioning.py",
-      "norm_label": "archive un instantane content-addresse de `csv_path` dans `snapshots_dir` et...",
-      "id": "backend_scripts_data_versioning_rationale_18"
+      "norm_label": "archive un instantane content-addresse de `csv_path` dans `snapshots_dir` et..."
     },
     {
       "label": "test_app_report_pdf.py",
@@ -30869,9 +30869,9 @@
       "source_location": "L49",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "backend_scripts_data_versioning_snapshot_dataset",
-      "target": "backend_scripts_data_versioning_sha256_of_file"
+      "target": "backend_scripts_data_versioning_sha256_of_file",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -38305,7 +38305,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "scripts/run_scrapers.sh",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0,
       "context": "call",
       "_origin": "ast",
@@ -48708,23 +48708,23 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L106",
+      "source_location": "L116",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "backend_scripts_data_versioning",
-      "target": "backend_scripts_data_versioning_load_active_model_metadata"
+      "target": "backend_scripts_data_versioning_load_active_model_metadata",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L122",
+      "source_location": "L132",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "backend_scripts_data_versioning",
-      "target": "backend_scripts_data_versioning_decide_promotion"
+      "target": "backend_scripts_data_versioning_decide_promotion",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -48733,20 +48733,20 @@
       "source_location": "L17",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "backend_scripts_data_versioning",
-      "target": "backend_scripts_data_versioning_snapshot_dataset"
+      "target": "backend_scripts_data_versioning_snapshot_dataset",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L170",
+      "source_location": "L180",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "backend_scripts_data_versioning",
-      "target": "backend_scripts_data_versioning_archive_model_version"
+      "target": "backend_scripts_data_versioning_archive_model_version",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -48755,9 +48755,9 @@
       "source_location": "L70",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "backend_scripts_data_versioning",
-      "target": "backend_scripts_data_versioning_record_model_metadata"
+      "target": "backend_scripts_data_versioning_record_model_metadata",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -48766,9 +48766,9 @@
       "source_location": "L9",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "backend_scripts_data_versioning",
-      "target": "backend_scripts_data_versioning_sha256_of_file"
+      "target": "backend_scripts_data_versioning_sha256_of_file",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -55836,7 +55836,7 @@
       "relation": "defines",
       "confidence": "EXTRACTED",
       "source_file": "scripts/run_scrapers.sh",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0,
       "_origin": "ast",
       "source": "scripts_run_scrapers",
@@ -55847,7 +55847,7 @@
       "relation": "defines",
       "confidence": "EXTRACTED",
       "source_file": "scripts/run_scrapers.sh",
-      "source_location": "L28",
+      "source_location": "L29",
       "weight": 1.0,
       "_origin": "ast",
       "source": "scripts_run_scrapers",
@@ -66102,9 +66102,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "airflow_dags_oracle_annonces_dag_rationale_1",
-      "target": "airflow_dags_oracle_annonces_dag"
+      "target": "airflow_dags_oracle_annonces_dag",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -66124,9 +66124,9 @@
       "source_location": "L1",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "airflow_dags_oracle_cleanup_dag_rationale_1",
-      "target": "airflow_dags_oracle_cleanup_dag"
+      "target": "airflow_dags_oracle_cleanup_dag",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -66913,34 +66913,23 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L107",
+      "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "backend_scripts_data_versioning_rationale_107",
-      "target": "backend_scripts_data_versioning_load_active_model_metadata"
+      "source": "backend_scripts_data_versioning_rationale_117",
+      "target": "backend_scripts_data_versioning_load_active_model_metadata",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L128",
+      "source_location": "L138",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "backend_scripts_data_versioning_rationale_128",
-      "target": "backend_scripts_data_versioning_decide_promotion"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L171",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "backend_scripts_data_versioning_rationale_171",
-      "target": "backend_scripts_data_versioning_archive_model_version"
+      "source": "backend_scripts_data_versioning_rationale_138",
+      "target": "backend_scripts_data_versioning_decide_promotion",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -66949,20 +66938,31 @@
       "source_location": "L18",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
       "source": "backend_scripts_data_versioning_rationale_18",
-      "target": "backend_scripts_data_versioning_snapshot_dataset"
+      "target": "backend_scripts_data_versioning_snapshot_dataset",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/scripts/data_versioning.py",
-      "source_location": "L79",
+      "source_location": "L181",
       "weight": 1.0,
       "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "backend_scripts_data_versioning_rationale_79",
-      "target": "backend_scripts_data_versioning_record_model_metadata"
+      "source": "backend_scripts_data_versioning_rationale_181",
+      "target": "backend_scripts_data_versioning_archive_model_version",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/scripts/data_versioning.py",
+      "source_location": "L80",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "backend_scripts_data_versioning_rationale_80",
+      "target": "backend_scripts_data_versioning_record_model_metadata",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -74038,5 +74038,5 @@
       "source_file": "docs/mockups/vue-calques.png"
     }
   ],
-  "built_at_commit": "be681d9eed45dd532417acfd1ca0b6b8aa5ad75d"
+  "built_at_commit": "53fe97910ada1bcfe14650fc1e3e3ef0455cf44f"
 }

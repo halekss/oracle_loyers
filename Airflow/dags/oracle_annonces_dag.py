@@ -51,11 +51,11 @@ with DAG(
     dag_id="oracle_annonces_pipeline",
     default_args=default_args,
     description="Pipeline ETL : Annonces → Features → Modèle → Carte — cadence hebdomadaire",
-    # 22h Europe/Paris (pas 2h du matin) : c'est le créneau où la machine qui
-    # héberge Airflow a le plus de chances d'être allumée. Timezone explicite
-    # (pas juste un décalage UTC figé) pour rester correct malgré les
-    # changements d'heure été/hiver.
-    schedule="0 22 * * 1",
+    # Pas de créneau fixe : scripts/run_scrapers.sh déclenche ce DAG à la fin
+    # du scraping. Un cron à 22h fusionnait des CSV à moitié scrapés quand le
+    # scraping débordait (veille du PC le 19/10) et sortait du master les
+    # annonces pas encore revues.
+    schedule=None,
     start_date=pendulum.datetime(2026, 2, 18, tz="Europe/Paris"),
     catchup=False,
     tags=["oracle", "etl", "immo", "annonces"],
