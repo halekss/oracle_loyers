@@ -28,7 +28,7 @@ def snapshot_dataset(csv_path, snapshots_dir):
     Cadence (ORA-129) : cette fonction est appelée une fois par exécution
     de `train_model.py` (voir l'appel en bas de ce script), lui-même la 3e étape du
     DAG Airflow `oracle_annonces_pipeline` (`Airflow/dags/oracle_annonces_dag.py`,
-    `schedule="0 22 * * 1"` — chaque lundi 22h Europe/Paris). En régime nominal, une
+    déclenché par `scripts/run_scrapers.sh` à la fin du scraping du lundi). En régime nominal, une
     nouvelle ligne apparaît donc dans `manifest.csv` environ une fois par semaine,
     jamais plus d'une fois par run.
 

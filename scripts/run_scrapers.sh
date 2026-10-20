@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Scraping hebdomadaire, hors Airflow (Chrome fenêtré + undetected_chromedriver,
 # impossible dans le conteneur). Lancé par le Planificateur de tâches Windows
-# le lundi 20h via `wsl.exe -d Ubuntu -- <ce script>`, avant le DAG
-# oracle_annonces_pipeline de 22h qui fusionne les CSV produits ici.
+# le lundi 20h via `wsl.exe -d Ubuntu -- <ce script>`. À la fin, déclenche le
+# DAG oracle_annonces_pipeline (fusion→clean→modèle→carte) : il n'a plus de
+# créneau fixe, pour ne jamais fusionner des CSV à moitié scrapés.
 #
 # Pour chaque ville de scraping_config.json : les scrapers de `sites_actifs`,
 # puis complete_data_extraction (absent du DAG). Un scraper en échec
@@ -53,4 +54,16 @@ for ville in "${VILLES[@]}"; do
   fi
 done
 log "=== Fin : $echecs échec(s)"
+# Conteneurs démarrés avant que la distro serve ses montages (19/10) : dossiers
+# vides dans le scheduler, le DAG échouerait. Les recréer les rattache.
+if ! docker exec oracle_airflow_scheduler test -f /opt/airflow/dags/oracle_annonces_dag.py >>"$LOG" 2>&1; then
+  log "Montages Airflow vides : recréation des conteneurs"
+  docker compose -f "$ROOT/docker-compose.yml" up -d --force-recreate --wait >>"$LOG" 2>&1
+fi
+if docker exec oracle_airflow_scheduler airflow dags trigger oracle_annonces_pipeline >>"$LOG" 2>&1; then
+  log "DAG oracle_annonces_pipeline déclenché"
+else
+  log "ÉCHEC du déclenchement du DAG (Docker/Airflow démarrés ? DAG en pause ?)"
+  echecs=$((echecs + 1))
+fi
 exit $((echecs > 0))
