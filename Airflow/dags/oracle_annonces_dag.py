@@ -83,6 +83,9 @@ with DAG(
     # Écrit : master_immo_final.csv
     step_features = BashOperator(
         task_id="clean_immo",
+        # Partagé avec oracle_cleanup_pipeline : le 20/10, son rattrapage a lu le
+        # master avant clean_immo et l'a réécrit après (master périmé).
+        pool="master_csv",
         bash_command=f"cd {SCRIPTS} && python clean_immo.py",
     )
 

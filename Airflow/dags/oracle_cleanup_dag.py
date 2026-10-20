@@ -10,7 +10,8 @@ Volontairement séparé de oracle_annonces_pipeline (hebdomadaire, après le scr
 cadence différente (quotidienne vs hebdomadaire) et ce DAG ne doit pas être
 bloqué par la durée du pipeline ML complet (fusion + features + entraînement).
 Exécuté à 3h du matin (Europe/Paris), en dehors du créneau du pipeline
-principal, pour éviter tout chevauchement d'écriture sur master_immo_final.csv.
+principal ; le pool `master_csv` (1 place, créé par airflow-init) empêche tout
+chevauchement d'écriture sur master_immo_final.csv, rattrapages compris.
 
 Ne couvre que le tier HTTP rapide (aiohttp) : le tier navigateur headless
 (Selenium, pour les 403/CAPTCHA constatés sur SeLoger) reste un script manuel
@@ -44,5 +45,8 @@ with DAG(
 
     step_verify = BashOperator(
         task_id="verify_annonces_async",
+        # Partagé avec clean_immo (oracle_annonces_pipeline) : un rattrapage au
+        # démarrage d'Airflow peut tomber pendant le pipeline principal.
+        pool="master_csv",
         bash_command=f"cd {BACKEND_SCRIPTS} && python verify_annonces_async.py --concurrency 5 --ttl-days 15",
     )

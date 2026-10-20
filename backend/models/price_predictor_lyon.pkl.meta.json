@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-10-14T09:25:41.387499+00:00",
-  "data_snapshot_sha256": "274a561c160c1f9347c3404cf1bfe97c792e839ecff3b9e54cecbbbacc444360",
-  "data_snapshot_file": "master_immo_final_274a561c160c.csv",
+  "trained_at": "2026-10-20T12:05:05.558046+00:00",
+  "data_snapshot_sha256": "962ae3cdfaacb103b087ad5ba81acbdf929a0230316b6edf07c4ffad1b6bb9d4",
+  "data_snapshot_file": "master_immo_final_962ae3cdfaac.csv",
   "metrics": {
-    "mae": 245.1822145968507,
-    "r2": 0.4877805693423025
+    "mae": 278.44313399783294,
+    "r2": 0.49571287405922826
   },
-  "model_version": "f7825c20716e",
+  "model_version": "bfad45d34fc7",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
@@ -45,6 +45,5 @@
       "Maison",
       "Studio"
     ]
-  },
-  "rolled_back_at": "2026-10-20T10:21:37.965408+00:00"
+  }
 }
