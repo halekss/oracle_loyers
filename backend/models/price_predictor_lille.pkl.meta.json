@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-10-14T09:25:41.519185+00:00",
-  "data_snapshot_sha256": "274a561c160c1f9347c3404cf1bfe97c792e839ecff3b9e54cecbbbacc444360",
-  "data_snapshot_file": "master_immo_final_274a561c160c.csv",
+  "trained_at": "2026-10-26T20:23:40.239893+00:00",
+  "data_snapshot_sha256": "bb34c04c92b200acb9e665a27062b27c38c06f3ec7e789d8a3a662c12deee194",
+  "data_snapshot_file": "master_immo_final_bb34c04c92b2.csv",
   "metrics": {
-    "mae": 127.29964111328125,
-    "r2": 0.7145431199003565
+    "mae": 107.54954440094704,
+    "r2": 0.8219173187258823
   },
-  "model_version": "c5fc8dcfb453",
+  "model_version": "9bbdc51c77ba",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
@@ -25,7 +25,6 @@
       "Lille-Centre",
       "Lille-Moulins",
       "Lille-Sud",
-      "Lomme",
       "Saint-Maurice Pellevoisin",
       "Vauban-Esquermes",
       "Vieux-Lille",
@@ -42,6 +41,5 @@
       "Maison",
       "Studio"
     ]
-  },
-  "rolled_back_at": "2026-10-20T12:05:06.754738+00:00"
+  }
 }
