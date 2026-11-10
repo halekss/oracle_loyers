@@ -1,12 +1,12 @@
 {
-  "trained_at": "2026-10-26T20:23:40.239893+00:00",
-  "data_snapshot_sha256": "bb34c04c92b200acb9e665a27062b27c38c06f3ec7e789d8a3a662c12deee194",
-  "data_snapshot_file": "master_immo_final_bb34c04c92b2.csv",
+  "trained_at": "2026-11-09T22:40:31.285236+00:00",
+  "data_snapshot_sha256": "0b8b266ff73f059147146f229e1fac38d15c2c1966054a86781c5aaec602fa1c",
+  "data_snapshot_file": "master_immo_final_0b8b266ff73f.csv",
   "metrics": {
-    "mae": 107.54954440094704,
-    "r2": 0.8219173187258823
+    "mae": 134.59455257267146,
+    "r2": 0.7148300834573911
   },
-  "model_version": "9bbdc51c77ba",
+  "model_version": "04edc6a2d872",
   "hyperparameters": {
     "n_estimators": 1500,
     "learning_rate": 0.01,
@@ -18,6 +18,7 @@
   "categories": {
     "quartier": [
       "Bois Blancs",
+      "Euralille",
       "Faubourg de Béthune",
       "Fives",
       "Hellemmes",
@@ -25,6 +26,7 @@
       "Lille-Centre",
       "Lille-Moulins",
       "Lille-Sud",
+      "Lomme",
       "Saint-Maurice Pellevoisin",
       "Vauban-Esquermes",
       "Vieux-Lille",
